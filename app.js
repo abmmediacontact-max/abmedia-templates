@@ -349,7 +349,7 @@ function drawEditor() { drawSlide(ctx(), curSlide(), CANVAS_W, CANVAS_H, state.a
  *  MOTOR DE RENDER
  * ========================================================================= */
 // Zona segura de Instagram Stories (fracciones del lienzo 1080x1920)
-const SAFE = { top: 0.135, bottom: 0.82, left: 0.05, right: 0.95 };
+const SAFE = { top: 0.18, bottom: 0.82, left: 0.05, right: 0.95 };
 function clampSafe(v, min, max) { return min > max ? (min + max) / 2 : Math.max(min, Math.min(max, v)); }
 
 function drawSlide(c, slide, w, h, style, guides) {
