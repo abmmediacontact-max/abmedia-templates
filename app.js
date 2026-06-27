@@ -53,7 +53,7 @@ const store = {
     const data = seqs.map(s => ({
       id: s.id, title: s.title, category: s.category, status: s.status,
       submitted: !!s.submitted, style: s.style,
-      slides: s.slides.map(sl => ({ body: sl.body, vpos: sl.vpos, overlay: sl.overlay }))
+      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay }))
     }));
     try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch {}
   }
@@ -66,9 +66,13 @@ const persist = () => store.save(state.sequences);
 function newStyle() { return JSON.parse(JSON.stringify(DEFAULT_STYLE)); }
 
 function makeSlide(s) {
+  const vy = s.vpos === "top" ? 0.24 : s.vpos === "center" ? 0.5 : 0.78;
   return {
-    body: s.body, vpos: s.vpos || "bottom", overlay: s.overlay || "bottom",
-    bgIndex: -1, inset: null
+    body: s.body,
+    overlay: s.overlay || "bottom",
+    pos: s.pos || { x: 0.5, y: vy },   // posición libre (centro del bloque)
+    align: s.align || "left",
+    bgIndex: -1, inset: null, _textBox: null
   };
 }
 
@@ -298,7 +302,7 @@ function syncStyleControls() {
   $("#fontSelect").value = st.font;
   $("#highlightColor").value = st.highlightColor;
   $("#textColor").value = st.textColor;
-  $("#sizeSelect").value = String(st.size);
+  $("#sizeRange").value = String(st.size);
 }
 function curSlide() { return state.active.slides[state.current]; }
 
@@ -336,7 +340,7 @@ function renderEditPanel() {
   const slide = curSlide();
   $("#slideName").textContent = "Frame " + (state.current + 1);
   $("#bodyInput").value = slide.body;
-  $("#vposSelect").value = slide.vpos;
+  $("#alignSelect").value = slide.align;
   $("#overlaySelect").value = slide.overlay;
   $("#insetControls").classList.toggle("hidden", !slide.inset);
 }
@@ -418,62 +422,63 @@ function segsToWords(segs) {
   return words;
 }
 function drawBody(c, slide, style, scale, w, h) {
+  slide._textBox = null;
   const text = (slide.body || "").trim();
   if (!text) return;
-  const size = 62 * style.size * scale;
-  const lh = size * 1.32;
-  const parGap = size * 0.55;
-  const margin = 84 * scale;
-  const maxW = w - margin * 2;
+  const align = slide.align || "left";
+  const size = 46 * style.size * scale;     // base más contenido, estilo Instagram
+  const lh = size * 1.34;
+  const parGap = size * 0.6;
+  const maxW = w * 0.82;                     // ancho máximo de envoltura
   c.font = `${style.weight} ${size}px ${style.font}`;
   c.textBaseline = "alphabetic";
 
-  // Layout: paragraphs -> lines (array of word tokens with x)
-  const paragraphs = text.split("\n");
-  const layout = []; // { lines:[ {words:[{...,x,w}], width} ] , isGap }
-  paragraphs.forEach(par => {
+  // Layout: párrafos -> líneas
+  const layout = []; let blockW = 0;
+  text.split("\n").forEach(par => {
     if (par.trim() === "") { layout.push({ gap: true }); return; }
     const words = segsToWords(tokenizeLine(par));
     words.forEach(t => t.w = c.measureText(t.text).width);
     const lines = []; let line = [], lineW = 0;
     words.forEach(t => {
-      if (!t.space && lineW + t.w > maxW && line.length) {
-        lines.push({ words: line, width: lineW }); line = []; lineW = 0;
-      }
-      if (t.space && line.length === 0) return; // no leading space
+      if (!t.space && lineW + t.w > maxW && line.length) { lines.push({ words: line, width: lineW }); line = []; lineW = 0; }
+      if (t.space && line.length === 0) return;
       t.x = lineW; line.push(t); lineW += t.w;
     });
     if (line.length) lines.push({ words: line, width: lineW });
+    lines.forEach(l => { blockW = Math.max(blockW, l.width); });
     layout.push({ lines });
   });
 
-  // Altura total
+  // Altura total del bloque
   let total = 0;
-  layout.forEach(block => {
-    if (block.gap) { total += parGap; return; }
-    total += block.lines.length * lh;
-  });
+  layout.forEach(b => { total += b.gap ? parGap : b.lines.length * lh; });
 
-  // Posición vertical
-  const top = margin + size, bottomMargin = 150 * scale;
-  let y;
-  if (slide.vpos === "top") y = top;
-  else if (slide.vpos === "center") y = (h - total) / 2 + size;
-  else y = h - total - bottomMargin + size;
+  // Anclaje libre (centro del bloque = slide.pos)
+  const cx = slide.pos.x * w, cyTop = slide.pos.y * h - total / 2;
+  const left = cx - blockW / 2;
+  let y = cyTop + size;
 
-  const x0 = margin;
+  // Recuadro para hit-test (en espacio de lienzo 1080, invariante a escala)
+  const pad = size * 0.3;
+  slide._textBox = {
+    x: (left - pad) / scale, y: (cyTop - pad) / scale,
+    w: (blockW + pad * 2) / scale, h: (total + pad * 2) / scale
+  };
+
   layout.forEach(block => {
     if (block.gap) { y += parGap; return; }
     block.lines.forEach(ln => {
-      // 1) cajas de resaltado (runs contiguos hl)
-      let i = 0;
-      while (i < ln.words.length) {
+      const lineX = align === "center" ? cx - ln.width / 2
+                  : align === "right" ? left + blockW - ln.width : left;
+      // 1) cajas de resaltado
+      for (let i = 0; i < ln.words.length;) {
         if (ln.words[i].hl) {
-          let j = i, startX = ln.words[i].x, endX = ln.words[i].x + ln.words[i].w;
-          while (j < ln.words.length && ln.words[j].hl) { endX = ln.words[j].x + ln.words[j].w; j++; }
-          const padX = size * 0.16, padY = size * 0.14;
+          let j = i, sX = ln.words[i].x, eX = ln.words[i].x + ln.words[i].w;
+          while (j < ln.words.length && ln.words[j].hl) { eX = ln.words[j].x + ln.words[j].w; j++; }
+          const padX = size * 0.16, padY = size * 0.13;
           c.fillStyle = style.highlightColor;
-          roundRect(c, x0 + startX - padX, y - size + size * 0.04 - padY, (endX - startX) + padX * 2, size + padY * 1.4, size * 0.16);
+          roundRect(c, lineX + sX - padX, y - size + size * 0.06 - padY, (eX - sX) + padX * 2, size + padY * 1.4, size * 0.18);
           c.fill();
           i = j;
         } else i++;
@@ -482,19 +487,18 @@ function drawBody(c, slide, style, scale, w, h) {
       ln.words.forEach(t => {
         if (t.space) return;
         c.fillStyle = t.hl ? style.highlightText : (t.ac ? style.highlightColor : style.textColor);
-        if (!t.hl) { c.shadowColor = "rgba(0,0,0,0.55)"; c.shadowBlur = size * 0.14; c.shadowOffsetY = size * 0.03; }
-        c.fillText(t.text, x0 + t.x, y);
+        if (!t.hl) { c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = size * 0.12; c.shadowOffsetY = size * 0.025; }
+        c.fillText(t.text, lineX + t.x, y);
         c.shadowColor = "transparent"; c.shadowBlur = 0; c.shadowOffsetY = 0;
       });
-      // 3) subrayados (runs contiguos ul)
-      let k = 0;
-      while (k < ln.words.length) {
+      // 3) subrayados
+      for (let k = 0; k < ln.words.length;) {
         if (ln.words[k].ul) {
           let j = k, sX = ln.words[k].x, eX = ln.words[k].x + ln.words[k].w;
           while (j < ln.words.length && ln.words[j].ul) { eX = ln.words[j].x + ln.words[j].w; j++; }
           c.strokeStyle = style.highlightColor; c.lineWidth = size * 0.07; c.lineCap = "round";
-          const uy = y + size * 0.16;
-          c.beginPath(); c.moveTo(x0 + sX, uy); c.lineTo(x0 + eX, uy); c.stroke();
+          const uy = y + size * 0.17;
+          c.beginPath(); c.moveTo(lineX + sX, uy); c.lineTo(lineX + eX, uy); c.stroke();
           k = j;
         } else k++;
       }
@@ -506,33 +510,44 @@ function drawBody(c, slide, style, scale, w, h) {
 /* =========================================================================
  *  Imagen insertada (pantallazo): arrastrar y redimensionar
  * ========================================================================= */
-function setupInsetDrag() {
+function setupDrag() {
   const cv = editorCanvas;
-  let dragging = false, offX = 0, offY = 0;
-  const pos = e => {
-    const r = cv.getBoundingClientRect();
-    const cx = (e.clientX - r.left) / r.width;
-    const cy = (e.clientY - r.top) / r.height;
-    return { cx, cy };
-  };
+  let target = null, offX = 0, offY = 0;   // target: "inset" | "text"
+  const norm = e => { const r = cv.getBoundingClientRect(); return { nx: (e.clientX - r.left) / r.width, ny: (e.clientY - r.top) / r.height }; };
+
   cv.addEventListener("pointerdown", e => {
-    const ins = state.active && curSlide().inset;
-    if (!ins) return;
-    const { cx, cy } = pos(e);
-    const iw = ins.scale, ih = ins.scale * (ins.img.height / ins.img.width) * (CANVAS_W / CANVAS_H);
-    if (Math.abs(cx - ins.cx) < iw / 2 && Math.abs(cy - ins.cy) < ih / 2) {
-      dragging = true; offX = cx - ins.cx; offY = cy - ins.cy; cv.setPointerCapture(e.pointerId);
+    if (!state.active) return;
+    const { nx, ny } = norm(e);
+    const px = nx * CANVAS_W, py = ny * CANVAS_H;
+    const slide = curSlide();
+    // 1) foto insertada (prioridad)
+    const ins = slide.inset;
+    if (ins && ins.img) {
+      const iw = ins.scale * CANVAS_W, ih = iw * (ins.img.height / ins.img.width);
+      const ix = ins.cx * CANVAS_W - iw / 2, iy = ins.cy * CANVAS_H - ih / 2;
+      if (px >= ix && px <= ix + iw && py >= iy && py <= iy + ih) {
+        target = "inset"; offX = nx - ins.cx; offY = ny - ins.cy; cv.setPointerCapture(e.pointerId); return;
+      }
+    }
+    // 2) bloque de texto
+    const b = slide._textBox;
+    if (b && px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) {
+      target = "text"; offX = nx - slide.pos.x; offY = ny - slide.pos.y; cv.setPointerCapture(e.pointerId);
     }
   });
   cv.addEventListener("pointermove", e => {
-    if (!dragging) return;
-    const { cx, cy } = pos(e);
-    const ins = curSlide().inset;
-    ins.cx = Math.max(0.05, Math.min(0.95, cx - offX));
-    ins.cy = Math.max(0.05, Math.min(0.95, cy - offY));
+    if (!target) return;
+    const { nx, ny } = norm(e);
+    const slide = curSlide();
+    const clamp = v => Math.max(0.04, Math.min(0.96, v));
+    if (target === "inset") { slide.inset.cx = clamp(nx - offX); slide.inset.cy = clamp(ny - offY); }
+    else { slide.pos.x = clamp(nx - offX); slide.pos.y = clamp(ny - offY); }
     drawEditor();
   });
-  cv.addEventListener("pointerup", e => { if (dragging) { dragging = false; refreshActiveThumb(); } });
+  const end = () => { if (target) { target = null; refreshActiveThumb(); persist(); } };
+  cv.addEventListener("pointerup", end);
+  cv.addEventListener("pointercancel", end);
+  cv.style.touchAction = "none";
 }
 
 /* =========================================================================
@@ -592,7 +607,7 @@ function wrapSelection(marker) {
  * ========================================================================= */
 function bind() {
   editorCanvas = $("#editorCanvas");
-  setupInsetDrag();
+  setupDrag();
 
   $$(".nav-item").forEach(n => n.addEventListener("click", () => setView(n.dataset.view)));
 
@@ -620,7 +635,7 @@ function bind() {
 
   // Texto del frame
   $("#bodyInput").addEventListener("input", e => { curSlide().body = e.target.value; drawEditor(); refreshActiveThumb(); });
-  $("#vposSelect").addEventListener("change", e => { curSlide().vpos = e.target.value; drawEditor(); refreshActiveThumb(); persist(); });
+  $("#alignSelect").addEventListener("change", e => { curSlide().align = e.target.value; drawEditor(); refreshActiveThumb(); persist(); });
   $("#overlaySelect").addEventListener("change", e => { curSlide().overlay = e.target.value; drawEditor(); refreshActiveThumb(); persist(); });
   $("#mkHighlight").addEventListener("click", () => wrapSelection("=="));
   $("#mkUnderline").addEventListener("click", () => wrapSelection("__"));
@@ -630,7 +645,8 @@ function bind() {
   $("#fontSelect").addEventListener("change", e => { state.active.style.font = e.target.value; drawEditor(); renderThumbs(); persist(); });
   $("#highlightColor").addEventListener("input", e => { state.active.style.highlightColor = e.target.value; drawEditor(); renderThumbs(); persist(); });
   $("#textColor").addEventListener("input", e => { state.active.style.textColor = e.target.value; drawEditor(); renderThumbs(); persist(); });
-  $("#sizeSelect").addEventListener("change", e => { state.active.style.size = parseFloat(e.target.value); drawEditor(); renderThumbs(); persist(); });
+  $("#sizeRange").addEventListener("input", e => { state.active.style.size = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
+  $("#sizeRange").addEventListener("change", persist);
 
   // Imágenes
   $("#shuffleAll").addEventListener("click", () => { assignRandomImages(state.active); drawEditor(); renderThumbs(); });
