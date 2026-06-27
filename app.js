@@ -67,11 +67,10 @@ const persist = () => store.save(state.sequences);
 function newStyle() { return JSON.parse(JSON.stringify(DEFAULT_STYLE)); }
 
 function makeSlide(s) {
-  const vy = s.vpos === "top" ? 0.24 : s.vpos === "center" ? 0.5 : 0.78;
   return {
     body: s.body,
     overlay: s.overlay || "bottom",
-    pos: s.pos || { x: 0.5, y: vy },   // posición libre (centro del bloque)
+    pos: s.pos || { x: 0.5, y: 0.16 },   // por defecto arriba del todo (centro del bloque)
     align: s.align || "left",
     bg: s.bg ? { ...s.bg } : { zoom: 1, ox: 0, oy: 0 },  // zoom/desplazamiento del fondo
     bgIndex: -1, inset: null, _textBox: null
@@ -100,7 +99,7 @@ function fromCatalog(catId, extra = {}) {
 
 function fromStructure(key, category) {
   const st = STRUCTURES[key];
-  const slides = Array.from({ length: st.frames }, (_, i) => ({ body: blankBody(i), vpos: "bottom", overlay: "bottom" }));
+  const slides = Array.from({ length: st.frames }, (_, i) => ({ body: blankBody(i), overlay: "bottom" }));
   return instantiate({ title: "Nueva secuencia", category, slides, status: "draft" });
 }
 
@@ -344,7 +343,7 @@ function renderThumbs() {
   const add = document.createElement("button");
   add.className = "thumb add"; add.innerHTML = "<span>＋</span>";
   add.addEventListener("click", () => {
-    state.active.slides.push(makeSlide({ body: blankBody(0), vpos: "bottom", overlay: "bottom" }));
+    state.active.slides.push(makeSlide({ body: blankBody(0), overlay: "bottom" }));
     assignRandomImages(state.active);
     state.current = state.active.slides.length - 1;
     persist(); renderThumbs(); drawEditor();
@@ -385,7 +384,7 @@ function drawEditor() { drawSlide(ctx(), curSlide(), CANVAS_W, CANVAS_H, state.a
  *  MOTOR DE RENDER
  * ========================================================================= */
 // Zona segura de Instagram Stories (fracciones del lienzo 1080x1920)
-const SAFE = { top: 0.18, bottom: 0.82, left: 0.05, right: 0.95 };
+const SAFE = { top: 0.075, bottom: 0.82, left: 0.05, right: 0.95 };
 function clampSafe(v, min, max) { return min > max ? (min + max) / 2 : Math.max(min, Math.min(max, v)); }
 
 function drawSlide(c, slide, w, h, style, guides) {
@@ -428,9 +427,13 @@ function drawCover(c, img, w, h, bg) {
   c.drawImage(img, dx, dy, dw, dh);
 }
 function drawPlaceholder(c, w, h) {
-  const g = c.createLinearGradient(0, 0, w, h);
-  g.addColorStop(0, "#2a2320"); g.addColorStop(1, "#14110f");
-  c.fillStyle = g; c.fillRect(0, 0, w, h);
+  // Fondo neutro vacío: aquí irá la imagen que suba el usuario.
+  c.fillStyle = "#1b1b1e";
+  c.fillRect(0, 0, w, h);
+  c.fillStyle = "rgba(255,255,255,0.16)";
+  c.textAlign = "center"; c.textBaseline = "middle";
+  c.font = `500 ${w * 0.05}px -apple-system, system-ui, sans-serif`;
+  c.fillText("＋ foto", w / 2, h / 2);
 }
 function drawOverlay(c, type, w, h) {
   if (type === "none") return;
@@ -477,9 +480,9 @@ function tokenizeLine(line) {
 }
 function segsToWords(segs) {
   const words = [];
-  segs.forEach(s => s.text.split(/(\s+)/).forEach(p => {
+  segs.forEach(s => s.text.split(/\s+/).forEach(p => {
     if (p === "") return;
-    words.push({ text: p, space: /^\s+$/.test(p), hl: s.hl, ul: s.ul, ac: s.ac });
+    words.push({ text: p, hl: s.hl, ul: s.ul, ac: s.ac });
   }));
   return words;
 }
@@ -493,6 +496,7 @@ function drawBody(c, slide, style, scale, w, h) {
   const parGap = size * 0.6;
   const maxW = w * 0.82;                     // ancho máximo de envoltura
   c.font = `${style.weight} ${size}px ${style.font}`;
+  c.textAlign = "left";          // imprescindible: el texto se posiciona por x manual
   c.textBaseline = "alphabetic";
 
   // Layout: párrafos -> líneas
@@ -501,11 +505,16 @@ function drawBody(c, slide, style, scale, w, h) {
     if (par.trim() === "") { layout.push({ gap: true }); return; }
     const words = segsToWords(tokenizeLine(par));
     words.forEach(t => t.w = c.measureText(t.text).width);
+    const sp = c.measureText(" ").width;   // espaciado uniforme entre palabras
     const lines = []; let line = [], lineW = 0;
     words.forEach(t => {
-      if (!t.space && lineW + t.w > maxW && line.length) { lines.push({ words: line, width: lineW }); line = []; lineW = 0; }
-      if (t.space && line.length === 0) return;
-      t.x = lineW; line.push(t); lineW += t.w;
+      const gap = line.length ? sp : 0;
+      if (lineW + gap + t.w > maxW && line.length) {
+        lines.push({ words: line, width: lineW }); line = []; lineW = 0;
+        t.x = 0; line.push(t); lineW = t.w;
+      } else {
+        t.x = lineW + gap; line.push(t); lineW += gap + t.w;
+      }
     });
     if (line.length) lines.push({ words: line, width: lineW });
     lines.forEach(l => { blockW = Math.max(blockW, l.width); });
