@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ABMedia · Story Builder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- ===================== SIDEBAR ===================== -->
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="logo">AB</span>
+        <div>
+          <strong>ABMedia</strong>
+          <small>Story Builder</small>
+        </div>
+      </div>
+      <nav class="nav">
+        <a class="nav-item active">▦ Production desk</a>
+        <a class="nav-item">▤ Dashboard</a>
+        <a class="nav-item">≡ Secuencias</a>
+      </nav>
+      <div class="upload-card">
+        <p class="upload-title">Tu carpeta de imágenes</p>
+        <p class="upload-sub" id="imgState"><span id="imgCount">0</span> imágenes cargadas</p>
+        <button class="btn btn-ghost full" id="uploadBtn">＋ Subir imágenes</button>
+        <input type="file" id="fileInput" accept="image/*" multiple hidden />
+        <p class="upload-note">Se quedan en tu dispositivo. No se suben a ningún servidor.</p>
+      </div>
+    </aside>
+
+    <!-- ===================== CONTENIDO ===================== -->
+    <main class="content">
+      <header class="topbar">
+        <div>
+          <h1>Production desk</h1>
+          <p>Crea secuencias de stories, ajusta los textos y exporta los frames.</p>
+        </div>
+        <button class="btn btn-primary" id="newSeq">＋ Nueva secuencia</button>
+      </header>
+
+      <div class="desk">
+        <!-- Bandeja de ideas -->
+        <section class="inbox">
+          <div class="inbox-head">
+            <span class="chip">INBOX</span>
+            <h2>Listas para crear</h2>
+            <p>Ideas escritas pendientes de convertir en frames editables.</p>
+          </div>
+          <div id="inboxList" class="inbox-list"></div>
+        </section>
+
+        <!-- Pipeline -->
+        <section class="pipeline">
+          <div class="tabs">
+            <button class="tab active" data-filter="all">Todas <span class="count">0</span></button>
+            <button class="tab" data-filter="draft">Borrador <span class="count">0</span></button>
+            <button class="tab" data-filter="progress">En progreso <span class="count">0</span></button>
+            <button class="tab" data-filter="scheduled">Programado <span class="count">0</span></button>
+            <button class="tab" data-filter="published">Publicado <span class="count">0</span></button>
+          </div>
+          <div id="grid" class="grid"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- ===================== MODAL: NUEVA SECUENCIA ===================== -->
+  <div id="tplModal" class="modal hidden">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2>Elige una plantilla</h2>
+        <button class="icon-btn" id="tplClose">✕</button>
+      </div>
+      <div id="tplList" class="tpl-grid"></div>
+    </div>
+  </div>
+
+  <!-- ===================== OVERLAY: EDITOR ===================== -->
+  <div id="overlay" class="overlay hidden">
+    <div class="editor">
+      <header class="editor-top">
+        <div class="editor-titlewrap">
+          <input id="editorTitle" class="editor-title" />
+          <select id="statusSelect" class="status-select">
+            <option value="draft">Borrador</option>
+            <option value="progress">En progreso</option>
+            <option value="scheduled">Programado</option>
+            <option value="published">Publicado</option>
+          </select>
+        </div>
+        <button class="icon-btn" id="editorClose">✕</button>
+      </header>
+
+      <div class="editor-body">
+        <!-- Columna izquierda: vista previa -->
+        <div class="preview-col">
+          <canvas id="editorCanvas" width="1080" height="1920" class="preview"></canvas>
+          <div class="preview-actions">
+            <button class="btn btn-ghost sm" id="newImg">🔀 Otra imagen</button>
+            <button class="btn btn-ghost sm" id="shuffleAll">🎲 Barajar todas</button>
+          </div>
+        </div>
+
+        <!-- Columna central: frames -->
+        <div class="frames-col">
+          <p class="col-label">Frames</p>
+          <div id="thumbs" class="thumbs"></div>
+        </div>
+
+        <!-- Columna derecha: edición -->
+        <div class="edit-col">
+          <div id="editorDrop" class="dropzone">
+            <strong>Arrastra tus imágenes aquí</strong>
+            <span>o haz clic para elegir una carpeta</span>
+            <input type="file" id="fileInput2" accept="image/*" multiple hidden />
+          </div>
+
+          <h3 class="edit-slide" id="slideName">Frame</h3>
+          <div id="textPanel" class="text-panel"></div>
+
+          <div class="style-row">
+            <label class="field inline">
+              <span>Color ABMedia</span>
+              <input type="color" id="accentColor" value="#ff6a1a" />
+            </label>
+            <label class="field inline">
+              <span>Tipografía</span>
+              <select id="fontSelect">
+                <option value="'Poppins', system-ui, sans-serif">Poppins</option>
+                <option value="'Montserrat', system-ui, sans-serif">Montserrat</option>
+                <option value="'Playfair Display', serif">Playfair</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="download-row">
+            <button class="btn btn-ghost" id="dlOne">⬇ Este frame</button>
+            <button class="btn btn-primary" id="dlAll">⬇ Descargar todos</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="templates.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
