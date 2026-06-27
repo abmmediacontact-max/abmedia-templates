@@ -55,15 +55,30 @@ carpeta) sin tocar tu hosting actual.
 
 ---
 
-## 💶 Coste
+## 💾 Guardado de secuencias
 
-| Concepto      | Coste |
-|---------------|-------|
-| Software      | 0 € (este proyecto) |
-| Hosting       | 0 € (estático, cabe en tu hosting o en uno gratuito) |
-| Mantenimiento | Prácticamente nulo |
+- **Versión actual (sin login):** las secuencias que creas se guardan en el
+  navegador (`localStorage`). Funcionan **en ese dispositivo**, sin coste. Si se
+  borran los datos del navegador o se cambia de equipo, no viajan contigo.
+- **Versión con cuentas (recomendada para clientes):** cada cliente entra con su
+  login y sus secuencias y plantillas se guardan en su cuenta, accesibles desde
+  cualquier dispositivo. Requiere un backend (p. ej. Supabase).
 
-**Total: 0 € adicionales** para una versión funcional.
+El flujo "📤 Enviar a revisión" ya está en la interfaz: el cliente marca una
+secuencia como candidata y, en la versión con cuentas, ABMedia podrá revisarla
+y —con su permiso— añadirla al catálogo general.
+
+## 💶 Coste (orientado a ~20 clientes 1-a-1)
+
+| Concepto | Sin login (hoy) | Con login (Supabase) |
+|----------|-----------------|----------------------|
+| Software | 0 € | 0 € |
+| Hosting / backend | 0 € | **0 € en plan gratuito** (suficiente para 20 usuarios) |
+| Mantenimiento | nulo | mínimo |
+
+Con ~20 clientes, el procesado de imágenes en el navegador y el tamaño diminuto
+de los datos (texto) hacen que **el plan gratuito de Supabase sea más que
+suficiente: 0 €/mes**. El tope de ~15-25 €/mes solo aplica a gran escala.
 
 ---
 

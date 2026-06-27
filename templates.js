@@ -141,5 +141,36 @@ const TEMPLATES = {
         ]
       }
     ]
+  },
+
+  dato: {
+    name: "📊 Dato / Cifra",
+    description: "3 stories: gancho, cifra grande y conclusión.",
+    slides: [
+      {
+        name: "1 · Gancho",
+        overlay: "full",
+        texts: [
+          { id: "kicker", label: "Antetítulo", default: "¿SABÍAS QUE...?", x: CX, y: 820, maxWidth: 900, size: 46, weight: 700, align: "center", color: "#ffffff", accent: true, transform: "uppercase", track: 6 },
+          { id: "hook", label: "Gancho", default: "La mayoría comete este error sin darse cuenta", x: CX, y: 1040, maxWidth: 880, size: 70, weight: 700, align: "center", color: "#ffffff", lineHeight: 1.15 }
+        ]
+      },
+      {
+        name: "2 · Cifra",
+        overlay: "full",
+        texts: [
+          { id: "number", label: "Cifra", default: "87%", x: CX, y: 820, maxWidth: 980, size: 230, weight: 800, align: "center", color: "#ffffff", accent: true },
+          { id: "context", label: "Contexto de la cifra", default: "no consigue resultados por no tener un sistema", x: CX, y: 1120, maxWidth: 880, size: 56, weight: 600, align: "center", color: "#ffffff", lineHeight: 1.2 }
+        ]
+      },
+      {
+        name: "3 · Conclusión",
+        overlay: "bottom",
+        texts: [
+          { id: "takeaway", label: "Conclusión", default: "No te quedes en el lado equivocado", x: CX, y: 1420, maxWidth: 900, size: 64, weight: 700, align: "center", color: "#ffffff", lineHeight: 1.15 },
+          { id: "cta", label: "Llamada a la acción", default: "Te lo cuento ↑", x: CX, y: 1620, maxWidth: 900, size: 50, weight: 700, align: "center", color: "#ffffff", accent: true, transform: "uppercase", track: 2 }
+        ]
+      }
+    ]
   }
 };

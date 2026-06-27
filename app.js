@@ -1,39 +1,31 @@
 /* =========================================================================
- *  ABMedia · Story Builder — Production desk
- *  Todo ocurre en el navegador: las imágenes nunca se suben a ningún servidor.
+ *  ABMedia · Story Builder
+ *  - Production desk (pipeline) + Biblioteca por categorías + Mis secuencias
+ *  - Todo en el navegador. Las secuencias se guardan en localStorage.
+ *  - El procesado de imágenes es local: las fotos no se suben a ningún servidor.
+ *
+ *  NOTA: la persistencia usa una capa (store.*) pensada para sustituirse por
+ *  un backend con login (p. ej. Supabase) sin tocar el resto de la app.
  * ========================================================================= */
 
 const state = {
-  images: [],          // [{ name, img }]
-  sequences: [],       // pipeline de secuencias creadas
-  inbox: [],           // ideas escritas pendientes de convertir
-  active: null,        // secuencia que se está editando
-  current: 0,          // slide actual dentro del editor
-  filter: "all",
-  accent: "#ff6a1a",   // naranja ABMedia
+  images: [],          // [{ name, img }]  (solo en memoria de la sesión)
+  sequences: [],       // secuencias del usuario (persistidas)
+  inbox: [],           // ideas escritas pendientes
+  active: null,        // secuencia en edición
+  current: 0,          // slide actual
+  view: "desk",        // desk | library | mine
+  filter: "all",       // filtro de estado en el desk
+  cat: "all",          // filtro de categoría en la biblioteca
+  accent: "#ff6a1a",
   font: "'Poppins', system-ui, sans-serif",
   seq: 1
 };
 
 const $ = (s) => document.querySelector(s);
+const $$ = (s) => Array.from(document.querySelectorAll(s));
+let editorCanvas;
 const ctx = () => editorCanvas.getContext("2d");
-
-/* --------- Datos de ejemplo (se ven al abrir, como en la referencia) ----- */
-const SEED_INBOX = [
-  { brief: "Algo que llevo tiempo sin abrir. Quiero contar por qué vuelvo a esto.", template: "minimal" },
-  { brief: "Quiero hablar de dónde empecé de verdad y por qué casi lo dejo.", template: "tips" },
-  { brief: "Estoy haciendo algo que nunca había hecho en público. Llevo meses dándole vueltas.", template: "promo" },
-  { brief: "Déjame contarte qué nos diferencia de cualquier otro que hayas visto.", template: "testimonio" }
-];
-
-const SEED_SEQUENCES = [
-  { title: "La estructura de 3 stories que mejor convierte", template: "tips", status: "progress" },
-  { title: "Quiero enseñarte por qué construí esto", template: "promo", status: "scheduled" },
-  { title: "Una rápida hoy. Sin gran pitch, sin cuenta atrás", template: "minimal", status: "scheduled" },
-  { title: "Un vistazo a un día real trabajando", template: "tips", status: "progress" },
-  { title: "Quiero enseñarte algo que pasó este mes", template: "testimonio", status: "progress" },
-  { title: "Plazas abiertas: 3 horas, 5 sitios", template: "promo", status: "published" }
-];
 
 const STATUS = {
   draft:     { label: "Borrador",     cls: "st-draft" },
@@ -42,19 +34,59 @@ const STATUS = {
   published: { label: "Publicado",    cls: "st-published" }
 };
 
-/* ---------------------------------------------------------------------------
- *  Crear una secuencia a partir de una plantilla
- * ------------------------------------------------------------------------- */
-function buildSequence({ title, template, status = "draft", brief = "" }) {
-  const tpl = TEMPLATES[template] || TEMPLATES.promo;
-  const slides = tpl.slides.map(def => ({
-    def,
-    imageIndex: 0,
-    texts: Object.fromEntries(def.texts.map(t => [t.id, t.default]))
-  }));
-  const seq = { id: state.seq++, title, template, status, brief, slides };
+const SEED_INBOX = [
+  { brief: "Algo que llevo tiempo sin abrir. Quiero contar por qué vuelvo a esto.", layout: "minimal", category: "lifestyle" },
+  { brief: "Quiero hablar de dónde empecé de verdad y por qué casi lo dejo.", layout: "minimal", category: "autoridad" },
+  { brief: "Tengo plazas abiertas y quiero llenarlas esta semana.", layout: "promo", category: "ventas" }
+];
+
+const DEMO_SEQS = [
+  { catalogId: "val-tips",   status: "progress" },
+  { catalogId: "v-oferta",   status: "scheduled" },
+  { catalogId: "a-resultado",status: "published" },
+  { catalogId: "l-bts",      status: "draft" }
+];
+
+/* =========================================================================
+ *  Capa de almacenamiento (hoy localStorage; mañana backend con login)
+ * ========================================================================= */
+const store = {
+  KEY: "abmedia_sequences_v1",
+  load() {
+    try { return JSON.parse(localStorage.getItem(this.KEY)) || null; }
+    catch { return null; }
+  },
+  save(seqs) {
+    const data = seqs.map(s => ({
+      id: s.id, title: s.title, layout: s.layout, category: s.category,
+      status: s.status, submitted: !!s.submitted,
+      slidesTexts: s.slides.map(sl => sl.texts)
+    }));
+    try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch (e) {}
+  }
+};
+const persist = () => store.save(state.sequences);
+
+/* =========================================================================
+ *  Construcción de secuencias
+ * ========================================================================= */
+function instantiate({ title, layout, category = "valor", status = "draft", submitted = false, presets = {}, slidesTexts = null, id = null }) {
+  const tpl = TEMPLATES[layout] || TEMPLATES.promo;
+  const slides = tpl.slides.map((def, i) => {
+    const texts = Object.fromEntries(def.texts.map(t => [t.id, t.default]));
+    if (presets[i]) Object.assign(texts, presets[i]);
+    if (slidesTexts && slidesTexts[i]) Object.assign(texts, slidesTexts[i]);
+    return { def, imageIndex: -1, texts };
+  });
+  const seq = { id: id || state.seq++, title, layout, category, status, submitted, slides };
+  if (id && id >= state.seq) state.seq = id + 1;
   assignRandomImages(seq);
   return seq;
+}
+
+function fromCatalog(catId, extra = {}) {
+  const c = CATALOG.find(x => x.id === catId);
+  return instantiate({ title: c.title, layout: c.layout, category: c.category, presets: c.presets, ...extra });
 }
 
 function assignRandomImages(seq) {
@@ -72,9 +104,9 @@ function shuffle(a) {
   return a;
 }
 
-/* ---------------------------------------------------------------------------
- *  Carga de imágenes
- * ------------------------------------------------------------------------- */
+/* =========================================================================
+ *  Imágenes
+ * ========================================================================= */
 function loadFiles(fileList) {
   const files = Array.from(fileList).filter(f => f.type.startsWith("image/"));
   if (!files.length) return;
@@ -87,9 +119,8 @@ function loadFiles(fileList) {
     function done() {
       if (--pending === 0) {
         updateImgCount();
-        // reasigna imágenes a todas las secuencias que aún no tenían
         state.sequences.forEach(s => { if (s.slides.some(sl => sl.imageIndex < 0)) assignRandomImages(s); });
-        renderGrid();
+        renderAll();
         if (state.active) { assignRandomImages(state.active); drawEditor(); renderThumbs(); }
       }
     }
@@ -102,35 +133,45 @@ function updateImgCount() {
   $("#imgState").classList.toggle("ok", n > 0);
 }
 
-/* ---------------------------------------------------------------------------
- *  DASHBOARD
- * ------------------------------------------------------------------------- */
+/* =========================================================================
+ *  Navegación entre vistas
+ * ========================================================================= */
+function setView(view) {
+  state.view = view;
+  $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === view));
+  ["desk", "library", "mine"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
+  renderAll();
+}
+
+function renderAll() {
+  if (state.view === "desk") { renderInbox(); renderGrid(); }
+  else if (state.view === "library") renderCatalog();
+  else if (state.view === "mine") renderMine();
+}
+
+/* =========================================================================
+ *  VISTA: Production desk
+ * ========================================================================= */
 function renderInbox() {
   const box = $("#inboxList");
   box.innerHTML = "";
-  if (!state.inbox.length) {
-    box.innerHTML = `<p class="empty">Bandeja vacía 🎉</p>`;
-    return;
-  }
+  if (!state.inbox.length) { box.innerHTML = `<p class="empty">Bandeja vacía 🎉</p>`; return; }
   state.inbox.forEach((item, i) => {
+    const tpl = TEMPLATES[item.layout];
     const el = document.createElement("div");
     el.className = "inbox-item";
-    const tpl = TEMPLATES[item.template];
-    el.innerHTML = `
-      <p>${item.brief}</p>
+    el.innerHTML = `<p>${item.brief}</p>
       <span class="meta">PENDIENTE · ${tpl.slides.length} frames</span>
       <button class="btn btn-primary sm">✦ Crear secuencia</button>`;
     el.querySelector("button").addEventListener("click", () => {
-      const seq = buildSequence({
-        title: item.brief.length > 48 ? item.brief.slice(0, 48) + "…" : item.brief,
-        template: item.template,
-        status: "draft",
-        brief: item.brief
+      const seq = instantiate({
+        title: item.brief.length > 46 ? item.brief.slice(0, 46) + "…" : item.brief,
+        layout: item.layout, category: item.category, status: "draft"
       });
       state.sequences.unshift(seq);
       state.inbox.splice(i, 1);
-      renderInbox();
-      renderGrid();
+      persist();
+      renderAll();
       openEditor(seq.id);
     });
     box.appendChild(el);
@@ -141,14 +182,79 @@ function renderGrid() {
   const grid = $("#grid");
   grid.innerHTML = "";
   const list = state.sequences.filter(s => state.filter === "all" || s.status === state.filter);
-  if (!list.length) {
-    grid.innerHTML = `<p class="empty">No hay secuencias en este estado.</p>`;
-    return;
+  if (!list.length) { grid.innerHTML = `<p class="empty">No hay secuencias en este estado.</p>`; updateCounts(); return; }
+  list.forEach(seq => grid.appendChild(makeCard(seq)));
+  updateCounts();
+}
+
+function makeCard(seq) {
+  const card = document.createElement("div");
+  card.className = "card";
+  const st = STATUS[seq.status];
+  const cat = CATEGORIES[seq.category];
+  const cv = document.createElement("canvas");
+  cv.width = 270; cv.height = 480; cv.className = "card-canvas";
+  drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height);
+  card.appendChild(cv);
+  const badge = document.createElement("span");
+  badge.className = "frames-badge";
+  badge.textContent = `${seq.slides.length} frames`;
+  card.appendChild(badge);
+  if (seq.submitted) {
+    const rev = document.createElement("span");
+    rev.className = "review-badge";
+    rev.textContent = "⏳ En revisión";
+    card.appendChild(rev);
   }
-  list.forEach(seq => {
+  const info = document.createElement("div");
+  info.className = "card-info";
+  info.innerHTML = `
+    <div class="card-row">
+      <h3>${seq.title}</h3>
+      <span class="status ${st.cls}">${st.label}</span>
+    </div>
+    <span class="cat-tag">${cat ? cat.emoji + " " + cat.name : ""}</span>`;
+  card.appendChild(info);
+  card.addEventListener("click", () => openEditor(seq.id));
+  return card;
+}
+
+function updateCounts() {
+  const c = { all: state.sequences.length, draft: 0, progress: 0, scheduled: 0, published: 0 };
+  state.sequences.forEach(s => c[s.status]++);
+  $$(".tab").forEach(t => { t.querySelector(".count").textContent = c[t.dataset.filter] ?? 0; });
+}
+
+/* =========================================================================
+ *  VISTA: Biblioteca (catálogo por categorías)
+ * ========================================================================= */
+function renderCatChips() {
+  const box = $("#catChips");
+  box.innerHTML = "";
+  const all = document.createElement("button");
+  all.className = "chip-btn" + (state.cat === "all" ? " active" : "");
+  all.textContent = "Todas";
+  all.addEventListener("click", () => { state.cat = "all"; renderCatalog(); });
+  box.appendChild(all);
+  Object.entries(CATEGORIES).forEach(([key, cat]) => {
+    const b = document.createElement("button");
+    b.className = "chip-btn" + (state.cat === key ? " active" : "");
+    b.innerHTML = `${cat.emoji} ${cat.name}`;
+    b.addEventListener("click", () => { state.cat = key; renderCatalog(); });
+    box.appendChild(b);
+  });
+}
+
+function renderCatalog() {
+  renderCatChips();
+  const grid = $("#catalogGrid");
+  grid.innerHTML = "";
+  const list = CATALOG.filter(c => state.cat === "all" || c.category === state.cat);
+  list.forEach(item => {
+    const seq = fromCatalog(item.id);
+    const cat = CATEGORIES[item.category];
     const card = document.createElement("div");
     card.className = "card";
-    const st = STATUS[seq.status];
     const cv = document.createElement("canvas");
     cv.width = 270; cv.height = 480; cv.className = "card-canvas";
     drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height);
@@ -160,37 +266,64 @@ function renderGrid() {
     const info = document.createElement("div");
     info.className = "card-info";
     info.innerHTML = `
-      <div class="card-row">
-        <h3>${seq.title}</h3>
-        <span class="status ${st.cls}">${st.label}</span>
-      </div>
-      <span class="edit-hint">Toca para editar los frames →</span>`;
+      <div class="card-row"><h3>${item.title}</h3>
+        <span class="cat-tag">${cat.emoji} ${cat.name}</span></div>
+      <p class="card-obj">${item.objective}</p>
+      <button class="btn btn-primary sm full">Usar esta secuencia →</button>`;
+    info.querySelector("button").addEventListener("click", () => {
+      const created = fromCatalog(item.id, { status: "draft" });
+      state.sequences.unshift(created);
+      persist();
+      openEditor(created.id);
+    });
     card.appendChild(info);
-    card.addEventListener("click", () => openEditor(seq.id));
     grid.appendChild(card);
   });
-  updateCounts();
 }
 
-function updateCounts() {
-  const c = { all: state.sequences.length, draft: 0, progress: 0, scheduled: 0, published: 0 };
-  state.sequences.forEach(s => c[s.status]++);
-  document.querySelectorAll(".tab").forEach(t => {
-    const k = t.dataset.filter;
-    t.querySelector(".count").textContent = c[k] ?? 0;
+/* =========================================================================
+ *  VISTA: Mis secuencias
+ * ========================================================================= */
+function renderMine() {
+  const grid = $("#mineGrid");
+  grid.innerHTML = "";
+  if (!state.sequences.length) {
+    grid.innerHTML = `<p class="empty">Aún no has guardado secuencias. Crea una desde la Biblioteca.</p>`;
+    return;
+  }
+  state.sequences.forEach(seq => {
+    const card = makeCard(seq);
+    const tools = document.createElement("div");
+    tools.className = "mine-tools";
+    const submitLabel = seq.submitted ? "⏳ En revisión" : "📤 Enviar a revisión";
+    tools.innerHTML = `
+      <button class="btn btn-ghost xs" data-act="submit" ${seq.submitted ? "disabled" : ""}>${submitLabel}</button>
+      <button class="btn btn-ghost xs danger" data-act="del">🗑</button>`;
+    tools.querySelector('[data-act="submit"]').addEventListener("click", e => {
+      e.stopPropagation();
+      seq.submitted = true; persist(); renderMine();
+      alert("¡Enviada a revisión! En la versión con cuentas, ABMedia podrá revisarla y, con tu permiso, añadirla al catálogo general.");
+    });
+    tools.querySelector('[data-act="del"]').addEventListener("click", e => {
+      e.stopPropagation();
+      if (!confirm("¿Eliminar esta secuencia?")) return;
+      state.sequences = state.sequences.filter(s => s.id !== seq.id);
+      persist(); renderMine();
+    });
+    card.appendChild(tools);
+    grid.appendChild(card);
   });
 }
 
-/* ---------------------------------------------------------------------------
+/* =========================================================================
  *  EDITOR
- * ------------------------------------------------------------------------- */
-let editorCanvas;
-
+ * ========================================================================= */
 function openEditor(id) {
   state.active = state.sequences.find(s => s.id === id);
   state.current = 0;
   $("#editorTitle").value = state.active.title;
   $("#statusSelect").value = state.active.status;
+  $("#catSelect").value = state.active.category;
   $("#overlay").classList.remove("hidden");
   document.body.style.overflow = "hidden";
   renderThumbs();
@@ -198,10 +331,11 @@ function openEditor(id) {
 }
 
 function closeEditor() {
+  persist();
   $("#overlay").classList.add("hidden");
   document.body.style.overflow = "";
   state.active = null;
-  renderGrid();
+  renderAll();
 }
 
 function renderThumbs() {
@@ -255,17 +389,14 @@ function drawEditor() {
   renderTextPanel();
 }
 
-/* ---------------------------------------------------------------------------
+/* =========================================================================
  *  Render del lienzo (motor)
- * ------------------------------------------------------------------------- */
+ * ========================================================================= */
 function drawSlide(c, slide, w, h) {
   const scale = w / CANVAS_W;
   c.clearRect(0, 0, w, h);
-
   const imgObj = slide.imageIndex >= 0 ? state.images[slide.imageIndex] : null;
-  if (imgObj) drawCover(c, imgObj.img, w, h);
-  else drawPlaceholder(c, w, h);
-
+  if (imgObj) drawCover(c, imgObj.img, w, h); else drawPlaceholder(c, w, h);
   drawOverlay(c, slide.def.overlay, w, h);
   slide.def.texts.forEach(t => drawText(c, t, slide.texts[t.id], scale));
 }
@@ -280,10 +411,8 @@ function drawCover(c, img, w, h) {
 
 function drawPlaceholder(c, w, h) {
   const g = c.createLinearGradient(0, 0, w, h);
-  g.addColorStop(0, "#2a211b");
-  g.addColorStop(1, "#15110d");
-  c.fillStyle = g;
-  c.fillRect(0, 0, w, h);
+  g.addColorStop(0, "#2a211b"); g.addColorStop(1, "#15110d");
+  c.fillStyle = g; c.fillRect(0, 0, w, h);
 }
 
 function drawOverlay(c, type, w, h) {
@@ -299,8 +428,7 @@ function drawOverlay(c, type, w, h) {
     g = c.createLinearGradient(0, 0, 0, h);
     g.addColorStop(0, "rgba(0,0,0,0.55)"); g.addColorStop(0.5, "rgba(0,0,0,0.30)"); g.addColorStop(1, "rgba(0,0,0,0.66)");
   }
-  c.fillStyle = g;
-  c.fillRect(0, 0, w, h);
+  c.fillStyle = g; c.fillRect(0, 0, w, h);
 }
 
 function drawText(c, def, value, scale) {
@@ -309,7 +437,6 @@ function drawText(c, def, value, scale) {
   const size = def.size * scale, x = def.x * scale, y = def.y * scale;
   const maxW = def.maxWidth * scale, lh = (def.lineHeight || 1.15) * size;
   const track = def.track ? def.track * scale : 0;
-
   c.font = `${def.weight || 600} ${size}px ${state.font}`;
   c.textAlign = def.align || "center";
   c.textBaseline = "middle";
@@ -317,7 +444,6 @@ function drawText(c, def, value, scale) {
   c.shadowColor = "rgba(0,0,0,0.45)";
   c.shadowBlur = size * 0.18;
   c.shadowOffsetY = size * 0.04;
-
   const lines = wrapText(c, text, maxW, track);
   let cy = y - ((lines.length - 1) * lh) / 2;
   lines.forEach(line => {
@@ -360,15 +486,14 @@ function drawTracked(c, text, x, y, track, align) {
   c.textAlign = prev;
 }
 
-/* ---------------------------------------------------------------------------
+/* =========================================================================
  *  Descargas
- * ------------------------------------------------------------------------- */
+ * ========================================================================= */
 function blobDownload(canvas, name) {
   return new Promise(res => canvas.toBlob(b => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(b);
-    a.download = name;
-    a.click();
+    a.download = name; a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); res(); }, 400);
   }, "image/jpeg", 0.92));
 }
@@ -377,16 +502,16 @@ async function downloadAll() {
   const off = document.createElement("canvas");
   off.width = CANVAS_W; off.height = CANVAS_H;
   const oc = off.getContext("2d");
-  const base = state.active.title.replace(/[^\w]+/g, "-").slice(0, 24) || "story";
+  const base = (state.active.title || "story").replace(/[^\w]+/g, "-").slice(0, 24) || "story";
   for (let i = 0; i < state.active.slides.length; i++) {
     drawSlide(oc, state.active.slides[i], CANVAS_W, CANVAS_H);
     await blobDownload(off, `${base}-${i + 1}.jpg`);
   }
 }
 
-/* ---------------------------------------------------------------------------
- *  Plantillas (modal "Nueva secuencia")
- * ------------------------------------------------------------------------- */
+/* =========================================================================
+ *  Modal "Nueva secuencia" (elige plantilla base)
+ * ========================================================================= */
 function openTemplateModal() {
   const box = $("#tplList");
   box.innerHTML = "";
@@ -395,10 +520,10 @@ function openTemplateModal() {
     b.className = "tpl-card";
     b.innerHTML = `<strong>${tpl.name}</strong><span>${tpl.description}</span><em>${tpl.slides.length} stories</em>`;
     b.addEventListener("click", () => {
-      const seq = buildSequence({ title: tpl.name.replace(/^[^\s]+\s/, ""), template: key, status: "draft" });
+      const seq = instantiate({ title: tpl.name.replace(/^[^\s]+\s/, ""), layout: key, category: "valor", status: "draft" });
       state.sequences.unshift(seq);
+      persist();
       $("#tplModal").classList.add("hidden");
-      renderGrid();
       openEditor(seq.id);
     });
     box.appendChild(b);
@@ -406,13 +531,14 @@ function openTemplateModal() {
   $("#tplModal").classList.remove("hidden");
 }
 
-/* ---------------------------------------------------------------------------
+/* =========================================================================
  *  Eventos
- * ------------------------------------------------------------------------- */
+ * ========================================================================= */
 function bind() {
   editorCanvas = $("#editorCanvas");
 
-  // Upload (sidebar + editor)
+  $$(".nav-item").forEach(n => n.addEventListener("click", () => setView(n.dataset.view)));
+
   ["#fileInput", "#fileInput2"].forEach(sel => {
     const el = $(sel);
     if (el) el.addEventListener("change", e => loadFiles(e.target.files));
@@ -424,23 +550,21 @@ function bind() {
   ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("hover"); }));
   drop.addEventListener("drop", e => loadFiles(e.dataTransfer.files));
 
-  // Tabs
-  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+  $$(".tab").forEach(t => t.addEventListener("click", () => {
+    $$(".tab").forEach(x => x.classList.remove("active"));
     t.classList.add("active");
     state.filter = t.dataset.filter;
     renderGrid();
   }));
 
-  // New sequence
   $("#newSeq").addEventListener("click", openTemplateModal);
   $("#tplClose").addEventListener("click", () => $("#tplModal").classList.add("hidden"));
   $("#tplModal").addEventListener("click", e => { if (e.target.id === "tplModal") $("#tplModal").classList.add("hidden"); });
 
-  // Editor controls
   $("#editorClose").addEventListener("click", closeEditor);
   $("#editorTitle").addEventListener("input", e => { state.active.title = e.target.value; });
-  $("#statusSelect").addEventListener("change", e => { state.active.status = e.target.value; });
+  $("#statusSelect").addEventListener("change", e => { state.active.status = e.target.value; persist(); });
+  $("#catSelect").addEventListener("change", e => { state.active.category = e.target.value; persist(); });
   $("#accentColor").addEventListener("input", e => { state.accent = e.target.value; drawEditor(); renderThumbs(); });
   $("#fontSelect").addEventListener("change", e => { state.font = e.target.value; drawEditor(); renderThumbs(); });
 
@@ -453,25 +577,44 @@ function bind() {
     slide.imageIndex = next; drawEditor(); refreshActiveThumb();
   });
 
+  $("#saveBtn").addEventListener("click", () => {
+    persist();
+    const b = $("#saveBtn");
+    const prev = b.textContent;
+    b.textContent = "✓ Guardada"; b.disabled = true;
+    setTimeout(() => { b.textContent = prev; b.disabled = false; }, 1400);
+  });
+  $("#submitBtn").addEventListener("click", () => {
+    state.active.submitted = true; persist();
+    alert("¡Enviada a revisión! En la versión con cuentas, ABMedia podrá revisarla y, con tu permiso, añadirla al catálogo general.");
+  });
+
   $("#dlOne").addEventListener("click", () => blobDownload(editorCanvas, `story-${state.current + 1}.jpg`));
   $("#dlAll").addEventListener("click", downloadAll);
+
+  $("#fontSelect").value = state.font;
 
   document.addEventListener("keydown", e => {
     if (e.key === "Escape" && !$("#overlay").classList.contains("hidden")) closeEditor();
   });
 }
 
-/* ---------------------------------------------------------------------------
+/* =========================================================================
  *  Arranque
- * ------------------------------------------------------------------------- */
+ * ========================================================================= */
 function init() {
   bind();
+  const saved = store.load();
+  if (saved && saved.length) {
+    state.sequences = saved.map(d => instantiate(d));
+  } else {
+    state.sequences = DEMO_SEQS.map(d => fromCatalog(d.catalogId, { status: d.status }));
+    persist();
+  }
   state.inbox = SEED_INBOX.map(x => ({ ...x }));
-  state.sequences = SEED_SEQUENCES.map(s => buildSequence(s));
   $("#accentColor").value = state.accent;
-  renderInbox();
-  renderGrid();
   updateImgCount();
+  setView("desk");
 }
 
 document.addEventListener("DOMContentLoaded", init);

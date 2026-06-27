@@ -15,15 +15,12 @@
     <aside class="sidebar">
       <div class="brand">
         <span class="logo">AB</span>
-        <div>
-          <strong>ABMedia</strong>
-          <small>Story Builder</small>
-        </div>
+        <div><strong>ABMedia</strong><small>Story Builder</small></div>
       </div>
       <nav class="nav">
-        <a class="nav-item active">▦ Production desk</a>
-        <a class="nav-item">▤ Dashboard</a>
-        <a class="nav-item">≡ Secuencias</a>
+        <a class="nav-item active" data-view="desk">▦ Production desk</a>
+        <a class="nav-item" data-view="library">≣ Biblioteca</a>
+        <a class="nav-item" data-view="mine">★ Mis secuencias</a>
       </nav>
       <div class="upload-card">
         <p class="upload-title">Tu carpeta de imágenes</p>
@@ -36,37 +33,60 @@
 
     <!-- ===================== CONTENIDO ===================== -->
     <main class="content">
-      <header class="topbar">
-        <div>
-          <h1>Production desk</h1>
-          <p>Crea secuencias de stories, ajusta los textos y exporta los frames.</p>
+      <!-- ---------- VISTA: PRODUCTION DESK ---------- -->
+      <section id="view-desk">
+        <header class="topbar">
+          <div>
+            <h1>Production desk</h1>
+            <p>Crea secuencias de stories, ajusta los textos y exporta los frames.</p>
+          </div>
+          <button class="btn btn-primary" id="newSeq">＋ Nueva secuencia</button>
+        </header>
+        <div class="desk">
+          <section class="inbox">
+            <div class="inbox-head">
+              <span class="chip">INBOX</span>
+              <h2>Listas para crear</h2>
+              <p>Ideas escritas pendientes de convertir en frames editables.</p>
+            </div>
+            <div id="inboxList" class="inbox-list"></div>
+          </section>
+          <section class="pipeline">
+            <div class="tabs">
+              <button class="tab active" data-filter="all">Todas <span class="count">0</span></button>
+              <button class="tab" data-filter="draft">Borrador <span class="count">0</span></button>
+              <button class="tab" data-filter="progress">En progreso <span class="count">0</span></button>
+              <button class="tab" data-filter="scheduled">Programado <span class="count">0</span></button>
+              <button class="tab" data-filter="published">Publicado <span class="count">0</span></button>
+            </div>
+            <div id="grid" class="grid"></div>
+          </section>
         </div>
-        <button class="btn btn-primary" id="newSeq">＋ Nueva secuencia</button>
-      </header>
+      </section>
 
-      <div class="desk">
-        <!-- Bandeja de ideas -->
-        <section class="inbox">
-          <div class="inbox-head">
-            <span class="chip">INBOX</span>
-            <h2>Listas para crear</h2>
-            <p>Ideas escritas pendientes de convertir en frames editables.</p>
+      <!-- ---------- VISTA: BIBLIOTECA ---------- -->
+      <section id="view-library" class="hidden">
+        <header class="topbar">
+          <div>
+            <h1>Biblioteca de secuencias</h1>
+            <p>Secuencias predeterminadas por objetivo. Elige una y adáptala con tus fotos y textos.</p>
           </div>
-          <div id="inboxList" class="inbox-list"></div>
-        </section>
+        </header>
+        <div id="catChips" class="chips"></div>
+        <div id="catalogGrid" class="grid"></div>
+      </section>
 
-        <!-- Pipeline -->
-        <section class="pipeline">
-          <div class="tabs">
-            <button class="tab active" data-filter="all">Todas <span class="count">0</span></button>
-            <button class="tab" data-filter="draft">Borrador <span class="count">0</span></button>
-            <button class="tab" data-filter="progress">En progreso <span class="count">0</span></button>
-            <button class="tab" data-filter="scheduled">Programado <span class="count">0</span></button>
-            <button class="tab" data-filter="published">Publicado <span class="count">0</span></button>
+      <!-- ---------- VISTA: MIS SECUENCIAS ---------- -->
+      <section id="view-mine" class="hidden">
+        <header class="topbar">
+          <div>
+            <h1>Mis secuencias</h1>
+            <p>Tus secuencias guardadas. Edítalas, descárgalas o envíalas a revisión.</p>
           </div>
-          <div id="grid" class="grid"></div>
-        </section>
-      </div>
+          <button class="btn btn-primary" id="newSeq2" onclick="document.getElementById('newSeq').click()">＋ Nueva secuencia</button>
+        </header>
+        <div id="mineGrid" class="grid"></div>
+      </section>
     </main>
   </div>
 
@@ -74,7 +94,7 @@
   <div id="tplModal" class="modal hidden">
     <div class="modal-box">
       <div class="modal-head">
-        <h2>Elige una plantilla</h2>
+        <h2>Elige una plantilla base</h2>
         <button class="icon-btn" id="tplClose">✕</button>
       </div>
       <div id="tplList" class="tpl-grid"></div>
@@ -87,6 +107,13 @@
       <header class="editor-top">
         <div class="editor-titlewrap">
           <input id="editorTitle" class="editor-title" />
+          <select id="catSelect" class="status-select">
+            <option value="ventas">💰 Ventas</option>
+            <option value="autoridad">👑 Autoridad</option>
+            <option value="valor">💡 Valor</option>
+            <option value="recursos">🎁 Recursos</option>
+            <option value="lifestyle">☕ Día a día</option>
+          </select>
           <select id="statusSelect" class="status-select">
             <option value="draft">Borrador</option>
             <option value="progress">En progreso</option>
@@ -98,7 +125,6 @@
       </header>
 
       <div class="editor-body">
-        <!-- Columna izquierda: vista previa -->
         <div class="preview-col">
           <canvas id="editorCanvas" width="1080" height="1920" class="preview"></canvas>
           <div class="preview-actions">
@@ -107,13 +133,11 @@
           </div>
         </div>
 
-        <!-- Columna central: frames -->
         <div class="frames-col">
           <p class="col-label">Frames</p>
           <div id="thumbs" class="thumbs"></div>
         </div>
 
-        <!-- Columna derecha: edición -->
         <div class="edit-col">
           <div id="editorDrop" class="dropzone">
             <strong>Arrastra tus imágenes aquí</strong>
@@ -139,6 +163,10 @@
             </label>
           </div>
 
+          <div class="save-row">
+            <button class="btn btn-ghost" id="saveBtn">💾 Guardar</button>
+            <button class="btn btn-ghost" id="submitBtn">📤 Enviar a revisión</button>
+          </div>
           <div class="download-row">
             <button class="btn btn-ghost" id="dlOne">⬇ Este frame</button>
             <button class="btn btn-primary" id="dlAll">⬇ Descargar todos</button>
@@ -149,6 +177,7 @@
   </div>
 
   <script src="templates.js"></script>
+  <script src="catalog.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
