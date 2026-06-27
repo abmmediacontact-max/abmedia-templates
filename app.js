@@ -10,6 +10,7 @@
 const state = {
   images: [],          // [{ name, img }]  (solo en memoria)
   sequences: [],
+  userTemplates: [],
   inbox: [],
   active: null,
   current: 0,
@@ -53,7 +54,7 @@ const store = {
     const data = seqs.map(s => ({
       id: s.id, title: s.title, category: s.category, status: s.status,
       submitted: !!s.submitted, style: s.style,
-      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay }))
+      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay, bg: sl.bg }))
     }));
     try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch {}
   }
@@ -72,6 +73,7 @@ function makeSlide(s) {
     overlay: s.overlay || "bottom",
     pos: s.pos || { x: 0.5, y: vy },   // posición libre (centro del bloque)
     align: s.align || "left",
+    bg: s.bg ? { ...s.bg } : { zoom: 1, ox: 0, oy: 0 },  // zoom/desplazamiento del fondo
     bgIndex: -1, inset: null, _textBox: null
   };
 }
@@ -226,32 +228,50 @@ function renderCatChips() {
   };
   mk("all", "Todas");
   Object.entries(CATEGORIES).forEach(([k, c]) => mk(k, `${c.emoji} ${c.name}`));
+  mk("mine", "⭐ Mías");
 }
 function renderCatalog() {
   renderCatChips();
   const grid = $("#catalogGrid"); grid.innerHTML = "";
-  CATALOG.filter(c => state.cat === "all" || c.category === state.cat).forEach(item => {
-    const seq = fromCatalog(item.id);
-    const cat = CATEGORIES[item.category];
-    const card = document.createElement("div"); card.className = "card";
-    const cv = document.createElement("canvas");
-    cv.width = 270; cv.height = 480; cv.className = "card-canvas";
-    drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height, seq.style);
-    card.appendChild(cv);
-    const badge = document.createElement("span");
-    badge.className = "frames-badge"; badge.textContent = `${seq.slides.length} frames`;
-    card.appendChild(badge);
-    const info = document.createElement("div"); info.className = "card-info";
-    info.innerHTML = `<div class="card-row"><h3>${item.title}</h3>
-        <span class="cat-tag">${cat.emoji} ${cat.name}</span></div>
-        <p class="card-obj">${item.objective}</p>
-        <button class="btn btn-primary sm full">Usar esta secuencia →</button>`;
-    info.querySelector("button").addEventListener("click", () => {
-      const created = fromCatalog(item.id, { status: "draft" });
-      state.sequences.unshift(created); persist(); openEditor(created.id);
-    });
-    card.appendChild(info); grid.appendChild(card);
+  if (state.cat === "mine") {
+    if (!state.userTemplates.length) {
+      grid.innerHTML = `<p class="empty">Aún no tienes plantillas propias. Abre una secuencia en el editor y pulsa "Guardar como plantilla".</p>`;
+      return;
+    }
+    state.userTemplates.forEach(item => grid.appendChild(makeLibCard(item, true)));
+    return;
+  }
+  CATALOG.filter(c => state.cat === "all" || c.category === state.cat)
+    .forEach(item => grid.appendChild(makeLibCard(item, false)));
+}
+function makeLibCard(item, isUser) {
+  const seq = isUser ? fromTemplate(item) : fromCatalog(item.id);
+  const cat = CATEGORIES[item.category];
+  const card = document.createElement("div"); card.className = "card";
+  const cv = document.createElement("canvas");
+  cv.width = 270; cv.height = 480; cv.className = "card-canvas";
+  drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height, seq.style);
+  card.appendChild(cv);
+  const badge = document.createElement("span");
+  badge.className = "frames-badge"; badge.textContent = `${seq.slides.length} frames`;
+  card.appendChild(badge);
+  const info = document.createElement("div"); info.className = "card-info";
+  info.innerHTML = `<div class="card-row"><h3>${item.title}</h3>
+      <span class="cat-tag">${cat.emoji} ${cat.name}</span></div>
+      ${item.objective ? `<p class="card-obj">${item.objective}</p>` : ""}
+      <button class="btn btn-primary sm full" data-act="use">Usar esta secuencia →</button>
+      ${isUser ? `<button class="btn btn-ghost xs full danger" data-act="del">🗑 Borrar plantilla</button>` : ""}`;
+  info.querySelector('[data-act="use"]').addEventListener("click", () => {
+    const created = isUser ? fromTemplate(item, { status: "draft" }) : fromCatalog(item.id, { status: "draft" });
+    state.sequences.unshift(created); persist(); openEditor(created.id);
   });
+  if (isUser) info.querySelector('[data-act="del"]').addEventListener("click", () => {
+    if (!confirm("¿Borrar esta plantilla?")) return;
+    state.userTemplates = state.userTemplates.filter(t => t.id !== item.id);
+    storeT.save(state.userTemplates); renderCatalog();
+  });
+  card.appendChild(info);
+  return card;
 }
 
 /* ---- Mis secuencias ---- */
@@ -338,10 +358,26 @@ function refreshActiveThumb() {
 
 function renderEditPanel() {
   const slide = curSlide();
-  $("#slideName").textContent = "Frame " + (state.current + 1);
+  $("#slideName").textContent = "Frame " + (state.current + 1) + " / " + state.active.slides.length;
   $("#bodyInput").value = slide.body;
   $("#overlaySelect").value = slide.overlay;
+  $("#bgZoom").value = slide.bg.zoom;
   $("#insetControls").classList.toggle("hidden", !slide.inset);
+  renderBgPicker();
+}
+function renderBgPicker() {
+  const box = $("#bgPicker"); if (!box) return;
+  box.innerHTML = "";
+  if (!state.images.length) { box.innerHTML = `<span class="bg-empty">Sube fotos para elegir el fondo.</span>`; return; }
+  state.images.forEach((im, i) => {
+    const t = document.createElement("button");
+    t.className = "bg-thumb" + (i === curSlide().bgIndex ? " active" : "");
+    const cv = document.createElement("canvas"); cv.width = 54; cv.height = 96;
+    drawCover(cv.getContext("2d"), im.img, 54, 96, { zoom: 1, ox: 0, oy: 0 });
+    t.appendChild(cv);
+    t.addEventListener("click", () => { curSlide().bgIndex = i; curSlide().bg = { zoom: 1, ox: 0, oy: 0 }; drawEditor(); refreshActiveThumb(); persist(); });
+    box.appendChild(t);
+  });
 }
 function drawEditor() { drawSlide(ctx(), curSlide(), CANVAS_W, CANVAS_H, state.active.style, true); renderEditPanel(); }
 
@@ -356,7 +392,7 @@ function drawSlide(c, slide, w, h, style, guides) {
   const scale = w / CANVAS_W;
   c.clearRect(0, 0, w, h);
   const imgObj = slide.bgIndex >= 0 ? state.images[slide.bgIndex] : null;
-  if (imgObj) drawCover(c, imgObj.img, 0, 0, w, h); else drawPlaceholder(c, w, h);
+  if (imgObj) drawCover(c, imgObj.img, w, h, slide.bg); else drawPlaceholder(c, w, h);
   drawOverlay(c, slide.overlay, w, h);
   if (slide.inset && slide.inset.img) drawInset(c, slide.inset, w, h);
   drawBody(c, slide, style, scale, w, h);
@@ -379,11 +415,16 @@ function drawGuides(c, w, h) {
   c.fillText("zona segura", w / 2, ty + w * 0.03);
   c.restore();
 }
-function drawCover(c, img, x, y, w, h) {
+function drawCover(c, img, w, h, bg) {
+  bg = bg || { zoom: 1, ox: 0, oy: 0 };
   const ir = img.width / img.height, tr = w / h;
-  let dw, dh, dx, dy;
-  if (ir > tr) { dh = h; dw = h * ir; dx = x + (w - dw) / 2; dy = y; }
-  else { dw = w; dh = w / ir; dx = x; dy = y + (h - dh) / 2; }
+  let dw, dh;
+  if (ir > tr) { dh = h; dw = h * ir; } else { dw = w; dh = w / ir; }
+  dw *= bg.zoom; dh *= bg.zoom;
+  let dx = (w - dw) / 2 + bg.ox * w;
+  let dy = (h - dh) / 2 + bg.oy * h;
+  dx = Math.min(0, Math.max(w - dw, dx));   // mantener cobertura (sin huecos)
+  dy = Math.min(0, Math.max(h - dh, dy));
   c.drawImage(img, dx, dy, dw, dh);
 }
 function drawPlaceholder(c, w, h) {
@@ -533,27 +574,29 @@ function drawBody(c, slide, style, scale, w, h) {
  * ========================================================================= */
 function setupDrag() {
   const cv = editorCanvas;
-  let target = null, offX = 0, offY = 0;   // target: "inset" | "text"
+  let target = null, start = null;   // target: "inset" | "text" | "bg"
   const norm = e => { const r = cv.getBoundingClientRect(); return { nx: (e.clientX - r.left) / r.width, ny: (e.clientY - r.top) / r.height }; };
+  const cl = (v, min, max) => (min > max ? (min + max) / 2 : Math.max(min, Math.min(max, v)));
 
   cv.addEventListener("pointerdown", e => {
     if (!state.active) return;
     const { nx, ny } = norm(e);
     const px = nx * CANVAS_W, py = ny * CANVAS_H;
     const slide = curSlide();
-    // 1) foto insertada (prioridad)
     const ins = slide.inset;
     if (ins && ins.img) {
       const iw = ins.scale * CANVAS_W, ih = iw * (ins.img.height / ins.img.width);
       const ix = ins.cx * CANVAS_W - iw / 2, iy = ins.cy * CANVAS_H - ih / 2;
       if (px >= ix && px <= ix + iw && py >= iy && py <= iy + ih) {
-        target = "inset"; offX = nx - ins.cx; offY = ny - ins.cy; cv.setPointerCapture(e.pointerId); return;
+        target = "inset"; start = { nx, ny, cx: ins.cx, cy: ins.cy }; cv.setPointerCapture(e.pointerId); return;
       }
     }
-    // 2) bloque de texto
     const b = slide._textBox;
     if (b && px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) {
-      target = "text"; offX = nx - slide.pos.x; offY = ny - slide.pos.y; cv.setPointerCapture(e.pointerId);
+      target = "text"; start = { nx, ny, x: slide.pos.x, y: slide.pos.y }; cv.setPointerCapture(e.pointerId); return;
+    }
+    if (slide.bgIndex >= 0) {  // arrastrar el fondo (pan)
+      target = "bg"; start = { nx, ny, ox: slide.bg.ox, oy: slide.bg.oy }; cv.setPointerCapture(e.pointerId);
     }
   });
   cv.addEventListener("pointermove", e => {
@@ -561,17 +604,17 @@ function setupDrag() {
     const { nx, ny } = norm(e);
     const slide = curSlide();
     if (target === "inset") {
-      const ins = slide.inset;
-      const hw = ins.scale / 2;
+      const ins = slide.inset, hw = ins.scale / 2;
       const hh = (ins.scale * (ins.img.height / ins.img.width) * (CANVAS_W / CANVAS_H)) / 2;
-      ins.cx = clampSafe(nx - offX, SAFE.left + hw, SAFE.right - hw);
-      ins.cy = clampSafe(ny - offY, SAFE.top + hh, SAFE.bottom - hh);
+      ins.cx = cl(start.cx + (nx - start.nx), SAFE.left + hw, SAFE.right - hw);
+      ins.cy = cl(start.cy + (ny - start.ny), SAFE.top + hh, SAFE.bottom - hh);
+    } else if (target === "text") {
+      const b = slide._textBox, hw = b ? (b.w / 2) / CANVAS_W : 0, hh = b ? (b.h / 2) / CANVAS_H : 0;
+      slide.pos.x = cl(start.x + (nx - start.nx), SAFE.left + hw, SAFE.right - hw);
+      slide.pos.y = cl(start.y + (ny - start.ny), SAFE.top + hh, SAFE.bottom - hh);
     } else {
-      const b = slide._textBox;
-      const hw = b ? (b.w / 2) / CANVAS_W : 0;
-      const hh = b ? (b.h / 2) / CANVAS_H : 0;
-      slide.pos.x = clampSafe(nx - offX, SAFE.left + hw, SAFE.right - hw);
-      slide.pos.y = clampSafe(ny - offY, SAFE.top + hh, SAFE.bottom - hh);
+      slide.bg.ox = start.ox + (nx - start.nx);
+      slide.bg.oy = start.oy + (ny - start.ny);
     }
     drawEditor();
   });
@@ -579,6 +622,52 @@ function setupDrag() {
   cv.addEventListener("pointerup", end);
   cv.addEventListener("pointercancel", end);
   cv.style.touchAction = "none";
+}
+
+/* ---- Gestión de frames ---- */
+function duplicateFrame() {
+  const s = curSlide();
+  const copy = makeSlide({ body: s.body, pos: { ...s.pos }, align: s.align, overlay: s.overlay, bg: { ...s.bg } });
+  copy.bgIndex = s.bgIndex; copy.inset = s.inset ? { ...s.inset } : null;
+  state.active.slides.splice(state.current + 1, 0, copy);
+  state.current++; persist(); renderThumbs(); drawEditor();
+}
+function deleteFrame() {
+  if (state.active.slides.length <= 1) { alert("Una secuencia necesita al menos un frame."); return; }
+  if (!confirm("¿Borrar este frame?")) return;
+  state.active.slides.splice(state.current, 1);
+  state.current = Math.max(0, state.current - 1);
+  persist(); renderThumbs(); drawEditor();
+}
+function moveFrame(dir) {
+  const i = state.current, j = i + dir, a = state.active.slides;
+  if (j < 0 || j >= a.length) return;
+  [a[i], a[j]] = [a[j], a[i]]; state.current = j;
+  persist(); renderThumbs(); drawEditor();
+}
+
+/* ---- Plantillas propias del usuario ---- */
+const storeT = {
+  KEY: "abmedia_user_templates_v1",
+  load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch { return []; } },
+  save(t) { try { localStorage.setItem(this.KEY, JSON.stringify(t)); } catch {} }
+};
+function fromTemplate(tpl, extra = {}) {
+  return instantiate({ title: tpl.title, category: tpl.category, slides: tpl.slides, style: tpl.style, ...extra });
+}
+function saveAsTemplate() {
+  const s = state.active;
+  const tpl = {
+    id: "u" + Date.now(),
+    title: s.title || "Plantilla",
+    category: s.category,
+    isUser: true,
+    style: JSON.parse(JSON.stringify(s.style)),
+    slides: s.slides.map(sl => ({ body: sl.body, pos: { ...sl.pos }, align: sl.align, overlay: sl.overlay }))
+  };
+  state.userTemplates.unshift(tpl);
+  storeT.save(state.userTemplates);
+  alert('Guardada en tus plantillas. La encontrarás en Biblioteca → "⭐ Mías".');
 }
 
 /* =========================================================================
@@ -591,14 +680,26 @@ function blobDownload(canvas, name) {
     setTimeout(() => { URL.revokeObjectURL(a.href); res(); }, 400);
   }, "image/jpeg", 0.92));
 }
-async function downloadAll() {
+function renderToBlob(slide) {
   const off = document.createElement("canvas"); off.width = CANVAS_W; off.height = CANVAS_H;
-  const oc = off.getContext("2d");
+  drawSlide(off.getContext("2d"), slide, CANVAS_W, CANVAS_H, state.active.style);
+  return new Promise(r => off.toBlob(r, "image/jpeg", 0.92));
+}
+async function downloadAll() {
   const base = (state.active.title || "story").replace(/[^\w]+/g, "-").slice(0, 24) || "story";
-  for (let i = 0; i < state.active.slides.length; i++) {
-    drawSlide(oc, state.active.slides[i], CANVAS_W, CANVAS_H, state.active.style);
-    await blobDownload(off, `${base}-${i + 1}.jpg`);
-  }
+  const btn = $("#dlAll"), prev = btn.textContent; btn.disabled = true; btn.textContent = "Generando…";
+  try {
+    if (typeof JSZip !== "undefined") {
+      const zip = new JSZip();
+      for (let i = 0; i < state.active.slides.length; i++) zip.file(`${base}-${i + 1}.jpg`, await renderToBlob(state.active.slides[i]));
+      const content = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(content); a.download = `${base}.zip`; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+    } else { // sin JSZip: descarga una a una
+      const off = document.createElement("canvas"); off.width = CANVAS_W; off.height = CANVAS_H; const oc = off.getContext("2d");
+      for (let i = 0; i < state.active.slides.length; i++) { drawSlide(oc, state.active.slides[i], CANVAS_W, CANVAS_H, state.active.style); await blobDownload(off, `${base}-${i + 1}.jpg`); }
+    }
+  } finally { btn.disabled = false; btn.textContent = prev; }
 }
 
 /* =========================================================================
@@ -664,6 +765,16 @@ function bind() {
   $("#statusSelect").addEventListener("change", e => { state.active.status = e.target.value; persist(); });
   $("#catSelect").addEventListener("change", e => { state.active.category = e.target.value; persist(); });
 
+  // Gestión de frames
+  $("#dupFrame").addEventListener("click", duplicateFrame);
+  $("#delFrame").addEventListener("click", deleteFrame);
+  $("#moveFramePrev").addEventListener("click", () => moveFrame(-1));
+  $("#moveFrameNext").addEventListener("click", () => moveFrame(1));
+
+  // Fondo del frame (zoom)
+  $("#bgZoom").addEventListener("input", e => { curSlide().bg.zoom = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
+  $("#bgZoom").addEventListener("change", persist);
+
   // Texto del frame
   $("#bodyInput").addEventListener("input", e => { curSlide().body = e.target.value; drawEditor(); refreshActiveThumb(); });
   $("#overlaySelect").addEventListener("change", e => { curSlide().overlay = e.target.value; drawEditor(); refreshActiveThumb(); persist(); });
@@ -708,7 +819,13 @@ function bind() {
     state.active.submitted = true; persist();
     alert("¡Enviada a revisión! Con cuentas activadas, ABMedia podrá revisarla y, con tu permiso, añadirla al catálogo general.");
   });
-  $("#dlOne").addEventListener("click", () => blobDownload(editorCanvas, `story-${state.current + 1}.jpg`));
+  $("#tplSaveBtn").addEventListener("click", saveAsTemplate);
+  $("#dlOne").addEventListener("click", async () => {
+    const blob = await renderToBlob(curSlide());  // exporta sin las guías
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = `story-${state.current + 1}.jpg`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
   $("#dlAll").addEventListener("click", downloadAll);
 
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#overlay").classList.contains("hidden")) closeEditor(); });
@@ -731,6 +848,7 @@ function init() {
   const saved = store.load();
   if (saved && saved.length) state.sequences = saved.map(d => instantiate(d));
   else { state.sequences = DEMO_SEQS.map(d => fromCatalog(d.catalogId, { status: d.status })); persist(); }
+  state.userTemplates = storeT.load();
   state.inbox = SEED_INBOX.map(x => ({ ...x }));
   updateImgCount();
   setView("desk");

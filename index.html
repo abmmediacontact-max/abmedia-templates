@@ -131,7 +131,11 @@
             <button class="btn btn-ghost sm" id="newImg">🔀 Otra imagen</button>
             <button class="btn btn-ghost sm" id="shuffleAll">🎲 Barajar todas</button>
           </div>
-          <p class="drag-hint">✋ Arrastra el texto o la foto con el cursor. Las líneas marcan la zona segura de Instagram (evita perfil y barra de respuesta).</p>
+          <label class="field inline zoom-field"><span>Zoom fondo</span>
+            <input type="range" id="bgZoom" min="1" max="2.6" step="0.02" value="1" />
+          </label>
+          <div id="bgPicker" class="bg-picker"></div>
+          <p class="drag-hint">✋ Arrastra el texto, la foto o el fondo con el cursor. Las líneas marcan la zona segura de Instagram.</p>
         </div>
 
         <div class="frames-col">
@@ -146,7 +150,15 @@
             <input type="file" id="fileInput2" accept="image/*" multiple hidden />
           </div>
 
-          <h3 class="edit-slide" id="slideName">Frame</h3>
+          <div class="frame-bar">
+            <h3 class="edit-slide" id="slideName">Frame</h3>
+            <div class="frame-actions">
+              <button class="icon-btn sm" id="moveFramePrev" title="Mover antes">↑</button>
+              <button class="icon-btn sm" id="moveFrameNext" title="Mover después">↓</button>
+              <button class="icon-btn sm" id="dupFrame" title="Duplicar frame">⎘</button>
+              <button class="icon-btn sm danger" id="delFrame" title="Borrar frame">🗑</button>
+            </div>
+          </div>
 
           <label class="field">
             <span>Texto de la story</span>
@@ -201,17 +213,21 @@
 
           <div class="save-row">
             <button class="btn btn-ghost" id="saveBtn">💾 Guardar</button>
+            <button class="btn btn-ghost" id="tplSaveBtn">⭐ Guardar como plantilla</button>
+          </div>
+          <div class="save-row">
             <button class="btn btn-ghost" id="submitBtn">📤 Enviar a revisión</button>
           </div>
           <div class="download-row">
             <button class="btn btn-ghost" id="dlOne">⬇ Este frame</button>
-            <button class="btn btn-primary" id="dlAll">⬇ Descargar todos</button>
+            <button class="btn btn-primary" id="dlAll">⬇ Descargar ZIP</button>
           </div>
         </div>
       </div>
     </div>
   </div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="templates.js"></script>
   <script src="catalog.js"></script>
   <script src="app.js"></script>
