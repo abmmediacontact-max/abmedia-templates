@@ -340,16 +340,19 @@ function renderEditPanel() {
   const slide = curSlide();
   $("#slideName").textContent = "Frame " + (state.current + 1);
   $("#bodyInput").value = slide.body;
-  $("#alignSelect").value = slide.align;
   $("#overlaySelect").value = slide.overlay;
   $("#insetControls").classList.toggle("hidden", !slide.inset);
 }
-function drawEditor() { drawSlide(ctx(), curSlide(), CANVAS_W, CANVAS_H, state.active.style); renderEditPanel(); }
+function drawEditor() { drawSlide(ctx(), curSlide(), CANVAS_W, CANVAS_H, state.active.style, true); renderEditPanel(); }
 
 /* =========================================================================
  *  MOTOR DE RENDER
  * ========================================================================= */
-function drawSlide(c, slide, w, h, style) {
+// Zona segura de Instagram Stories (fracciones del lienzo 1080x1920)
+const SAFE = { top: 0.135, bottom: 0.82, left: 0.05, right: 0.95 };
+function clampSafe(v, min, max) { return min > max ? (min + max) / 2 : Math.max(min, Math.min(max, v)); }
+
+function drawSlide(c, slide, w, h, style, guides) {
   const scale = w / CANVAS_W;
   c.clearRect(0, 0, w, h);
   const imgObj = slide.bgIndex >= 0 ? state.images[slide.bgIndex] : null;
@@ -357,6 +360,24 @@ function drawSlide(c, slide, w, h, style) {
   drawOverlay(c, slide.overlay, w, h);
   if (slide.inset && slide.inset.img) drawInset(c, slide.inset, w, h);
   drawBody(c, slide, style, scale, w, h);
+  if (guides) drawGuides(c, w, h);
+}
+
+function drawGuides(c, w, h) {
+  const ty = SAFE.top * h, by = SAFE.bottom * h;
+  c.save();
+  c.fillStyle = "rgba(0,0,0,0.22)";
+  c.fillRect(0, 0, w, ty); c.fillRect(0, by, w, h - by);
+  c.strokeStyle = "rgba(255,255,255,0.45)";
+  c.lineWidth = Math.max(1, w * 0.003);
+  c.setLineDash([w * 0.022, w * 0.022]);
+  c.beginPath(); c.moveTo(0, ty); c.lineTo(w, ty); c.moveTo(0, by); c.lineTo(w, by); c.stroke();
+  c.setLineDash([]);
+  c.fillStyle = "rgba(255,255,255,0.55)";
+  c.font = `600 ${w * 0.026}px -apple-system, system-ui, sans-serif`;
+  c.textAlign = "center"; c.textBaseline = "middle";
+  c.fillText("zona segura", w / 2, ty + w * 0.03);
+  c.restore();
 }
 function drawCover(c, img, x, y, w, h) {
   const ir = img.width / img.height, tr = w / h;
@@ -539,9 +560,19 @@ function setupDrag() {
     if (!target) return;
     const { nx, ny } = norm(e);
     const slide = curSlide();
-    const clamp = v => Math.max(0.04, Math.min(0.96, v));
-    if (target === "inset") { slide.inset.cx = clamp(nx - offX); slide.inset.cy = clamp(ny - offY); }
-    else { slide.pos.x = clamp(nx - offX); slide.pos.y = clamp(ny - offY); }
+    if (target === "inset") {
+      const ins = slide.inset;
+      const hw = ins.scale / 2;
+      const hh = (ins.scale * (ins.img.height / ins.img.width) * (CANVAS_W / CANVAS_H)) / 2;
+      ins.cx = clampSafe(nx - offX, SAFE.left + hw, SAFE.right - hw);
+      ins.cy = clampSafe(ny - offY, SAFE.top + hh, SAFE.bottom - hh);
+    } else {
+      const b = slide._textBox;
+      const hw = b ? (b.w / 2) / CANVAS_W : 0;
+      const hh = b ? (b.h / 2) / CANVAS_H : 0;
+      slide.pos.x = clampSafe(nx - offX, SAFE.left + hw, SAFE.right - hw);
+      slide.pos.y = clampSafe(ny - offY, SAFE.top + hh, SAFE.bottom - hh);
+    }
     drawEditor();
   });
   const end = () => { if (target) { target = null; refreshActiveThumb(); persist(); } };
@@ -635,7 +666,6 @@ function bind() {
 
   // Texto del frame
   $("#bodyInput").addEventListener("input", e => { curSlide().body = e.target.value; drawEditor(); refreshActiveThumb(); });
-  $("#alignSelect").addEventListener("change", e => { curSlide().align = e.target.value; drawEditor(); refreshActiveThumb(); persist(); });
   $("#overlaySelect").addEventListener("change", e => { curSlide().overlay = e.target.value; drawEditor(); refreshActiveThumb(); persist(); });
   $("#mkHighlight").addEventListener("click", () => wrapSelection("=="));
   $("#mkUnderline").addEventListener("click", () => wrapSelection("__"));

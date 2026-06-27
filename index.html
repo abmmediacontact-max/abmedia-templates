@@ -131,7 +131,7 @@
             <button class="btn btn-ghost sm" id="newImg">🔀 Otra imagen</button>
             <button class="btn btn-ghost sm" id="shuffleAll">🎲 Barajar todas</button>
           </div>
-          <p class="drag-hint">✋ Arrastra el texto o la foto sobre la vista previa para colocarlos, como en Instagram.</p>
+          <p class="drag-hint">✋ Arrastra el texto o la foto con el cursor. Las líneas marcan la zona segura de Instagram (evita perfil y barra de respuesta).</p>
         </div>
 
         <div class="frames-col">
@@ -160,13 +160,6 @@
           </div>
 
           <div class="style-row">
-            <label class="field inline"><span>Alineación</span>
-              <select id="alignSelect">
-                <option value="left">Izquierda</option>
-                <option value="center">Centro</option>
-                <option value="right">Derecha</option>
-              </select>
-            </label>
             <label class="field inline"><span>Fondo</span>
               <select id="overlaySelect">
                 <option value="none">Sin oscurecer</option>
@@ -175,13 +168,13 @@
                 <option value="full">Oscuro</option>
               </select>
             </label>
-          </div>
-
-          <div class="style-row">
             <label class="field inline"><span>Tipografía</span>
               <select id="fontSelect"></select>
             </label>
-            <label class="field inline"><span>Tamaño</span>
+          </div>
+
+          <div class="style-row">
+            <label class="field inline"><span>Tamaño del texto</span>
               <input type="range" id="sizeRange" min="0.6" max="1.7" step="0.02" value="1" />
             </label>
           </div>
