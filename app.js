@@ -8,9 +8,13 @@
  * ========================================================================= */
 
 const state = {
+  user: null,
+  isAdminUser: false,
   images: [],          // [{ name, img }]  (solo en memoria)
   sequences: [],
-  userTemplates: [],
+  userTemplates: [],   // las del usuario (privadas o pendientes/aprobadas)
+  publicTemplates: [], // catálogo general aprobado por admin
+  reviewQueue: [],     // (admin) plantillas pendientes
   inbox: [],
   active: null,
   current: 0,
@@ -59,7 +63,15 @@ const store = {
     try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch {}
   }
 };
-const persist = () => store.save(state.sequences);
+// Guarda localmente (cache) Y en la nube (asíncrono, no bloquea).
+const persist = () => {
+  store.save(state.sequences);
+  if (state.user && state.active) {
+    sbDB.sbUpsertSequence(state.active).then(row => {
+      if (row && !state.active.cloudId) state.active.cloudId = row.id;
+    });
+  }
+};
 
 /* =========================================================================
  *  Construcción de secuencias
@@ -146,13 +158,42 @@ function updateImgCount() {
 function setView(view) {
   state.view = view;
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === view));
-  ["desk", "library", "mine"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
+  ["desk", "library", "mine", "admin"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
   renderAll();
 }
 function renderAll() {
   if (state.view === "desk") { renderInbox(); renderGrid(); }
   else if (state.view === "library") renderCatalog();
   else if (state.view === "mine") renderMine();
+  else if (state.view === "admin") renderAdmin();
+}
+
+async function renderAdmin() {
+  const grid = $("#adminGrid"); grid.innerHTML = `<p class="empty">Cargando…</p>`;
+  const items = await sbDB.sbFetchTemplates("review");
+  grid.innerHTML = "";
+  if (!items.length) { grid.innerHTML = `<p class="empty">No hay plantillas pendientes.</p>`; return; }
+  items.forEach(row => {
+    const tpl = { id: "r" + row.id, cloudId: row.id, title: row.title, category: row.category, style: row.style, slides: row.slides };
+    const seq = fromTemplate(tpl);
+    const cat = CATEGORIES[tpl.category] || CATEGORIES.valor;
+    const card = document.createElement("div"); card.className = "card";
+    const cv = document.createElement("canvas"); cv.width = 270; cv.height = 480; cv.className = "card-canvas";
+    drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height, seq.style);
+    card.appendChild(cv);
+    const badge = document.createElement("span"); badge.className = "frames-badge"; badge.textContent = `${seq.slides.length} frames`;
+    card.appendChild(badge);
+    const info = document.createElement("div"); info.className = "card-info";
+    info.innerHTML = `<div class="card-row"><h3>${tpl.title}</h3>
+        <span class="cat-tag">${cat.emoji} ${cat.name}</span></div>
+        <p class="card-obj">Enviada para revisión</p>
+        <button class="btn btn-primary sm full" data-act="approve">✅ Aprobar y publicar</button>`;
+    info.querySelector('[data-act="approve"]').addEventListener("click", async () => {
+      await sbDB.sbApproveTemplate(row.id);
+      renderAdmin();
+    });
+    card.appendChild(info); grid.appendChild(card);
+  });
 }
 
 /* ---- Production desk ---- */
@@ -264,8 +305,9 @@ function makeLibCard(item, isUser) {
     const created = isUser ? fromTemplate(item, { status: "draft" }) : fromCatalog(item.id, { status: "draft" });
     state.sequences.unshift(created); persist(); openEditor(created.id);
   });
-  if (isUser) info.querySelector('[data-act="del"]').addEventListener("click", () => {
+  if (isUser) info.querySelector('[data-act="del"]').addEventListener("click", async () => {
     if (!confirm("¿Borrar esta plantilla?")) return;
+    if (state.user && item.cloudId) await sbDB.sbDeleteTemplate(item.cloudId);
     state.userTemplates = state.userTemplates.filter(t => t.id !== item.id);
     storeT.save(state.userTemplates); renderCatalog();
   });
@@ -283,14 +325,27 @@ function renderMine() {
     tools.className = "mine-tools";
     tools.innerHTML = `<button class="btn btn-ghost xs" data-act="submit" ${seq.submitted ? "disabled" : ""}>${seq.submitted ? "⏳ En revisión" : "📤 Enviar a revisión"}</button>
       <button class="btn btn-ghost xs danger" data-act="del">🗑</button>`;
-    tools.querySelector('[data-act="submit"]').addEventListener("click", e => {
-      e.stopPropagation(); seq.submitted = true; persist(); renderMine();
-      alert("¡Enviada a revisión! Con cuentas activadas, ABMedia podrá revisarla y, con tu permiso, añadirla al catálogo general.");
+    tools.querySelector('[data-act="submit"]').addEventListener("click", async e => {
+      e.stopPropagation(); seq.submitted = true; persist();
+      // crea una plantilla asociada a la secuencia y la manda a revisión
+      if (state.user) {
+        const tplRow = await sbDB.sbUpsertTemplate({
+          title: seq.title, category: seq.category, style: seq.style,
+          slides: seq.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay })),
+          submitted: true, is_public: false
+        });
+        if (tplRow) {
+          state.userTemplates.unshift({ id: "u" + tplRow.id, cloudId: tplRow.id, title: tplRow.title, category: tplRow.category, style: tplRow.style, slides: tplRow.slides, submitted: true, isUser: true });
+        }
+      }
+      renderMine();
+      alert("¡Enviada a revisión! ABMedia la podrá revisar y, con tu permiso, añadirla al catálogo general.");
     });
-    tools.querySelector('[data-act="del"]').addEventListener("click", e => {
+    tools.querySelector('[data-act="del"]').addEventListener("click", async e => {
       e.stopPropagation();
       if (!confirm("¿Eliminar esta secuencia?")) return;
-      state.sequences = state.sequences.filter(s => s.id !== seq.id); persist(); renderMine();
+      if (state.user && seq.cloudId) await sbDB.sbDeleteSequence(seq.cloudId);
+      state.sequences = state.sequences.filter(s => s.id !== seq.id); store.save(state.sequences); renderMine();
     });
     card.appendChild(tools); grid.appendChild(card);
   });
@@ -676,7 +731,7 @@ const storeT = {
 function fromTemplate(tpl, extra = {}) {
   return instantiate({ title: tpl.title, category: tpl.category, slides: tpl.slides, style: tpl.style, ...extra });
 }
-function saveAsTemplate() {
+async function saveAsTemplate() {
   const s = state.active;
   const tpl = {
     id: "u" + Date.now(),
@@ -686,9 +741,14 @@ function saveAsTemplate() {
     style: JSON.parse(JSON.stringify(s.style)),
     slides: s.slides.map(sl => ({ body: sl.body, pos: { ...sl.pos }, align: sl.align, overlay: sl.overlay }))
   };
+  if (state.user) {
+    const row = await sbDB.sbUpsertTemplate({ ...tpl });
+    if (row) tpl.cloudId = row.id;
+  }
   state.userTemplates.unshift(tpl);
   storeT.save(state.userTemplates);
   alert('Guardada en tus plantillas. La encontrarás en Biblioteca → "⭐ Mías".');
+  if (state.view === "library") renderCatalog();
 }
 
 /* =========================================================================
@@ -861,17 +921,85 @@ function fillFontSelect() {
 }
 
 /* =========================================================================
- *  Arranque
+ *  AUTH + arranque
  * ========================================================================= */
-function init() {
-  fillFontSelect();
-  bind();
-  const saved = store.load();
-  if (saved && saved.length) state.sequences = saved.map(d => instantiate(d));
-  else { state.sequences = DEMO_SEQS.map(d => fromCatalog(d.catalogId, { status: d.status })); persist(); }
-  state.userTemplates = storeT.load();
+async function bootLoggedIn(user) {
+  state.user = user;
+  state.isAdminUser = sbAuth.isAdmin(user);
+  document.getElementById("loginScreen").classList.add("hidden");
+  document.getElementById("appRoot").classList.remove("hidden");
+  document.getElementById("userEmail").textContent = user.email || "";
+  document.getElementById("adminTab").classList.toggle("hidden", !state.isAdminUser);
+
+  // Carga desde la nube
+  const cloudSeqs = await sbDB.sbFetchSequences();
+  if (cloudSeqs.length) {
+    state.sequences = cloudSeqs.map(r => {
+      const seq = instantiate({ title: r.title, category: r.category, status: r.status, submitted: r.submitted, style: r.style, slides: r.slides });
+      seq.cloudId = r.id;
+      return seq;
+    });
+  } else {
+    // primer uso: rellena con demos y los sube
+    state.sequences = DEMO_SEQS.map(d => fromCatalog(d.catalogId, { status: d.status }));
+    for (const s of state.sequences) {
+      const row = await sbDB.sbUpsertSequence(s);
+      if (row) s.cloudId = row.id;
+    }
+  }
+  const cloudTpls = await sbDB.sbFetchTemplates("mine");
+  state.userTemplates = cloudTpls.map(r => ({ id: "u" + r.id, cloudId: r.id, title: r.title, category: r.category, style: r.style, slides: r.slides, submitted: r.submitted, isUser: true }));
+
   state.inbox = SEED_INBOX.map(x => ({ ...x }));
   updateImgCount();
   setView("desk");
+}
+
+function showLogin() {
+  document.getElementById("loginScreen").classList.remove("hidden");
+  document.getElementById("appRoot").classList.add("hidden");
+}
+
+function bindLogin() {
+  let mode = "signin"; // | "signup"
+  const err = document.getElementById("loginError");
+  const setMode = m => {
+    mode = m;
+    document.getElementById("loginTitle").textContent = m === "signin" ? "Inicia sesión" : "Crear cuenta";
+    document.getElementById("loginBtn").textContent = m === "signin" ? "Entrar" : "Crear cuenta";
+    document.getElementById("signupToggle").textContent = m === "signin" ? "¿No tienes cuenta? Crear una" : "Ya tengo cuenta, iniciar sesión";
+    err.textContent = "";
+  };
+  document.getElementById("signupToggle").addEventListener("click", () => setMode(mode === "signin" ? "signup" : "signin"));
+  document.getElementById("loginBtn").addEventListener("click", async () => {
+    err.textContent = "";
+    const email = document.getElementById("loginEmail").value.trim();
+    const pass = document.getElementById("loginPass").value;
+    if (!email || !pass) { err.textContent = "Email y contraseña requeridos."; return; }
+    try {
+      if (mode === "signin") { await sbAuth.sbSignIn(email, pass); }
+      else {
+        await sbAuth.sbSignUp(email, pass);
+        const s = await sbAuth.sbGetSession();
+        if (!s) { err.textContent = "Cuenta creada. Revisa tu email para confirmar y vuelve a iniciar sesión."; return; }
+      }
+    } catch (e) { err.textContent = e.message || "Error al iniciar sesión."; }
+  });
+  document.getElementById("logoutBtn").addEventListener("click", async () => { await sbAuth.sbSignOut(); });
+}
+
+async function init() {
+  fillFontSelect();
+  bind();
+  bindLogin();
+
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (session && session.user) await bootLoggedIn(session.user);
+    else { state.user = null; showLogin(); }
+  });
+
+  const s = await sbAuth.sbGetSession();
+  if (s) await bootLoggedIn(s.user);
+  else showLogin();
 }
 document.addEventListener("DOMContentLoaded", init);

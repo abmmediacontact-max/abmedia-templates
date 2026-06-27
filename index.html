@@ -10,7 +10,24 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app">
+  <!-- ===================== LOGIN ===================== -->
+  <div id="loginScreen" class="login hidden">
+    <div class="login-box">
+      <div class="brand login-brand">
+        <span class="logo">AB</span>
+        <div><strong>ABMedia</strong><small>Story Builder</small></div>
+      </div>
+      <h2 id="loginTitle">Inicia sesión</h2>
+      <p class="login-sub">Entra con tu cuenta para guardar tus secuencias y plantillas en la nube.</p>
+      <label class="field"><span>Email</span><input type="email" id="loginEmail" autocomplete="email" /></label>
+      <label class="field"><span>Contraseña</span><input type="password" id="loginPass" autocomplete="current-password" /></label>
+      <p id="loginError" class="login-err"></p>
+      <button class="btn btn-primary full" id="loginBtn">Entrar</button>
+      <button class="btn btn-ghost full" id="signupToggle">¿No tienes cuenta? Crear una</button>
+    </div>
+  </div>
+
+  <div class="app hidden" id="appRoot">
     <!-- ===================== SIDEBAR ===================== -->
     <aside class="sidebar">
       <div class="brand">
@@ -21,7 +38,12 @@
         <a class="nav-item active" data-view="desk">▦ Production desk</a>
         <a class="nav-item" data-view="library">≣ Biblioteca</a>
         <a class="nav-item" data-view="mine">★ Mis secuencias</a>
+        <a class="nav-item hidden" data-view="admin" id="adminTab">🛡 Revisar enviadas</a>
       </nav>
+      <div class="user-mini">
+        <span id="userEmail"></span>
+        <button class="btn btn-ghost xs" id="logoutBtn">Salir</button>
+      </div>
       <div class="upload-card">
         <p class="upload-title">Tu carpeta de imágenes</p>
         <p class="upload-sub" id="imgState"><span id="imgCount">0</span> imágenes cargadas</p>
@@ -74,6 +96,17 @@
         </header>
         <div id="catChips" class="chips"></div>
         <div id="catalogGrid" class="grid"></div>
+      </section>
+
+      <!-- ---------- VISTA: ADMIN ---------- -->
+      <section id="view-admin" class="hidden">
+        <header class="topbar">
+          <div>
+            <h1>Revisar enviadas</h1>
+            <p>Plantillas enviadas por los clientes pendientes de aprobación.</p>
+          </div>
+        </header>
+        <div id="adminGrid" class="grid"></div>
       </section>
 
       <!-- ---------- VISTA: MIS SECUENCIAS ---------- -->
@@ -228,6 +261,8 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
   <script src="templates.js"></script>
   <script src="catalog.js"></script>
   <script src="app.js"></script>
