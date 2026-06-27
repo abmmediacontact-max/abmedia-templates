@@ -48,7 +48,7 @@ const DEMO_SEQS = [
  *  Almacenamiento (localStorage; sustituible por backend con login)
  * ========================================================================= */
 const store = {
-  KEY: "abmedia_sequences_v2",
+  KEY: "abmedia_sequences_v3",
   load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || null; } catch { return null; } },
   save(seqs) {
     const data = seqs.map(s => ({
@@ -70,7 +70,7 @@ function makeSlide(s) {
   return {
     body: s.body,
     overlay: s.overlay || "bottom",
-    pos: s.pos || { x: 0.5, y: 0.16 },   // por defecto arriba del todo (centro del bloque)
+    pos: s.pos || { x: 0.05, y: 0.085 },   // por defecto: arriba-izquierda (esquina del bloque)
     align: s.align || "left",
     bg: s.bg ? { ...s.bg } : { zoom: 1, ox: 0, oy: 0 },  // zoom/desplazamiento del fondo
     bgIndex: -1, inset: null, _textBox: null
@@ -486,80 +486,90 @@ function segsToWords(segs) {
   }));
   return words;
 }
-function drawBody(c, slide, style, scale, w, h) {
-  slide._textBox = null;
+// Márgenes del lienzo para el texto (fracciones)
+const TXT = { left: 0.05, right: 0.95 };
+
+// Calcula el layout del texto: anclaje arriba-izquierda en slide.pos,
+// el ancho se adapta hasta el margen derecho => NUNCA se corta (añade líneas).
+function layoutBody(c, slide, style, scale, w, h) {
   const text = (slide.body || "").trim();
-  if (!text) return;
-  const align = slide.align || "left";
-  const size = 46 * style.size * scale;     // base más contenido, estilo Instagram
+  if (!text) return null;
+  const size = 46 * style.size * scale;
   const lh = size * 1.34;
   const parGap = size * 0.6;
-  const maxW = w * 0.72;                     // ancho de envoltura (más estrecho: permite colocarlo a un lado)
   c.font = `${style.weight} ${size}px ${style.font}`;
-  c.textAlign = "left";          // imprescindible: el texto se posiciona por x manual
+  c.textAlign = "left";
   c.textBaseline = "alphabetic";
 
-  // Layout: párrafos -> líneas
+  const lx = slide.pos.x;                         // esquina superior-izquierda (normalizada)
+  const left = lx * w;
+  const maxW = Math.max(size * 2.5, (TXT.right - lx) * w);  // ancho disponible hasta el margen derecho
+  const sp = c.measureText(" ").width;
+
   const layout = []; let blockW = 0;
   text.split("\n").forEach(par => {
     if (par.trim() === "") { layout.push({ gap: true }); return; }
-    const words = segsToWords(tokenizeLine(par));
-    words.forEach(t => t.w = c.measureText(t.text).width);
-    const sp = c.measureText(" ").width;   // espaciado uniforme entre palabras
+    // tokeniza y parte palabras más anchas que maxW (corte por caracteres)
+    const fitted = [];
+    segsToWords(tokenizeLine(par)).forEach(t => {
+      const wd = c.measureText(t.text).width;
+      if (wd <= maxW) { t.w = wd; fitted.push(t); return; }
+      let chunk = "";
+      for (const ch of t.text) {
+        if (chunk && c.measureText(chunk + ch).width > maxW) {
+          fitted.push({ text: chunk, hl: t.hl, ul: t.ul, ac: t.ac, w: c.measureText(chunk).width });
+          chunk = ch;
+        } else chunk += ch;
+      }
+      if (chunk) fitted.push({ text: chunk, hl: t.hl, ul: t.ul, ac: t.ac, w: c.measureText(chunk).width });
+    });
     const lines = []; let line = [], lineW = 0;
-    words.forEach(t => {
+    fitted.forEach(t => {
       const gap = line.length ? sp : 0;
       if (lineW + gap + t.w > maxW && line.length) {
         lines.push({ words: line, width: lineW }); line = []; lineW = 0;
         t.x = 0; line.push(t); lineW = t.w;
-      } else {
-        t.x = lineW + gap; line.push(t); lineW += gap + t.w;
-      }
+      } else { t.x = lineW + gap; line.push(t); lineW += gap + t.w; }
     });
     if (line.length) lines.push({ words: line, width: lineW });
     lines.forEach(l => { blockW = Math.max(blockW, l.width); });
     layout.push({ lines });
   });
 
-  // Altura total del bloque
   let total = 0;
   layout.forEach(b => { total += b.gap ? parGap : b.lines.length * lh; });
+  return { layout, blockW, total, size, lh, parGap, left, topY: slide.pos.y * h };
+}
 
-  // Anclaje libre (centro del bloque = slide.pos)
-  const cx = slide.pos.x * w, cyTop = slide.pos.y * h - total / 2;
-  const left = cx - blockW / 2;
-  let y = cyTop + size;
-
-  // Recuadro para hit-test (en espacio de lienzo 1080, invariante a escala)
+function drawBody(c, slide, style, scale, w, h) {
+  slide._textBox = null;
+  const L = layoutBody(c, slide, style, scale, w, h);
+  if (!L) return;
+  const { layout, blockW, total, size, lh, parGap, left, topY } = L;
   const pad = size * 0.3;
-  slide._textBox = {
-    x: (left - pad) / scale, y: (cyTop - pad) / scale,
-    w: (blockW + pad * 2) / scale, h: (total + pad * 2) / scale
-  };
+  slide._textBox = { x: (left - pad) / scale, y: (topY - pad) / scale, w: (blockW + pad * 2) / scale, h: (total + pad * 2) / scale };
 
+  let y = topY + size;
   layout.forEach(block => {
     if (block.gap) { y += parGap; return; }
     block.lines.forEach(ln => {
-      const lineX = align === "center" ? cx - ln.width / 2
-                  : align === "right" ? left + blockW - ln.width : left;
-      // 1) cajas de resaltado
+      // 1) cajas de resaltado (siguen al texto: relativas a 'left')
       for (let i = 0; i < ln.words.length;) {
         if (ln.words[i].hl) {
           let j = i, sX = ln.words[i].x, eX = ln.words[i].x + ln.words[i].w;
           while (j < ln.words.length && ln.words[j].hl) { eX = ln.words[j].x + ln.words[j].w; j++; }
           const padX = size * 0.16, padY = size * 0.13;
           c.fillStyle = style.highlightColor;
-          roundRect(c, lineX + sX - padX, y - size + size * 0.06 - padY, (eX - sX) + padX * 2, size + padY * 1.4, size * 0.18);
+          roundRect(c, left + sX - padX, y - size + size * 0.06 - padY, (eX - sX) + padX * 2, size + padY * 1.4, size * 0.18);
           c.fill();
           i = j;
         } else i++;
       }
       // 2) texto
       ln.words.forEach(t => {
-        if (t.space) return;
         c.fillStyle = t.hl ? style.highlightText : (t.ac ? style.highlightColor : style.textColor);
         if (!t.hl) { c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = size * 0.12; c.shadowOffsetY = size * 0.025; }
-        c.fillText(t.text, lineX + t.x, y);
+        c.fillText(t.text, left + t.x, y);
         c.shadowColor = "transparent"; c.shadowBlur = 0; c.shadowOffsetY = 0;
       });
       // 3) subrayados
@@ -569,7 +579,7 @@ function drawBody(c, slide, style, scale, w, h) {
           while (j < ln.words.length && ln.words[j].ul) { eX = ln.words[j].x + ln.words[j].w; j++; }
           c.strokeStyle = style.highlightColor; c.lineWidth = size * 0.07; c.lineCap = "round";
           const uy = y + size * 0.17;
-          c.beginPath(); c.moveTo(lineX + sX, uy); c.lineTo(lineX + eX, uy); c.stroke();
+          c.beginPath(); c.moveTo(left + sX, uy); c.lineTo(left + eX, uy); c.stroke();
           k = j;
         } else k++;
       }
@@ -618,10 +628,11 @@ function setupDrag() {
       ins.cx = cl(start.cx + (nx - start.nx), SAFE.left + hw, SAFE.right - hw);
       ins.cy = cl(start.cy + (ny - start.ny), SAFE.top + hh, SAFE.bottom - hh);
     } else if (target === "text") {
-      const b = slide._textBox, hw = b ? (b.w / 2) / CANVAS_W : 0, hh = b ? (b.h / 2) / CANVAS_H : 0;
-      // horizontal: libre hasta el borde del lienzo (permite lateral); vertical: zona segura
-      slide.pos.x = cl(start.x + (nx - start.nx), 0.03 + hw, 0.97 - hw);
-      slide.pos.y = cl(start.y + (ny - start.ny), SAFE.top + hh, SAFE.bottom - hh);
+      // pos = esquina arriba-izquierda. El ancho se reajusta solo, así que solo
+      // limitamos para que el bloque quede dentro de la zona segura sin cortarse.
+      const b = slide._textBox, bh = b ? b.h / CANVAS_H : 0;
+      slide.pos.x = cl(start.x + (nx - start.nx), 0.05, 0.70);
+      slide.pos.y = cl(start.y + (ny - start.ny), SAFE.top, Math.max(SAFE.top, SAFE.bottom - bh));
     } else {
       slide.bg.ox = start.ox + (nx - start.nx);
       slide.bg.oy = start.oy + (ny - start.ny);
@@ -658,7 +669,7 @@ function moveFrame(dir) {
 
 /* ---- Plantillas propias del usuario ---- */
 const storeT = {
-  KEY: "abmedia_user_templates_v1",
+  KEY: "abmedia_user_templates_v2",
   load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch { return []; } },
   save(t) { try { localStorage.setItem(this.KEY, JSON.stringify(t)); } catch {} }
 };
