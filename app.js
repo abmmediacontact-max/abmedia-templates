@@ -494,7 +494,7 @@ function drawBody(c, slide, style, scale, w, h) {
   const size = 46 * style.size * scale;     // base más contenido, estilo Instagram
   const lh = size * 1.34;
   const parGap = size * 0.6;
-  const maxW = w * 0.82;                     // ancho máximo de envoltura
+  const maxW = w * 0.72;                     // ancho de envoltura (más estrecho: permite colocarlo a un lado)
   c.font = `${style.weight} ${size}px ${style.font}`;
   c.textAlign = "left";          // imprescindible: el texto se posiciona por x manual
   c.textBaseline = "alphabetic";
@@ -619,7 +619,8 @@ function setupDrag() {
       ins.cy = cl(start.cy + (ny - start.ny), SAFE.top + hh, SAFE.bottom - hh);
     } else if (target === "text") {
       const b = slide._textBox, hw = b ? (b.w / 2) / CANVAS_W : 0, hh = b ? (b.h / 2) / CANVAS_H : 0;
-      slide.pos.x = cl(start.x + (nx - start.nx), SAFE.left + hw, SAFE.right - hw);
+      // horizontal: libre hasta el borde del lienzo (permite lateral); vertical: zona segura
+      slide.pos.x = cl(start.x + (nx - start.nx), 0.03 + hw, 0.97 - hw);
       slide.pos.y = cl(start.y + (ny - start.ny), SAFE.top + hh, SAFE.bottom - hh);
     } else {
       slide.bg.ox = start.ox + (nx - start.nx);
