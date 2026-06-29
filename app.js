@@ -569,10 +569,24 @@ function closeEditor() {
 }
 function syncStyleControls() {
   const st = state.active.style;
-  $("#fontSelect").value = st.font;
   $("#highlightColor").value = st.highlightColor;
   $("#textColor").value = st.textColor;
   $("#sizeRange").value = String(st.size);
+  updateColorDots();
+  syncFontChips();
+}
+function updateColorDots() {
+  const st = state.active?.style; if (!st) return;
+  const t = $("#textColorDot"); if (t) t.style.background = st.textColor;
+  const h = $("#highlightColorDot"); if (h) h.style.background = st.highlightColor;
+}
+function syncFontChips() {
+  const box = $("#fontChips"); if (!box) return;
+  $$(".font-chip").forEach(c => c.classList.toggle("active", c.dataset.fontval === state.active.style.font));
+}
+function syncOverlayChips() {
+  const cur = curSlide().overlay;
+  $$(".chip-vis").forEach(c => c.classList.toggle("active", c.dataset.overlay === cur));
 }
 function curSlide() { return state.active.slides[state.current]; }
 function renderThumbs() {
@@ -607,7 +621,7 @@ function renderEditPanel() {
   const slide = curSlide();
   $("#slideName").textContent = "Frame " + (state.current + 1) + " / " + state.active.slides.length;
   $("#bodyInput").value = slide.body;
-  $("#overlaySelect").value = slide.overlay;
+  syncOverlayChips();
   $("#bgZoom").value = slide.bg.zoom;
   $("#insetControls").classList.toggle("hidden", !slide.inset);
   renderBgPicker();
@@ -1108,13 +1122,18 @@ function bind() {
   $("#bgZoom").addEventListener("input", e => { curSlide().bg.zoom = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
   $("#bgZoom").addEventListener("change", persist);
   $("#bodyInput").addEventListener("input", e => { curSlide().body = e.target.value; drawEditor(); refreshActiveThumb(); });
-  $("#overlaySelect").addEventListener("change", e => { curSlide().overlay = e.target.value; drawEditor(); refreshActiveThumb(); persist(); });
+  // Overlay chips
+  $$(".chip-vis").forEach(c => c.addEventListener("click", () => {
+    curSlide().overlay = c.dataset.overlay;
+    syncOverlayChips(); drawEditor(); refreshActiveThumb(); persist();
+  }));
   $("#mkHighlight").addEventListener("click", () => wrapSelection("=="));
   $("#mkUnderline").addEventListener("click", () => wrapSelection("__"));
   $("#mkAccent").addEventListener("click", () => wrapSelection("**"));
-  $("#fontSelect").addEventListener("change", e => { state.active.style.font = e.target.value; drawEditor(); renderThumbs(); persist(); });
-  $("#highlightColor").addEventListener("input", e => { state.active.style.highlightColor = e.target.value; drawEditor(); renderThumbs(); persist(); });
-  $("#textColor").addEventListener("input", e => { state.active.style.textColor = e.target.value; drawEditor(); renderThumbs(); persist(); });
+  // Font chips
+  buildFontChips();
+  $("#highlightColor").addEventListener("input", e => { state.active.style.highlightColor = e.target.value; updateColorDots(); drawEditor(); renderThumbs(); persist(); });
+  $("#textColor").addEventListener("input", e => { state.active.style.textColor = e.target.value; updateColorDots(); drawEditor(); renderThumbs(); persist(); });
   $("#sizeRange").addEventListener("input", e => { state.active.style.size = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
   $("#sizeRange").addEventListener("change", persist);
   $("#shuffleAll").addEventListener("click", () => { assignRandomImages(state.active); drawEditor(); renderThumbs(); });
@@ -1165,12 +1184,26 @@ function bind() {
 }
 
 /* =========================================================================
- *  Fuentes
+ *  Fuentes (chips visuales)
  * ========================================================================= */
-function fillFontSelect() {
-  const sel = $("#fontSelect"); sel.innerHTML = "";
-  FONTS.forEach(f => { const o = document.createElement("option"); o.value = f.value; o.textContent = f.name; sel.appendChild(o); });
+function buildFontChips() {
+  const box = $("#fontChips"); if (!box) return;
+  box.innerHTML = "";
+  FONTS.forEach(f => {
+    const b = document.createElement("button");
+    b.className = "font-chip";
+    b.dataset.fontval = f.value;
+    b.style.fontFamily = f.value;
+    b.textContent = f.name;
+    b.addEventListener("click", () => {
+      state.active.style.font = f.value;
+      syncFontChips();
+      drawEditor(); renderThumbs(); persist();
+    });
+    box.appendChild(b);
+  });
 }
+function fillFontSelect() { /* deprecated — sustituido por buildFontChips */ }
 
 /* =========================================================================
  *  AUTH + arranque

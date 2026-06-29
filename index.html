@@ -236,14 +236,20 @@
         <div class="preview-col">
           <canvas id="editorCanvas" width="1080" height="1920" class="preview"></canvas>
           <div class="preview-actions">
-            <button class="btn btn-ghost sm" id="newImg">🔀 Otra imagen</button>
-            <button class="btn btn-ghost sm" id="shuffleAll">🎲 Barajar todas</button>
+            <button class="btn btn-ghost sm" id="newImg">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M7 7 H17 L14 4 M17 7 L14 10 M17 17 H7 L10 14 M7 17 L10 20"/></svg>
+              Otra imagen
+            </button>
+            <button class="btn btn-ghost sm" id="shuffleAll">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M3 7 H8 L18 17 H21 M18 17 L21 14 M18 17 L21 20 M3 17 H8 L11 14 M13 10 L18 7 H21 M18 7 L21 4 M18 7 L21 10"/></svg>
+              Barajar
+            </button>
           </div>
           <label class="field inline zoom-field"><span>Zoom fondo</span>
             <input type="range" id="bgZoom" min="1" max="2.6" step="0.02" value="1" />
           </label>
           <div id="bgPicker" class="bg-picker"></div>
-          <p class="drag-hint">✋ Arrastra el texto, la foto o el fondo con el cursor. Las líneas marcan la zona segura de Instagram.</p>
+          <p class="drag-hint">Arrastra el texto, la foto o el fondo con el cursor. Las líneas marcan la zona segura de Instagram.</p>
         </div>
 
         <div class="frames-col">
@@ -253,6 +259,7 @@
 
         <div class="edit-col">
           <div id="editorDrop" class="dropzone">
+            <svg class="ic" viewBox="0 0 24 24"><path d="M3 7 V19 C3 20 4 21 5 21 H19 C20 21 21 20 21 19 V9 C21 8 20 7 19 7 H12 L10 5 H5 C4 5 3 6 3 7 Z"/></svg>
             <strong>Arrastra tus fotos de fondo aquí</strong>
             <span>o haz clic para elegir una carpeta</span>
             <input type="file" id="fileInput2" accept="image/*" multiple hidden />
@@ -261,10 +268,18 @@
           <div class="frame-bar">
             <h3 class="edit-slide" id="slideName">Frame</h3>
             <div class="frame-actions">
-              <button class="icon-btn sm" id="moveFramePrev" title="Mover antes">↑</button>
-              <button class="icon-btn sm" id="moveFrameNext" title="Mover después">↓</button>
-              <button class="icon-btn sm" id="dupFrame" title="Duplicar frame">⎘</button>
-              <button class="icon-btn sm danger" id="delFrame" title="Borrar frame">🗑</button>
+              <button class="icon-btn sm" id="moveFramePrev" title="Mover antes">
+                <svg class="ic" viewBox="0 0 24 24"><path d="M12 4 V20 M6 10 L12 4 L18 10"/></svg>
+              </button>
+              <button class="icon-btn sm" id="moveFrameNext" title="Mover después">
+                <svg class="ic" viewBox="0 0 24 24"><path d="M12 4 V20 M6 14 L12 20 L18 14"/></svg>
+              </button>
+              <button class="icon-btn sm" id="dupFrame" title="Duplicar frame">
+                <svg class="ic" viewBox="0 0 24 24"><rect x="5" y="5" width="11" height="13" rx="2"/><rect x="9" y="9" width="11" height="13" rx="2"/></svg>
+              </button>
+              <button class="icon-btn sm danger" id="delFrame" title="Borrar frame">
+                <svg class="ic" viewBox="0 0 24 24"><path d="M5 7 H19 M9 7 V5 C9 4 10 3 11 3 H13 C14 3 15 4 15 5 V7 M7 7 L8 21 H16 L17 7 M10 11 V17 M14 11 V17"/></svg>
+              </button>
             </div>
           </div>
 
@@ -273,42 +288,72 @@
             <textarea id="bodyInput" rows="5" placeholder="Escribe en párrafos..."></textarea>
           </label>
           <div class="mark-row">
-            <button class="btn btn-ghost xs" id="mkHighlight">＝ Resaltar</button>
-            <button class="btn btn-ghost xs" id="mkUnderline">＿ Subrayar</button>
-            <button class="btn btn-ghost xs" id="mkAccent">✱ Acento</button>
+            <button class="btn btn-ghost xs" id="mkHighlight" title="Resaltado naranja">
+              <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="9" width="18" height="8" rx="2" fill="currentColor" opacity=".25"/><path d="M3 13 H21"/></svg>
+              Resaltar
+            </button>
+            <button class="btn btn-ghost xs" id="mkUnderline" title="Subrayado">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M6 4 V12 C6 16 9 18 12 18 S18 16 18 12 V4 M5 21 H19"/></svg>
+              Subrayar
+            </button>
+            <button class="btn btn-ghost xs" id="mkAccent" title="Color de acento">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M5 21 L12 4 L19 21 M8 14 H16"/></svg>
+              Acento
+            </button>
             <span class="mark-hint">Selecciona texto y pulsa</span>
           </div>
 
-          <div class="style-row">
-            <label class="field inline"><span>Fondo</span>
-              <select id="overlaySelect">
-                <option value="none">Sin oscurecer</option>
-                <option value="soft">Suave</option>
-                <option value="bottom">Degradado abajo</option>
-                <option value="full">Oscuro</option>
-              </select>
-            </label>
-            <label class="field inline"><span>Tipografía</span>
-              <select id="fontSelect"></select>
-            </label>
+          <div class="section">
+            <span class="sect-label">Fondo de la foto</span>
+            <div class="chip-row" id="overlayChips">
+              <button class="chip-vis" data-overlay="none" title="Sin oscurecer">
+                <span class="prev prev-none"></span>
+                <span class="lbl">Limpio</span>
+              </button>
+              <button class="chip-vis" data-overlay="soft" title="Oscurecido suave">
+                <span class="prev prev-soft"></span>
+                <span class="lbl">Suave</span>
+              </button>
+              <button class="chip-vis" data-overlay="bottom" title="Degradado abajo">
+                <span class="prev prev-bottom"></span>
+                <span class="lbl">Degradado</span>
+              </button>
+              <button class="chip-vis" data-overlay="full" title="Oscurecido total">
+                <span class="prev prev-full"></span>
+                <span class="lbl">Oscuro</span>
+              </button>
+            </div>
           </div>
 
-          <div class="style-row">
-            <label class="field inline"><span>Tamaño del texto</span>
-              <input type="range" id="sizeRange" min="0.6" max="1.7" step="0.02" value="1" />
-            </label>
+          <div class="section">
+            <span class="sect-label">Tipografía</span>
+            <div class="chip-row" id="fontChips"></div>
           </div>
-          <div class="style-row">
-            <label class="field inline"><span>Color destacado</span>
-              <input type="color" id="highlightColor" value="#ff6a1a" />
-            </label>
-            <label class="field inline"><span>Color texto</span>
-              <input type="color" id="textColor" value="#ffffff" />
-            </label>
+
+          <div class="section">
+            <span class="sect-label">Tamaño del texto</span>
+            <input type="range" id="sizeRange" min="0.6" max="1.7" step="0.02" value="1" />
+          </div>
+
+          <div class="section">
+            <span class="sect-label">Colores</span>
+            <div class="color-row">
+              <label class="swatch"><span class="dot" id="textColorDot"></span>
+                <span class="sw-lbl">Texto</span>
+                <input type="color" id="textColor" value="#ffffff" />
+              </label>
+              <label class="swatch"><span class="dot" id="highlightColorDot"></span>
+                <span class="sw-lbl">Acento</span>
+                <input type="color" id="highlightColor" value="#ff6a1a" />
+              </label>
+            </div>
           </div>
 
           <div class="inset-block">
-            <button class="btn btn-ghost full" id="insetBtn">🖼 Insertar foto / pantallazo</button>
+            <button class="btn btn-ghost full" id="insetBtn">
+              <svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.7"/><path d="M3 17 L8 13 L13 17 L17 14 L21 18"/></svg>
+              Insertar foto / pantallazo
+            </button>
             <div id="insetControls" class="hidden">
               <label class="field inline"><span>Tamaño foto</span>
                 <input type="range" id="insetSize" min="0.25" max="0.95" step="0.01" value="0.62" />
@@ -319,16 +364,29 @@
             <input type="file" id="insetInput" accept="image/*" hidden />
           </div>
 
-          <div class="save-row">
-            <button class="btn btn-ghost" id="saveBtn">💾 Guardar</button>
-            <button class="btn btn-ghost" id="tplSaveBtn">⭐ Guardar como plantilla</button>
+          <div class="actions-bar">
+            <button class="btn btn-ghost" id="saveBtn">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M5 3 H17 L21 7 V19 C21 20 20 21 19 21 H5 C4 21 3 20 3 19 V5 C3 4 4 3 5 3 Z M7 3 V9 H15 V3 M7 21 V13 H17 V21"/></svg>
+              Guardar
+            </button>
+            <button class="btn btn-ghost" id="tplSaveBtn">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M12 3 L14.5 9 L21 9.5 L16 14 L17.5 21 L12 17.5 L6.5 21 L8 14 L3 9.5 L9.5 9 Z"/></svg>
+              Plantilla
+            </button>
+            <button class="btn btn-ghost" id="submitBtn">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M3 12 L21 4 L17 22 L12 14 L3 12 Z"/></svg>
+              Enviar a revisión
+            </button>
           </div>
-          <div class="save-row">
-            <button class="btn btn-ghost" id="submitBtn">📤 Enviar a revisión</button>
-          </div>
-          <div class="download-row">
-            <button class="btn btn-ghost" id="dlOne">⬇ Este frame</button>
-            <button class="btn btn-primary" id="dlAll">⬇ Descargar ZIP</button>
+          <div class="actions-bar">
+            <button class="btn btn-ghost" id="dlOne">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M12 3 V17 M6 12 L12 18 L18 12 M4 21 H20"/></svg>
+              Este frame
+            </button>
+            <button class="btn btn-primary" id="dlAll">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M12 3 V17 M6 12 L12 18 L18 12 M4 21 H20"/></svg>
+              Descargar ZIP
+            </button>
           </div>
         </div>
       </div>
