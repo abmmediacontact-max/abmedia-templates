@@ -105,5 +105,15 @@ async function sbApproveTemplate(cloudId) {
   return data;
 }
 
-window.sbAuth = { sbGetSession, sbSignIn, sbSignUp, sbSignOut, isAdmin };
+/* ---- Whitelist (allowed_users) ---- */
+async function sbIsAllowed(email) {
+  if (!email) return false;
+  if (ADMIN_EMAILS.includes(email.toLowerCase())) return true;
+  const { data, error } = await sb.from("allowed_users")
+    .select("active").eq("email", email.toLowerCase()).maybeSingle();
+  if (error) { console.warn("sbIsAllowed", error); return false; }
+  return !!(data && data.active);
+}
+
+window.sbAuth = { sbGetSession, sbSignIn, sbSignUp, sbSignOut, isAdmin, sbIsAllowed };
 window.sbDB = { sbFetchSequences, sbUpsertSequence, sbDeleteSequence, sbFetchTemplates, sbUpsertTemplate, sbDeleteTemplate, sbApproveTemplate };

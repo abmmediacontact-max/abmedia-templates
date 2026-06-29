@@ -7,9 +7,26 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=2" />
+  <link rel="stylesheet" href="styles.css?v=4" />
 </head>
 <body>
+  <!-- ===================== NO AUTORIZADO ===================== -->
+  <div id="notAllowed" class="login hidden">
+    <div class="login-box">
+      <div class="brand login-brand">
+        <span class="logo"><img src="assets/logo.png" alt="ABMedia" class="logo-img" /></span>
+        <div class="brand-text">
+          <strong>Sequence Builder</strong>
+          <small>by ABMedia</small>
+        </div>
+      </div>
+      <h2>Cuenta pendiente de aprobación</h2>
+      <p class="login-sub">Tu email todavía no tiene acceso. Contacta con ABMedia para activarlo.</p>
+      <p class="login-sub" id="notAllowedEmail"></p>
+      <button class="btn btn-primary full" id="notAllowedLogout">Cerrar sesión</button>
+    </div>
+  </div>
+
   <!-- ===================== LOGIN ===================== -->
   <div id="loginScreen" class="login hidden">
     <div class="login-box">
@@ -409,9 +426,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase.js?v=2"></script>
-  <script src="templates.js?v=2"></script>
-  <script src="catalog.js?v=2"></script>
-  <script src="app.js?v=2"></script>
+  <script src="supabase.js?v=4"></script>
+  <script src="templates.js?v=4"></script>
+  <script src="catalog.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

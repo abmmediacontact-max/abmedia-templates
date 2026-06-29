@@ -141,9 +141,10 @@ const storeT = {
 const persist = () => {
   store.save(state.sequences);
   if (state.user && state.active) {
-    sbDB.sbUpsertSequence(state.active).then(row => {
-      if (row && !state.active.cloudId) state.active.cloudId = row.id;
-    });
+    const ref = state.active;
+    sbDB.sbUpsertSequence(ref).then(row => {
+      if (row && ref && !ref.cloudId) ref.cloudId = row.id;
+    }).catch(() => {});
   }
 };
 
@@ -1211,6 +1212,24 @@ function fillFontSelect() { /* deprecated — sustituido por buildFontChips */ }
 async function bootLoggedIn(user) {
   state.user = user;
   state.isAdminUser = sbAuth.isAdmin(user);
+
+  // Whitelist: si no eres admin ni estás en allowed_users → fuera
+  if (!state.isAdminUser) {
+    const ok = await sbAuth.sbIsAllowed(user.email);
+    if (!ok) {
+      document.getElementById("loginScreen").classList.add("hidden");
+      document.getElementById("appRoot").classList.add("hidden");
+      const na = document.getElementById("notAllowed");
+      if (na) {
+        na.classList.remove("hidden");
+        const em = document.getElementById("notAllowedEmail");
+        if (em) em.textContent = user.email || "";
+      }
+      return;
+    }
+  }
+
+  document.getElementById("notAllowed")?.classList.add("hidden");
   document.getElementById("loginScreen").classList.add("hidden");
   document.getElementById("appRoot").classList.remove("hidden");
   document.getElementById("userEmail").textContent = user.email || "";
@@ -1241,9 +1260,16 @@ async function bootLoggedIn(user) {
 }
 
 function showLogin() {
+  document.getElementById("notAllowed")?.classList.add("hidden");
   document.getElementById("loginScreen").classList.remove("hidden");
   document.getElementById("appRoot").classList.add("hidden");
 }
+
+// Botón "Cerrar sesión" en la pantalla de no-autorizado
+document.addEventListener("DOMContentLoaded", () => {
+  const b = document.getElementById("notAllowedLogout");
+  if (b) b.addEventListener("click", async () => { await sbAuth.sbSignOut(); });
+});
 
 function bindLogin() {
   let mode = "signin";
