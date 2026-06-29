@@ -12,24 +12,21 @@
 const CATEGORIES = {
   personal: {
     name: "Personal",
-    emoji: "👤",
-    icon: "👤",
+    icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21 C4 16 7.5 14 12 14 S20 16 20 21 Z"/></svg>',
     desc: "Cercanía y lifestyle. Conectar contando tu día a día.",
     color: "#ff6a1a"
   },
   venta: {
     name: "Venta",
-    emoji: "💰",
-    icon: "💰",
+    icon: '<svg viewBox="0 0 24 24"><path d="M3 13 L11 21 L21 11 V3 H13 Z"/><circle cx="16.5" cy="7.5" r="1.6" fill="#0c0a09"/></svg>',
     desc: "Vender, abrir cupos y empujar a la compra.",
-    color: "#22c55e"
+    color: "#ff6a1a"
   },
   puente: {
     name: "Puente",
-    emoji: "🌉",
-    icon: "🌉",
+    icon: '<svg viewBox="0 0 24 24"><path d="M2 17 H22 V19 H2 Z"/><path d="M4 17 V11 C4 8 7 6 12 6 S20 8 20 11 V17 H17 V12 H7 V17 Z"/><path d="M4 13 H20 V14 H4 Z"/></svg>',
     desc: "Lead magnets y stories que llevan a CTA.",
-    color: "#60a5fa"
+    color: "#ff6a1a"
   }
 };
 

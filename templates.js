@@ -43,5 +43,6 @@ const STRUCTURES = {
 };
 
 function blankBody(i) {
-  return "Escribe aquí tu mensaje.\n\nDestaca palabras con ==resaltado== o __subrayado__.";
+  // Frame vacío: el usuario empieza a escribir desde cero.
+  return "";
 }

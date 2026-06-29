@@ -1,24 +1,24 @@
 /* =========================================================================
  *  Sequence Builder · ABMedia
- *  Stories estilo Instagram con biblioteca por categorías, galería de
- *  imágenes y panel de ideas. Auth + persistencia en Supabase.
  * ========================================================================= */
 
 const state = {
   user: null,
   isAdminUser: false,
-  images: [],          // [{ name, img }]  (solo en memoria)
+  images: [],
   sequences: [],
-  userTemplates: [],   // las del usuario (privadas o pendientes/aprobadas)
-  publicTemplates: [], // catálogo general aprobado por admin
-  reviewQueue: [],     // (admin) plantillas pendientes
+  userTemplates: [],
+  publicTemplates: [],
+  reviewQueue: [],
   inbox: [],
   active: null,
   current: 0,
   view: "library",
-  libraryStage: "categories", // "categories" | "list"
-  libraryFilter: "all",       // "all" | "mine"
-  libraryCat: null,           // "personal" | "venta" | "puente" cuando estás dentro
+  libraryStage: "categories",
+  libraryFilter: "all",
+  libraryCat: null,
+  calMonth: null,  // Date (1st of visible month)
+  schedule: {},    // { 'YYYY-MM-DD': catalogId }
   seq: 1
 };
 
@@ -35,7 +35,80 @@ const STATUS = {
 };
 
 /* =========================================================================
- *  Persistencia local (cache; backend en Supabase)
+ *  IndexedDB para imágenes (persistente entre sesiones)
+ * ========================================================================= */
+const imgDB = {
+  DB_NAME: "abmedia_images_v1",
+  STORE: "files",
+  _db: null,
+  open() {
+    if (this._db) return Promise.resolve(this._db);
+    return new Promise((res, rej) => {
+      const req = indexedDB.open(this.DB_NAME, 1);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains(this.STORE)) {
+          db.createObjectStore(this.STORE, { autoIncrement: true });
+        }
+      };
+      req.onsuccess = () => { this._db = req.result; res(req.result); };
+      req.onerror = () => rej(req.error);
+    });
+  },
+  async put(name, blob) {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(this.STORE, "readwrite");
+      tx.objectStore(this.STORE).add({ name, blob, t: Date.now() });
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  },
+  async getAll() {
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(this.STORE, "readonly");
+      const req = tx.objectStore(this.STORE).getAll();
+      req.onsuccess = () => res(req.result || []);
+      req.onerror = () => rej(req.error);
+    });
+  },
+  async clear() {
+    const db = await this.open();
+    return new Promise((res) => {
+      const tx = db.transaction(this.STORE, "readwrite");
+      tx.objectStore(this.STORE).clear();
+      tx.oncomplete = () => res();
+    });
+  },
+  async deleteAt(index) {
+    // Borra por posición (re-lee, filtra, re-graba)
+    const all = await this.getAll();
+    if (index < 0 || index >= all.length) return;
+    const keep = all.filter((_, i) => i !== index);
+    await this.clear();
+    const db = await this.open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction(this.STORE, "readwrite");
+      const store = tx.objectStore(this.STORE);
+      keep.forEach(r => store.add(r));
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
+};
+
+function blobToImage(blob, name) {
+  return new Promise(res => {
+    const img = new Image();
+    img.onload = () => res({ name, img });
+    img.onerror = () => res(null);
+    img.src = URL.createObjectURL(blob);
+  });
+}
+
+/* =========================================================================
+ *  Persistencia local
  * ========================================================================= */
 const store = {
   KEY: "abmedia_sequences_v3",
@@ -49,11 +122,20 @@ const store = {
     try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch {}
   }
 };
-
 const storeIdeas = {
   KEY: "abmedia_ideas_v1",
   load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch { return []; } },
   save(items) { try { localStorage.setItem(this.KEY, JSON.stringify(items)); } catch {} }
+};
+const storeSched = {
+  KEY: "abmedia_schedule_v1",
+  load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || null; } catch { return null; } },
+  save(s) { try { localStorage.setItem(this.KEY, JSON.stringify(s)); } catch {} }
+};
+const storeT = {
+  KEY: "abmedia_user_templates_v2",
+  load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch { return []; } },
+  save(t) { try { localStorage.setItem(this.KEY, JSON.stringify(t)); } catch {} }
 };
 
 const persist = () => {
@@ -80,7 +162,6 @@ function makeSlide(s) {
     bgIndex: -1, inset: null, _textBox: null
   };
 }
-
 function instantiate(data) {
   const seq = {
     id: data.id || state.seq++,
@@ -95,51 +176,73 @@ function instantiate(data) {
   assignRandomImages(seq);
   return seq;
 }
-
 function fromCatalog(catId, extra = {}) {
   const c = CATALOG.find(x => x.id === catId);
   return instantiate({ title: c.title, category: c.category, slides: c.slides, ...extra });
 }
-
 function fromStructure(frames, category) {
   const slides = Array.from({ length: frames }, (_, i) => ({ body: blankBody(i), overlay: "bottom" }));
   return instantiate({ title: "Nueva secuencia", category, slides, status: "draft" });
 }
-
+function fromTemplate(tpl, extra = {}) {
+  return instantiate({ title: tpl.title, category: tpl.category, slides: tpl.slides, style: tpl.style, ...extra });
+}
 function assignRandomImages(seq) {
   const n = state.images.length;
   if (!n) { seq.slides.forEach(s => s.bgIndex = -1); return; }
   const pool = shuffle([...Array(n).keys()]);
   seq.slides.forEach((s, i) => { s.bgIndex = pool[i % pool.length]; });
 }
-
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 /* =========================================================================
- *  Imágenes
+ *  Imágenes (subida + persistencia)
  * ========================================================================= */
-function loadFiles(fileList) {
+async function loadFiles(fileList) {
   const files = Array.from(fileList).filter(f => f.type.startsWith("image/"));
   if (!files.length) return;
-  let pending = files.length;
-  files.forEach(file => {
-    const img = new Image();
-    img.onload = () => { state.images.push({ name: file.name, img }); done(); };
-    img.onerror = done;
-    img.src = URL.createObjectURL(file);
-    function done() {
-      if (--pending === 0) {
-        updateImgCount();
-        state.sequences.forEach(s => { if (s.slides.some(sl => sl.bgIndex < 0)) assignRandomImages(s); });
-        renderAll();
-        if (state.active) { assignRandomImages(state.active); drawEditor(); renderThumbs(); }
-      }
-    }
-  });
+  for (const file of files) {
+    try { await imgDB.put(file.name, file); } catch (e) { console.warn("DB put", e); }
+    await new Promise(res => {
+      const img = new Image();
+      img.onload = () => { state.images.push({ name: file.name, img }); res(); };
+      img.onerror = () => res();
+      img.src = URL.createObjectURL(file);
+    });
+  }
+  updateImgCount();
+  state.sequences.forEach(s => { if (s.slides.some(sl => sl.bgIndex < 0)) assignRandomImages(s); });
+  renderAll();
+  if (state.active) { assignRandomImages(state.active); drawEditor(); renderThumbs(); }
 }
 function updateImgCount() {
   const n = state.images.length;
   const el = $("#galCount"); if (el) el.textContent = `${n} ${n === 1 ? "imagen" : "imágenes"}`;
+}
+async function loadImagesFromDB() {
+  try {
+    const rows = await imgDB.getAll();
+    for (const r of rows) {
+      const o = await blobToImage(r.blob, r.name);
+      if (o) state.images.push(o);
+    }
+  } catch (e) { console.warn("loadImagesFromDB", e); }
+  updateImgCount();
+}
+async function clearGallery() {
+  if (!confirm("¿Vaciar toda la galería de imágenes?")) return;
+  await imgDB.clear();
+  state.images = [];
+  state.sequences.forEach(s => assignRandomImages(s));
+  updateImgCount();
+  renderAll();
+}
+async function deleteImage(index) {
+  await imgDB.deleteAt(index);
+  state.images.splice(index, 1);
+  state.sequences.forEach(s => assignRandomImages(s));
+  updateImgCount();
+  renderAll();
 }
 
 /* =========================================================================
@@ -148,30 +251,28 @@ function updateImgCount() {
 function setView(view) {
   state.view = view;
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === view));
-  ["library", "gallery", "desk", "admin"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
+  ["library", "gallery", "desk", "calendar", "admin"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
   if (view === "library") { state.libraryStage = "categories"; state.libraryCat = null; }
   renderAll();
 }
-
 function renderAll() {
   if (state.view === "library") renderLibrary();
   else if (state.view === "gallery") renderGallery();
   else if (state.view === "desk") renderIdeas();
+  else if (state.view === "calendar") renderCalendar();
   else if (state.view === "admin") renderAdmin();
 }
 
 /* ---------------------------------------------------------------------- *
- *  BIBLIOTECA: categorías + listado
+ *  BIBLIOTECA
  * ---------------------------------------------------------------------- */
 function getCategoryItems(catKey) {
-  // mezcla catálogo público (preestablecido + aprobado) y propias del usuario
-  // según el filtro libraryFilter
-  const fromCatalog = CATALOG.map(c => ({ ...c, isUser: false }));
+  const fromCatalogList = CATALOG.map(c => ({ ...c, isUser: false }));
   const fromUser = state.userTemplates.map(t => ({
     id: t.id, cloudId: t.cloudId, title: t.title, category: t.category,
     slides: t.slides, style: t.style, isUser: true
   }));
-  const all = [...fromCatalog, ...fromUser];
+  const all = [...fromCatalogList, ...fromUser];
   return all.filter(it => {
     if (catKey && it.category !== catKey) return false;
     if (state.libraryFilter === "mine" && !it.isUser) return false;
@@ -180,7 +281,6 @@ function getCategoryItems(catKey) {
 }
 
 function renderLibrary() {
-  // top bar
   $("#libBack").classList.toggle("hidden", state.libraryStage === "categories");
   if (state.libraryStage === "categories") {
     $("#libTitle").textContent = "Biblioteca de secuencias";
@@ -189,13 +289,10 @@ function renderLibrary() {
       : "Elige una categoría para ver sus secuencias.";
   } else {
     const cat = CATEGORIES[state.libraryCat];
-    $("#libTitle").textContent = `${cat.icon} ${cat.name}`;
+    $("#libTitle").textContent = cat.name;
     $("#libSub").textContent = cat.desc;
   }
-
-  // filtro
   $$(".lib-filter .seg").forEach(s => s.classList.toggle("active", s.dataset.libfilter === state.libraryFilter));
-
   if (state.libraryStage === "categories") {
     $("#catTiles").classList.remove("hidden");
     $("#catalogGrid").classList.add("hidden");
@@ -238,9 +335,7 @@ function renderCatalogList() {
 }
 
 function makeLibCard(item) {
-  const seq = item.isUser
-    ? fromTemplate(item)
-    : fromCatalog(item.id);
+  const seq = item.isUser ? fromTemplate(item) : fromCatalog(item.id);
   const cat = CATEGORIES[item.category] || CATEGORIES.venta;
   const card = document.createElement("div"); card.className = "card";
   const cv = document.createElement("canvas");
@@ -252,11 +347,12 @@ function makeLibCard(item) {
   card.appendChild(badge);
   const info = document.createElement("div"); info.className = "card-info";
   info.innerHTML = `<div class="card-row"><h3>${item.title}</h3>
-      <span class="cat-tag">${cat.icon} ${cat.name}</span></div>
+      <span class="cat-tag">${cat.name}</span></div>
       ${item.objective ? `<p class="card-obj">${item.objective}</p>` : ""}
       <button class="btn btn-primary sm full" data-act="use">Usar esta secuencia →</button>
       ${item.isUser ? `<button class="btn btn-ghost xs full danger" data-act="del">🗑 Borrar plantilla</button>` : ""}`;
-  info.querySelector('[data-act="use"]').addEventListener("click", () => {
+  info.querySelector('[data-act="use"]').addEventListener("click", (e) => {
+    e.stopPropagation();
     const created = item.isUser
       ? fromTemplate(item, { status: "draft" })
       : fromCatalog(item.id, { status: "draft" });
@@ -283,16 +379,19 @@ function renderGallery() {
     grid.innerHTML = `<p class="empty">Aún no has cargado imágenes. Pulsa el botón de arriba para elegir tu carpeta.</p>`;
     return;
   }
-  state.images.forEach(im => {
+  state.images.forEach((im, i) => {
     const cell = document.createElement("div"); cell.className = "gallery-cell";
     const img = document.createElement("img"); img.src = im.img.src;
     const name = document.createElement("div"); name.className = "name"; name.textContent = im.name;
-    cell.appendChild(img); cell.appendChild(name); grid.appendChild(cell);
+    const x = document.createElement("button"); x.className = "x"; x.textContent = "✕"; x.title = "Eliminar";
+    x.addEventListener("click", e => { e.stopPropagation(); deleteImage(i); });
+    cell.appendChild(img); cell.appendChild(name); cell.appendChild(x);
+    grid.appendChild(cell);
   });
 }
 
 /* ---------------------------------------------------------------------- *
- *  IDEAS (antes Production Desk)
+ *  IDEAS (tipo tabla)
  * ---------------------------------------------------------------------- */
 function renderIdeas() {
   const box = $("#inboxList");
@@ -303,29 +402,26 @@ function renderIdeas() {
   }
   state.inbox.forEach((item, i) => {
     const cat = CATEGORIES[item.category] || CATEGORIES.venta;
-    const el = document.createElement("div");
-    el.className = "inbox-item";
-    el.innerHTML = `
-      <span class="meta">${cat.icon} ${cat.name}</span>
-      <p>${escapeHtml(item.brief)}</p>
-      <div class="row">
-        <button class="btn btn-primary sm" data-act="use">Convertir en secuencia</button>
-        <button class="btn btn-ghost sm danger" data-act="del" title="Eliminar idea">🗑</button>
-      </div>`;
-    el.querySelector('[data-act="use"]').addEventListener("click", () => {
+    const row = document.createElement("div");
+    row.className = "idea-row";
+    row.innerHTML = `
+      <div class="txt" title="${escapeAttr(item.brief)}">${escapeHtml(item.brief)}</div>
+      <span class="cat-pill">${cat.name}</span>
+      <button class="btn btn-primary" data-act="use">Convertir</button>
+      <button class="icon-btn" data-act="del" title="Eliminar">🗑</button>`;
+    row.querySelector('[data-act="use"]').addEventListener("click", () => {
       const seq = fromStructure(3, item.category);
       seq.title = item.brief.length > 46 ? item.brief.slice(0, 46) + "…" : item.brief;
       state.sequences.unshift(seq);
       state.inbox.splice(i, 1); storeIdeas.save(state.inbox);
       persist(); renderAll(); openEditor(seq.id);
     });
-    el.querySelector('[data-act="del"]').addEventListener("click", () => {
+    row.querySelector('[data-act="del"]').addEventListener("click", () => {
       state.inbox.splice(i, 1); storeIdeas.save(state.inbox); renderIdeas();
     });
-    box.appendChild(el);
+    box.appendChild(row);
   });
 }
-
 function addIdea() {
   const input = $("#ideaInput");
   const txt = input.value.trim();
@@ -336,9 +432,88 @@ function addIdea() {
   input.value = "";
   renderIdeas();
 }
+function escapeHtml(s) { return s.replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
+function escapeAttr(s) { return escapeHtml(s); }
 
-function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+/* ---------------------------------------------------------------------- *
+ *  CALENDARIO
+ * ---------------------------------------------------------------------- */
+const MONTHS_ES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const DOW_ES = ["L","M","X","J","V","S","D"]; // empezamos en lunes
+function fmtDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function ymKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; }
+
+function ensureScheduleFor(monthDate) {
+  // Si ya hay schedule, lo respeta. Si no, asigna 3 secuencias/semana (Mon/Wed/Fri)
+  // rotando por CATALOG. Persistente por mes.
+  const key = ymKey(monthDate);
+  if (state.schedule[key]) return;
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+  // semilla determinista para que cada mes sea consistente
+  let idx = ((year * 12 + month) * 3) % CATALOG.length;
+  const map = {};
+  for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+    const dow = d.getDay(); // 0=Sun
+    if (dow === 1 || dow === 3 || dow === 5) {
+      map[fmtDate(d)] = CATALOG[idx % CATALOG.length].id;
+      idx++;
+    }
+  }
+  state.schedule[key] = map;
+  storeSched.save(state.schedule);
+}
+
+function renderCalendar() {
+  if (!state.calMonth) state.calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  ensureScheduleFor(state.calMonth);
+  const m = state.calMonth;
+  $("#calLabel").textContent = `${MONTHS_ES[m.getMonth()]} ${m.getFullYear()}`;
+  const map = state.schedule[ymKey(m)] || {};
+  const grid = $("#calGrid"); grid.innerHTML = "";
+  // Cabecera (L-D)
+  DOW_ES.forEach(d => {
+    const h = document.createElement("div"); h.className = "cal-head"; h.textContent = d; grid.appendChild(h);
+  });
+  // padding inicial (Lunes = 1; si día 1 cae en domingo (0) -> 6 huecos)
+  const first = new Date(m.getFullYear(), m.getMonth(), 1);
+  const pad = (first.getDay() + 6) % 7;
+  for (let i = 0; i < pad; i++) {
+    const c = document.createElement("div"); c.className = "cal-cell muted"; grid.appendChild(c);
+  }
+  const last = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+  for (let day = 1; day <= last; day++) {
+    const date = new Date(m.getFullYear(), m.getMonth(), day);
+    const key = fmtDate(date);
+    const cell = document.createElement("div");
+    cell.className = "cal-cell" + (date.getTime() === today.getTime() ? " today" : "");
+    const dn = document.createElement("div"); dn.className = "dnum"; dn.textContent = day; cell.appendChild(dn);
+    const catId = map[key];
+    if (catId) {
+      const c = CATALOG.find(x => x.id === catId);
+      if (c) {
+        const cat = CATEGORIES[c.category] || CATEGORIES.venta;
+        const seqEl = document.createElement("div");
+        seqEl.className = "seq";
+        seqEl.innerHTML = `<span class="ct">${cat.name}</span>${c.title}`;
+        seqEl.addEventListener("click", () => {
+          const created = fromCatalog(c.id, { status: "scheduled" });
+          state.sequences.unshift(created); persist(); openEditor(created.id);
+        });
+        cell.appendChild(seqEl);
+      }
+    }
+    grid.appendChild(cell);
+  }
+}
+
+function calMove(delta) {
+  if (!state.calMonth) state.calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  state.calMonth = new Date(state.calMonth.getFullYear(), state.calMonth.getMonth() + delta, 1);
+  renderCalendar();
 }
 
 /* ---------------------------------------------------------------------- *
@@ -361,7 +536,7 @@ async function renderAdmin() {
     card.appendChild(badge);
     const info = document.createElement("div"); info.className = "card-info";
     info.innerHTML = `<div class="card-row"><h3>${tpl.title}</h3>
-        <span class="cat-tag">${cat.icon} ${cat.name}</span></div>
+        <span class="cat-tag">${cat.name}</span></div>
         <p class="card-obj">Enviada para revisión</p>
         <button class="btn btn-primary sm full" data-act="approve">✅ Aprobar y publicar</button>`;
     info.querySelector('[data-act="approve"]').addEventListener("click", async () => {
@@ -400,7 +575,6 @@ function syncStyleControls() {
   $("#sizeRange").value = String(st.size);
 }
 function curSlide() { return state.active.slides[state.current]; }
-
 function renderThumbs() {
   const box = $("#thumbs"); box.innerHTML = "";
   state.active.slides.forEach((slide, i) => {
@@ -429,7 +603,6 @@ function refreshActiveThumb() {
   const cv = $("#thumbs").children[state.current]?.querySelector("canvas");
   if (cv) drawSlide(cv.getContext("2d"), curSlide(), cv.width, cv.height, state.active.style);
 }
-
 function renderEditPanel() {
   const slide = curSlide();
   $("#slideName").textContent = "Frame " + (state.current + 1) + " / " + state.active.slides.length;
@@ -456,11 +629,10 @@ function renderBgPicker() {
 function drawEditor() { drawSlide(ctx(), curSlide(), CANVAS_W, CANVAS_H, state.active.style, true); renderEditPanel(); }
 
 /* =========================================================================
- *  MOTOR DE RENDER
+ *  RENDER (igual que antes)
  * ========================================================================= */
 const SAFE = { top: 0.075, bottom: 0.82, left: 0.05, right: 0.95 };
 function clampSafe(v, min, max) { return min > max ? (min + max) / 2 : Math.max(min, Math.min(max, v)); }
-
 function drawSlide(c, slide, w, h, style, guides) {
   const scale = w / CANVAS_W;
   c.clearRect(0, 0, w, h);
@@ -471,7 +643,6 @@ function drawSlide(c, slide, w, h, style, guides) {
   drawBody(c, slide, style, scale, w, h);
   if (guides) drawGuides(c, w, h);
 }
-
 function drawGuides(c, w, h) {
   const ty = SAFE.top * h, by = SAFE.bottom * h;
   c.save();
@@ -536,7 +707,6 @@ function drawInset(c, inset, w, h) {
   c.drawImage(inset.img, x, y, iw, ih);
   c.restore();
 }
-
 function tokenizeLine(line) {
   const segs = []; let hl = false, ul = false, ac = false, buf = "";
   const flush = () => { if (buf) { segs.push({ text: buf, hl, ul, ac }); buf = ""; } };
@@ -559,7 +729,6 @@ function segsToWords(segs) {
   return words;
 }
 const TXT = { left: 0.05, right: 0.95 };
-
 function layoutBody(c, slide, style, scale, w, h) {
   const text = (slide.body || "").trim();
   if (!text) return null;
@@ -569,12 +738,10 @@ function layoutBody(c, slide, style, scale, w, h) {
   c.font = `${style.weight} ${size}px ${style.font}`;
   c.textAlign = "left";
   c.textBaseline = "alphabetic";
-
   const lx = slide.pos.x;
   const left = lx * w;
   const maxW = Math.max(size * 2.5, (TXT.right - lx) * w);
   const sp = c.measureText(" ").width;
-
   const layout = []; let blockW = 0;
   text.split("\n").forEach(par => {
     if (par.trim() === "") { layout.push({ gap: true }); return; }
@@ -603,12 +770,10 @@ function layoutBody(c, slide, style, scale, w, h) {
     lines.forEach(l => { blockW = Math.max(blockW, l.width); });
     layout.push({ lines });
   });
-
   let total = 0;
   layout.forEach(b => { total += b.gap ? parGap : b.lines.length * lh; });
   return { layout, blockW, total, size, lh, parGap, left, topY: slide.pos.y * h };
 }
-
 function drawBody(c, slide, style, scale, w, h) {
   slide._textBox = null;
   const L = layoutBody(c, slide, style, scale, w, h);
@@ -616,7 +781,6 @@ function drawBody(c, slide, style, scale, w, h) {
   const { layout, blockW, total, size, lh, parGap, left, topY } = L;
   const pad = size * 0.3;
   slide._textBox = { x: (left - pad) / scale, y: (topY - pad) / scale, w: (blockW + pad * 2) / scale, h: (total + pad * 2) / scale };
-
   let y = topY + size;
   layout.forEach(block => {
     if (block.gap) { y += parGap; return; }
@@ -654,14 +818,13 @@ function drawBody(c, slide, style, scale, w, h) {
 }
 
 /* =========================================================================
- *  Drag (texto, foto, fondo)
+ *  Drag
  * ========================================================================= */
 function setupDrag() {
   const cv = editorCanvas;
   let target = null, start = null;
   const norm = e => { const r = cv.getBoundingClientRect(); return { nx: (e.clientX - r.left) / r.width, ny: (e.clientY - r.top) / r.height }; };
   const cl = (v, min, max) => (min > max ? (min + max) / 2 : Math.max(min, Math.min(max, v)));
-
   cv.addEventListener("pointerdown", e => {
     if (!state.active) return;
     const { nx, ny } = norm(e);
@@ -708,7 +871,7 @@ function setupDrag() {
   cv.style.touchAction = "none";
 }
 
-/* ---- Gestión de frames ---- */
+/* ---- Frames ---- */
 function duplicateFrame() {
   const s = curSlide();
   const copy = makeSlide({ body: s.body, pos: { ...s.pos }, align: s.align, overlay: s.overlay, bg: { ...s.bg } });
@@ -730,16 +893,7 @@ function moveFrame(dir) {
   persist(); renderThumbs(); drawEditor();
 }
 
-/* ---- Plantillas propias ---- */
-const storeT = {
-  KEY: "abmedia_user_templates_v2",
-  load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch { return []; } },
-  save(t) { try { localStorage.setItem(this.KEY, JSON.stringify(t)); } catch {} }
-};
-function fromTemplate(tpl, extra = {}) {
-  return instantiate({ title: tpl.title, category: tpl.category, slides: tpl.slides, style: tpl.style, ...extra });
-}
-
+/* ---- Plantilla propia ---- */
 function openSaveTplModal() {
   const s = state.active;
   $("#saveTplName").value = s.title || "Plantilla";
@@ -837,18 +991,20 @@ function wrapSelection(marker) {
 }
 
 /* =========================================================================
- *  TOUR / ONBOARDING
+ *  TOUR
  * ========================================================================= */
-const TOUR_KEY = "abmedia_tour_done_v2";
+const TOUR_KEY = "abmedia_tour_done_v3";
 const TOUR_STEPS = [
-  { sel: '[data-tour="library"]', title: "Biblioteca",
-    body: "Aquí tienes tus secuencias y las que tenemos preestablecidas. Elige una categoría y luego una secuencia para empezar. Puedes filtrar entre 'Todas' o solo 'Mis secuencias'." },
-  { sel: '[data-tour="gallery"]', title: "Galería de imágenes",
-    body: "Sube tu carpeta de fotos. Las imágenes se quedan en tu dispositivo (no se suben a ningún servidor) y se usan como fondo de las stories." },
-  { sel: '[data-tour="desk"]', title: "Ideas de stories",
-    body: "Anota tus ideas para luego transformarlas en secuencias. Es tu cuaderno de inspiración." },
-  { sel: '#libTitle', title: "Empezar a crear",
-    body: "Pulsa cualquier secuencia, edita los textos con los marcadores ==resaltado==, __subrayado__ y **acento**, y descarga las imágenes listas para Instagram." }
+  { view: "library", sel: '[data-tour="library"]', title: "Biblioteca",
+    body: "Aquí están todas las secuencias preestablecidas y las tuyas. Filtra entre 'Todas' o 'Mis secuencias' y entra en una categoría (Personal, Venta o Puente) para verlas." },
+  { view: "gallery", sel: '[data-tour="gallery"]', title: "Galería de imágenes",
+    body: "Sube tu carpeta de fotos. Se quedan guardadas en tu navegador y se usan como fondo de las stories. Puedes vaciarlas o eliminar imágenes una a una." },
+  { view: "desk", sel: '[data-tour="desk"]', title: "Ideas de stories",
+    body: "Tu cuaderno de inspiración. Anota ideas con su categoría y conviértelas en secuencias en un clic." },
+  { view: "calendar", sel: '[data-tour="calendar"]', title: "Calendario de stories",
+    body: "Te proponemos 3 publicaciones por semana. Pulsa cualquier día para abrir la secuencia y editarla con tus textos y fotos." },
+  { view: "library", sel: '[data-tour="new"]', title: "Empezar a crear",
+    body: "Cuando quieras una secuencia desde cero, pulsa este botón. Te deja elegir cuántos frames y la categoría." }
 ];
 let tourIdx = 0;
 let tourSpotEl = null;
@@ -861,11 +1017,13 @@ function startTour(force = false) {
 }
 function showTourStep() {
   const step = TOUR_STEPS[tourIdx];
+  if (step.view && state.view !== step.view) setView(step.view);
   $("#tourStep").textContent = `${tourIdx + 1} / ${TOUR_STEPS.length}`;
   $("#tourTitle").textContent = step.title;
   $("#tourBody").textContent = step.body;
   $("#tourNext").textContent = tourIdx === TOUR_STEPS.length - 1 ? "Empezar →" : "Siguiente →";
-  positionTourSpot(step.sel);
+  // Necesitamos un tick para que el DOM del setView esté pintado antes de medir
+  setTimeout(() => positionTourSpot(step.sel), 30);
 }
 function positionTourSpot(selector) {
   if (tourSpotEl) tourSpotEl.remove();
@@ -900,25 +1058,24 @@ function bind() {
 
   $$(".nav-item").forEach(n => n.addEventListener("click", () => setView(n.dataset.view)));
 
-  // Filtro biblioteca
   $$(".lib-filter .seg").forEach(s => s.addEventListener("click", () => {
-    state.libraryFilter = s.dataset.libfilter;
-    renderLibrary();
+    state.libraryFilter = s.dataset.libfilter; renderLibrary();
   }));
   $("#libBack").addEventListener("click", () => {
     state.libraryStage = "categories"; state.libraryCat = null; renderLibrary();
   });
 
-  // Galería: drop + botón grande
+  // Galería
   const gDrop = $("#galleryDrop");
   gDrop.addEventListener("click", () => $("#galleryInput").click());
   $("#galleryPickBtn").addEventListener("click", e => { e.stopPropagation(); $("#galleryInput").click(); });
+  $("#galleryClearBtn").addEventListener("click", e => { e.stopPropagation(); clearGallery(); });
   $("#galleryInput").addEventListener("change", e => loadFiles(e.target.files));
   ["dragover", "dragenter"].forEach(ev => gDrop.addEventListener(ev, e => { e.preventDefault(); gDrop.classList.add("hover"); }));
   ["dragleave", "drop"].forEach(ev => gDrop.addEventListener(ev, e => { e.preventDefault(); gDrop.classList.remove("hover"); }));
   gDrop.addEventListener("drop", e => loadFiles(e.dataTransfer.files));
 
-  // Drop dentro del editor
+  // Drop editor
   const drop = $("#editorDrop");
   drop.addEventListener("click", () => $("#fileInput2").click());
   $("#fileInput2").addEventListener("change", e => loadFiles(e.target.files));
@@ -930,6 +1087,10 @@ function bind() {
   $("#addIdeaBtn").addEventListener("click", addIdea);
   $("#ideaInput").addEventListener("keydown", e => { if (e.key === "Enter") addIdea(); });
 
+  // Calendar
+  $("#calPrev").addEventListener("click", () => calMove(-1));
+  $("#calNext").addEventListener("click", () => calMove(1));
+
   // Nueva secuencia
   $("#newSeq").addEventListener("click", openTemplateModal);
   $("#tplClose").addEventListener("click", () => $("#tplModal").classList.add("hidden"));
@@ -940,34 +1101,28 @@ function bind() {
   $("#editorTitle").addEventListener("input", e => { state.active.title = e.target.value; });
   $("#statusSelect").addEventListener("change", e => { state.active.status = e.target.value; persist(); });
   $("#catSelect").addEventListener("change", e => { state.active.category = e.target.value; persist(); });
-
   $("#dupFrame").addEventListener("click", duplicateFrame);
   $("#delFrame").addEventListener("click", deleteFrame);
   $("#moveFramePrev").addEventListener("click", () => moveFrame(-1));
   $("#moveFrameNext").addEventListener("click", () => moveFrame(1));
-
   $("#bgZoom").addEventListener("input", e => { curSlide().bg.zoom = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
   $("#bgZoom").addEventListener("change", persist);
-
   $("#bodyInput").addEventListener("input", e => { curSlide().body = e.target.value; drawEditor(); refreshActiveThumb(); });
   $("#overlaySelect").addEventListener("change", e => { curSlide().overlay = e.target.value; drawEditor(); refreshActiveThumb(); persist(); });
   $("#mkHighlight").addEventListener("click", () => wrapSelection("=="));
   $("#mkUnderline").addEventListener("click", () => wrapSelection("__"));
   $("#mkAccent").addEventListener("click", () => wrapSelection("**"));
-
   $("#fontSelect").addEventListener("change", e => { state.active.style.font = e.target.value; drawEditor(); renderThumbs(); persist(); });
   $("#highlightColor").addEventListener("input", e => { state.active.style.highlightColor = e.target.value; drawEditor(); renderThumbs(); persist(); });
   $("#textColor").addEventListener("input", e => { state.active.style.textColor = e.target.value; drawEditor(); renderThumbs(); persist(); });
   $("#sizeRange").addEventListener("input", e => { state.active.style.size = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
   $("#sizeRange").addEventListener("change", persist);
-
   $("#shuffleAll").addEventListener("click", () => { assignRandomImages(state.active); drawEditor(); renderThumbs(); });
   $("#newImg").addEventListener("click", () => {
     const n = state.images.length; if (n <= 1) return;
     const slide = curSlide(); let next; do { next = Math.floor(Math.random() * n); } while (next === slide.bgIndex);
     slide.bgIndex = next; drawEditor(); refreshActiveThumb();
   });
-
   $("#insetBtn").addEventListener("click", () => $("#insetInput").click());
   $("#insetInput").addEventListener("change", e => {
     const f = e.target.files[0]; if (!f) return;
@@ -986,7 +1141,7 @@ function bind() {
   });
   $("#submitBtn").addEventListener("click", () => {
     state.active.submitted = true; persist();
-    alert("¡Enviada a revisión! ABMedia podrá añadirla al catálogo general.");
+    alert("¡Enviada a revisión!");
   });
   $("#tplSaveBtn").addEventListener("click", openSaveTplModal);
   $("#saveTplClose").addEventListener("click", () => $("#saveTplModal").classList.add("hidden"));
@@ -1006,8 +1161,7 @@ function bind() {
   $("#restartTourBtn").addEventListener("click", () => startTour(true));
 
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#overlay").classList.contains("hidden")) closeEditor(); });
-
-  window.addEventListener("resize", () => { if (!$("#tour").classList.contains("hidden")) showTourStep(); });
+  window.addEventListener("resize", () => { if (!$("#tour").classList.contains("hidden")) positionTourSpot(TOUR_STEPS[tourIdx]?.sel); });
 }
 
 /* =========================================================================
@@ -1029,6 +1183,9 @@ async function bootLoggedIn(user) {
   document.getElementById("userEmail").textContent = user.email || "";
   document.getElementById("adminTab").classList.toggle("hidden", !state.isAdminUser);
 
+  // Carga imágenes persistidas ANTES de pintar
+  await loadImagesFromDB();
+
   const cloudSeqs = await sbDB.sbFetchSequences();
   if (cloudSeqs.length) {
     state.sequences = cloudSeqs.map(r => {
@@ -1043,10 +1200,10 @@ async function bootLoggedIn(user) {
   state.userTemplates = cloudTpls.map(r => ({ id: "u" + r.id, cloudId: r.id, title: r.title, category: r.category, style: r.style, slides: r.slides, submitted: r.submitted, isUser: true }));
 
   state.inbox = storeIdeas.load();
-  updateImgCount();
-  setView("library");
+  state.schedule = storeSched.load() || {};
+  state.calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
-  // Tour para usuarios nuevos
+  setView("library");
   setTimeout(() => startTour(false), 600);
 }
 
