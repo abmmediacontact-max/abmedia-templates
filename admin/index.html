@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin · Sequence Builder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css?v=4" />
+  <link rel="stylesheet" href="admin.css?v=4" />
+</head>
+<body>
+  <!-- LOGIN -->
+  <div id="loginScreen" class="login hidden">
+    <div class="login-box">
+      <div class="brand login-brand">
+        <span class="logo"><img src="../assets/logo.png" alt="ABMedia" class="logo-img" /></span>
+        <div class="brand-text">
+          <strong>Sequence Builder</strong>
+          <small>Admin · ABMedia</small>
+        </div>
+      </div>
+      <h2 id="loginTitle">Acceso admin</h2>
+      <p class="login-sub">Sólo el equipo de ABMedia.</p>
+      <label class="field"><span>Email</span><input type="email" id="loginEmail" autocomplete="email" /></label>
+      <label class="field"><span>Contraseña</span><input type="password" id="loginPass" autocomplete="current-password" /></label>
+      <p id="loginError" class="login-err"></p>
+      <button class="btn btn-primary full" id="loginBtn">Entrar</button>
+      <a href="/" class="btn btn-ghost full">← Volver a la app</a>
+    </div>
+  </div>
+
+  <!-- NOT ADMIN -->
+  <div id="notAdmin" class="login hidden">
+    <div class="login-box">
+      <h2>No autorizado</h2>
+      <p class="login-sub">Esta cuenta no tiene permisos de administración.</p>
+      <button class="btn btn-ghost full" id="naLogoutBtn">Cerrar sesión</button>
+      <a href="/" class="btn btn-primary full">Ir a la app</a>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div class="app hidden" id="appRoot">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="logo"><img src="../assets/logo.png" alt="ABMedia" class="logo-img" /></span>
+        <div class="brand-text">
+          <strong>Sequence Builder</strong>
+          <small>Panel admin</small>
+        </div>
+      </div>
+      <nav class="nav">
+        <a class="nav-item active" data-view="users">
+          <svg class="ni" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21 C2 16 5 14 9 14 S16 16 16 21 Z"/><circle cx="17" cy="7" r="3"/><path d="M14 16 C16 14 19 14 22 16 V21"/></svg>
+          <span>Usuarios</span>
+        </a>
+        <a class="nav-item" data-view="seqs">
+          <svg class="ni" viewBox="0 0 24 24"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="9" y="4" width="4" height="16" rx="1"/><rect x="15" y="6" width="6" height="14" rx="1"/></svg>
+          <span>Todas las secuencias</span>
+        </a>
+        <a class="nav-item" data-view="review">
+          <svg class="ni" viewBox="0 0 24 24"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z M9 12 L11 14 L15 10"/></svg>
+          <span>Plantillas pendientes</span>
+        </a>
+      </nav>
+      <div class="sidebar-foot">
+        <a class="btn btn-ghost xs full" href="/">← App principal</a>
+        <div class="user-mini">
+          <span id="userEmail"></span>
+          <button class="btn btn-ghost xs" id="logoutBtn">Salir</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="content">
+      <!-- USERS -->
+      <section id="view-users">
+        <header class="topbar">
+          <div>
+            <h1>Usuarios autorizados</h1>
+            <p>Sólo los emails de esta lista (y los admin) pueden usar la herramienta.</p>
+          </div>
+        </header>
+        <div class="ideas-form" style="grid-template-columns: 1fr 1fr 150px;">
+          <input type="email" id="newUserEmail" placeholder="email@cliente.com" />
+          <input type="text" id="newUserNotes" placeholder="Notas (ej: Plan Mensual)" />
+          <button class="btn btn-primary" id="addUserBtn">＋ Añadir</button>
+        </div>
+        <div id="usersList" class="ideas-list"></div>
+      </section>
+
+      <!-- ALL SEQUENCES -->
+      <section id="view-seqs" class="hidden">
+        <header class="topbar">
+          <div>
+            <h1>Todas las secuencias</h1>
+            <p>Lo que están creando tus clientes. Promociona las buenas a plantilla pública.</p>
+          </div>
+          <span class="pill" id="seqsCount">0</span>
+        </header>
+        <div id="seqsGrid" class="grid"></div>
+      </section>
+
+      <!-- REVIEW -->
+      <section id="view-review" class="hidden">
+        <header class="topbar">
+          <div>
+            <h1>Plantillas pendientes</h1>
+            <p>Plantillas enviadas por los clientes para que las apruebes y publiques.</p>
+          </div>
+        </header>
+        <div id="reviewGrid" class="grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../supabase.js?v=4"></script>
+  <script src="../templates.js?v=4"></script>
+  <script src="../catalog.js?v=4"></script>
+  <script src="admin.js?v=4"></script>
+</body>
+</html>
