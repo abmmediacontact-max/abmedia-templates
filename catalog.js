@@ -1,152 +1,133 @@
 /*
- * Catálogo de secuencias predefinidas por objetivo (categoría).
+ * Catálogo de secuencias ABMedia.
  * Cada slide usa el modelo de párrafos con marcas inline editables:
  *   ==resaltado==   __subrayado__   **acento**
+ *
+ * Las secuencias están organizadas en 3 categorías de uso:
+ *   personal — Cercanía / lifestyle
+ *   venta    — Vender / oferta / lanzamiento
+ *   puente   — Lead magnets / piezas que llevan a CTA
  */
 
 const CATEGORIES = {
-  ventas:    { name: "Ventas",     emoji: "💰", desc: "Vender, lanzar ofertas y cerrar plazas." },
-  autoridad: { name: "Autoridad",  emoji: "👑", desc: "Resultados, historia y credibilidad." },
-  valor:     { name: "Valor",      emoji: "💡", desc: "Enseñar, dar tips y aportar." },
-  recursos:  { name: "Recursos",   emoji: "🎁", desc: "Guías, plantillas y lead magnets." },
-  lifestyle: { name: "Día a día",  emoji: "☕", desc: "Detrás de cámaras y cercanía." }
+  personal: {
+    name: "Personal",
+    emoji: "👤",
+    icon: "👤",
+    desc: "Cercanía y lifestyle. Conectar contando tu día a día.",
+    color: "#ff6a1a"
+  },
+  venta: {
+    name: "Venta",
+    emoji: "💰",
+    icon: "💰",
+    desc: "Vender, abrir cupos y empujar a la compra.",
+    color: "#22c55e"
+  },
+  puente: {
+    name: "Puente",
+    emoji: "🌉",
+    icon: "🌉",
+    desc: "Lead magnets y stories que llevan a CTA.",
+    color: "#60a5fa"
+  }
 };
 
 const CATALOG = [
-  /* ----------------------------- VENTAS ------------------------------- */
+  /* =========================== PERSONAL =========================== */
   {
-    id: "v-oferta", category: "ventas", title: "Lanzamiento de oferta",
-    objective: "Presentar una oferta y empujar a la compra.",
+    id: "p-finde", category: "personal", title: "Fin de Semana",
+    objective: "Mostrar tu fin de semana y conectar con tu audiencia.",
     slides: [
-      { vpos: "bottom", overlay: "bottom", body: "Llevo semanas preparando esto.\n\nHoy abro ==plazas== y quiero que entres tú." },
-      { vpos: "center", overlay: "full", body: "Esto es lo que te llevas:\n\n__Formación + acompañamiento + comunidad__.\n\nTodo lo que necesitas para empezar." },
-      { vpos: "bottom", overlay: "bottom", body: "Solo durante esta semana.\n\n**Comenta \"QUIERO\" y te paso el acceso.**" }
+      { overlay: "bottom", body: "Esto me hace conseguir ==[resultado soñado]== más que cualquier cosa…" },
+      { overlay: "bottom", body: "Están siendo días de [situación] y hacer __[actividad]__ me ayuda a recargar las pilas." },
+      { overlay: "bottom", body: "**Explica sobre la actividad / anécdota**\n\nUna foto + una frase corta y honesta." }
     ]
   },
   {
-    id: "v-urgencia", category: "ventas", title: "Urgencia / Cuenta atrás",
-    objective: "Crear urgencia el último día de una oferta.",
+    id: "p-nosabeis", category: "personal", title: "No sabéis lo que…",
+    objective: "Generar curiosidad sobre algo que has hecho.",
     slides: [
-      { vpos: "center", overlay: "full", body: "==ÚLTIMO DÍA==\n\nA medianoche sube el precio y no vuelve a bajar." },
-      { vpos: "bottom", overlay: "bottom", body: "Si llevas días dándole vueltas, __esta es la señal__.\n\nNo te quedes fuera." },
-      { vpos: "bottom", overlay: "bottom", body: "**Desliza hacia arriba y entra ahora.**" }
-    ]
-  },
-  {
-    id: "v-objeciones", category: "ventas", title: "Rompe objeciones",
-    objective: "Resolver las dudas que frenan la compra.",
-    slides: [
-      { vpos: "center", overlay: "full", body: "¿Lo estás pensando?\n\nDéjame quitarte ==3 dudas== de encima." },
-      { vpos: "center", overlay: "full", body: "\"No tengo tiempo\"\n\n→ está diseñado para gente ocupada. __20 min al día__." },
-      { vpos: "center", overlay: "full", body: "\"Es caro\"\n\n→ calcula lo que te cuesta **NO** hacerlo." },
-      { vpos: "bottom", overlay: "bottom", body: "\"¿Y si no funciona?\"\n\n→ tienes ==garantía== y soporte directo." }
+      { overlay: "bottom", body: "No sabéis lo que ==[actividad pasada]== [fecha concreta].\n\nPista: __no tiene nada que ver__ con [tu sector]." },
+      { overlay: "bottom", body: "Comenta la actividad que hiciste, **sin entrar en detalle**." },
+      { overlay: "bottom", body: "Trabajar duro está bien…\n\nPero __vivir es mejor que trabajar__.\n\nTener tiempo y estabilidad económica para disfrutar momentos así…\n\n==Todo gracias a [tu sector]==." }
     ]
   },
 
-  /* ---------------------------- AUTORIDAD ----------------------------- */
+  /* ============================ VENTA ============================ */
   {
-    id: "a-historia", category: "autoridad", title: "Mi historia / Origen",
-    objective: "Conectar contando de dónde vienes.",
+    id: "v-objetivos", category: "venta", title: "Objetivos 2026",
+    objective: "Cerrar año y abrir oferta para el año nuevo.",
     slides: [
-      { vpos: "bottom", overlay: "bottom", body: "Antes de todo esto, yo también ==empecé de cero==." },
-      { vpos: "center", overlay: "full", body: "Hubo un momento en el que casi lo dejo.\n\n__Me alegro de no haberlo hecho.__" },
-      { vpos: "bottom", overlay: "bottom", body: "Si estás empezando, este mensaje es para ti.\n\n**Sigue.**" }
+      { overlay: "bottom", body: "Si ==[cliente ideal]==…\n\nAtento ➡️" },
+      { overlay: "full", body: "El año pasado, conseguí __[logro]__.\n\nEste año, quiero ==[nueva meta / objetivo]==." },
+      { overlay: "bottom", body: "Si quieres conseguir [objetivo soñado]\n\n**Responde \"PALABRA CLAVE\"** y te lo cuento." }
     ]
   },
   {
-    id: "a-resultado", category: "autoridad", title: "Resultado de cliente",
-    objective: "Mostrar un caso real para generar confianza.",
+    id: "v-siclienteideal", category: "venta", title: "Si [cliente ideal]…",
+    objective: "Atrapar la atención del cliente ideal y vender.",
     slides: [
-      { vpos: "bottom", overlay: "bottom", body: "Quiero enseñarte algo que pasó este mes." },
-      { vpos: "center", overlay: "full", body: "\"En 60 días pasé de no tener clientes a tener ==lista de espera==.\"\n\n— Cliente de ABMedia" },
-      { vpos: "bottom", overlay: "bottom", body: "No es suerte. Es __un sistema__.\n\n**Te lo cuento por DM.**" }
+      { overlay: "bottom", body: "Si ==[cliente ideal]==…\n\nAtento ➡️" },
+      { overlay: "full", body: "Muchos [cliente ideal] están dejando pasar __[resultado soñado]__ por no hacer esto:\n\n**\"[el sistema] →\"**" },
+      { overlay: "bottom", body: "Si tienes [cliente ideal] y quieres ==[objetivo soñado]==\n\n**Responde \"PALABRA CLAVE\"** y te explico cómo hacerlo." }
     ]
   },
   {
-    id: "a-cifra", category: "autoridad", title: "Cifra de autoridad",
-    objective: "Demostrar resultados con datos.",
+    id: "v-mehedespertado", category: "venta", title: "Me he despertado así…",
+    objective: "Mensaje + autoridad + sistema + CTA hacia tu VSL.",
     slides: [
-      { vpos: "center", overlay: "full", body: "Los resultados hablan mejor que yo." },
-      { vpos: "center", overlay: "full", body: "==+200 personas== ya han pasado por el programa.\n\nY los números siguen subiendo." },
-      { vpos: "bottom", overlay: "bottom", body: "¿Quieres ser el siguiente?\n\n**Comenta \"INFO\".**" }
-    ]
-  },
-
-  /* ------------------------------ VALOR ------------------------------- */
-  {
-    id: "val-tips", category: "valor", title: "3 consejos rápidos",
-    objective: "Aportar valor accionable en segundos.",
-    slides: [
-      { vpos: "center", overlay: "full", body: "==3 claves== que deberías aplicar ya 👇" },
-      { vpos: "center", overlay: "full", body: "1. __Primera clave__\n\nExplica aquí por qué importa." },
-      { vpos: "center", overlay: "full", body: "2. __Segunda clave__\n\nExplica aquí por qué importa." },
-      { vpos: "bottom", overlay: "bottom", body: "3. __Tercera clave__\n\n**Guarda esto para no olvidarlo.**" }
+      { overlay: "full", body: "\"Todas las mañanas me despierto con esto 👇\"\n\n❌ No [método común 1]\n❌ No [método común 2]\n\n✅ Solo ==[tu método]==.\n\n**ASÍ FUNCIONA →**" },
+      { overlay: "full", body: "En los últimos [X] años, no he hecho más que dominar __[método o habilidad]__ que [consigue resultado].\n\nHay ==[X] sistemas== que me han permitido replicar estos resultados.\n\n**LOS [X] SISTEMAS →**" },
+      { overlay: "full", body: "1: __[Nombre 1ª parte]__\n2: __[Nombre 2ª parte]__\n3: __[Nombre 3ª parte]__\n4: __[Nombre 4ª parte]__\n\n**Cómo conseguir estos Sistemas →**" },
+      { overlay: "bottom", body: "He creado un vídeo de [X] minutos explicando cómo implementar estos sistemas ==en tu negocio==.\n\n**Responde \"PALABRA CLAVE\"** y te lo envío." }
     ]
   },
   {
-    id: "val-error", category: "valor", title: "El error común",
-    objective: "Señalar un error frecuente y cómo evitarlo.",
+    id: "v-comoes", category: "venta", title: "Cómo es…",
+    objective: "Mostrar prueba social con testimonios + CTA.",
     slides: [
-      { vpos: "center", overlay: "full", body: "El error que ==casi todos cometen== sin darse cuenta." },
-      { vpos: "center", overlay: "full", body: "Crees que el problema es X.\n\n__Pero en realidad es otra cosa.__" },
-      { vpos: "bottom", overlay: "bottom", body: "Corrige esto y todo cambia.\n\n**Sigue para más.**" }
+      { overlay: "bottom", body: "Oye [tu nombre / apodo], ==¿qué se siente trabajar dentro de [nombre de tu empresa]?==" },
+      { overlay: "soft", body: "Testimonio 1 / resultado de cliente.\n\n__Mantén el mismo encabezado en todas.__" },
+      { overlay: "soft", body: "Testimonio 2 / resultado de cliente." },
+      { overlay: "soft", body: "Testimonio 3 / resultado de cliente." },
+      { overlay: "soft", body: "Testimonio 4 / resultado de cliente." },
+      { overlay: "bottom", body: "Responde **[keyword]** para más info." }
     ]
   },
   {
-    id: "val-pasos", category: "valor", title: "Mini guía paso a paso",
-    objective: "Enseñar un proceso simple en pasos.",
+    id: "v-ampliacion", category: "venta", title: "Ampliación de cupos",
+    objective: "Abrir cupos / lista de espera y empujar a inscribirse.",
     slides: [
-      { vpos: "center", overlay: "full", body: "Cómo hacerlo en ==3 pasos==." },
-      { vpos: "center", overlay: "full", body: "Paso 1 → __primer paso del proceso__." },
-      { vpos: "center", overlay: "full", body: "Paso 2 → __segundo paso del proceso__." },
-      { vpos: "bottom", overlay: "bottom", body: "Paso 3 → __tercer paso del proceso__.\n\n**Aplícalo hoy.**" }
+      { overlay: "bottom", body: "Estamos abriendo nuestra ==lista de espera== para [tu oferta].\n\nAmpliamos el límite de miembros de **[X–Y]**.\n\nSi te interesa:\n• __[Característica 1]__\n• __[Característica 2]__\n• __[Característica 3]__\n\n**Responde \"PALABRA CLAVE\"** para más info." }
     ]
   },
 
-  /* ----------------------------- RECURSOS ----------------------------- */
+  /* ============================ PUENTE ============================ */
   {
-    id: "r-gratis", category: "recursos", title: "Recurso gratuito",
-    objective: "Regalar una guía a cambio de contacto.",
+    id: "pu-netflix", category: "puente", title: "Netflix",
+    objective: "Comparar tu lead magnet con Netflix para destacar el valor.",
     slides: [
-      { vpos: "center", overlay: "full", body: "He preparado una ==guía gratuita==.\n\nY hoy te la regalo." },
-      { vpos: "center", overlay: "full", body: "Dentro tienes lo que normalmente __cobro en sesiones__." },
-      { vpos: "bottom", overlay: "bottom", body: "**Comenta \"GUÍA\" y te la mando.**" }
+      { overlay: "bottom", body: "==Esto es Netflix==." },
+      { overlay: "bottom", body: "Y este es mi __[sistema / metodología]__ que [resultado obtenido]." },
+      { overlay: "full", body: "❌ Coste: $20\n❌ Ofrece: Diversión\n❌ Valor: Perder tiempo\n\n✅ Coste: ==Gratis==\n✅ Ofrece: [Resultado soñado]\n✅ Valor: [Resultados / coste]\n\n**Responde \"PALABRA CLAVE\"** para tener [sistema]." }
     ]
   },
   {
-    id: "r-checklist", category: "recursos", title: "Checklist descargable",
-    objective: "Ofrecer un checklist como recurso rápido.",
+    id: "pu-webinar", category: "puente", title: "Webinar / Directo",
+    objective: "Anunciar un directo gratuito y captar registros.",
     slides: [
-      { vpos: "center", overlay: "full", body: "Una ==checklist== para que no se te escape nada." },
-      { vpos: "bottom", overlay: "bottom", body: "**Pídemela por DM 📩**" }
-    ]
-  },
-
-  /* ---------------------------- LIFESTYLE ----------------------------- */
-  {
-    id: "l-bts", category: "lifestyle", title: "Detrás de cámaras",
-    objective: "Mostrar el día a día y humanizar tu marca.",
-    slides: [
-      { vpos: "bottom", overlay: "bottom", body: "Así es un ==día normal== por aquí." },
-      { vpos: "bottom", overlay: "bottom", body: "Lo que no se ve en el feed.\n\n__El trabajo de verdad.__" }
+      { overlay: "bottom", body: "No consigues ==[Resultado soñado]==.\n\nEnumera 2 cosas que se suelen hacer y __una tercera__ que no consiga el resultado.\n\nPor eso [fecha / tiempo] voy a dar una **mentoría en directo GRATIS** 👉🏻" },
+      { overlay: "bottom", body: "En esta mentoría veremos:\n\n• __Punto de dolor 1__\n• __Punto de dolor 2__\n• __[Sistema / metodología]__\n\nSi quieres acceso **responde \"PALABRA CLAVE\"** y te mando el link." }
     ]
   },
   {
-    id: "l-dia", category: "lifestyle", title: "Un día en mi vida",
-    objective: "Contar tu rutina conectando con tu audiencia.",
+    id: "pu-estrategia", category: "puente", title: "¿Quieres la estrategia completa?",
+    objective: "Validar interés (encuesta) y entregar lead magnet por DM.",
     slides: [
-      { vpos: "center", overlay: "full", body: "Un vistazo a ==cómo trabajo==." },
-      { vpos: "center", overlay: "full", body: "AM → cómo empiezo la mañana." },
-      { vpos: "center", overlay: "full", body: "PM → lo que ocupa mi tarde." },
-      { vpos: "bottom", overlay: "bottom", body: "Y mi __momento favorito__ del día." }
-    ]
-  },
-  {
-    id: "l-reflexion", category: "lifestyle", title: "Reflexión",
-    objective: "Compartir una reflexión que genere cercanía.",
-    slides: [
-      { vpos: "center", overlay: "soft", body: "Algo que he ==aprendido== esta semana." },
-      { vpos: "bottom", overlay: "bottom", body: "**¿Te ha pasado? Cuéntame 👇**" }
+      { overlay: "bottom", body: "¿Quieres el ==[lead magnet]== completo que me consigue [resultado cuantificable]?\n\n**Encuesta: Sí / No**" },
+      { overlay: "bottom", body: "He creado un __[recurso] detallado__ que explica la estrategia exacta que utilizo." },
+      { overlay: "bottom", body: "**Responde \"PALABRA CLAVE\"** para acceder a él." }
     ]
   }
 ];

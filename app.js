@@ -1,10 +1,7 @@
 /* =========================================================================
- *  ABMedia · Story Builder
- *  Stories estilo Instagram: foto de fondo aleatoria + párrafos editables
- *  con resaltado/subrayado + foto insertable (pantallazo de resultados).
- *
- *  Persistencia: localStorage (capa store.*), lista para conectar a un
- *  backend con login (Supabase) — ver auth.js / README.
+ *  Sequence Builder · ABMedia
+ *  Stories estilo Instagram con biblioteca por categorías, galería de
+ *  imágenes y panel de ideas. Auth + persistencia en Supabase.
  * ========================================================================= */
 
 const state = {
@@ -18,9 +15,10 @@ const state = {
   inbox: [],
   active: null,
   current: 0,
-  view: "desk",
-  filter: "all",
-  cat: "all",
+  view: "library",
+  libraryStage: "categories", // "categories" | "list"
+  libraryFilter: "all",       // "all" | "mine"
+  libraryCat: null,           // "personal" | "venta" | "puente" cuando estás dentro
   seq: 1
 };
 
@@ -36,20 +34,8 @@ const STATUS = {
   published: { label: "Publicado",   cls: "st-published" }
 };
 
-const SEED_INBOX = [
-  { brief: "Quiero contar por qué vuelvo a esto después de tiempo.", structure: "s3", category: "lifestyle" },
-  { brief: "Tengo plazas abiertas y quiero llenarlas esta semana.", structure: "s3", category: "ventas" }
-];
-
-const DEMO_SEQS = [
-  { catalogId: "a-resultado", status: "published" },
-  { catalogId: "v-oferta",    status: "scheduled" },
-  { catalogId: "val-tips",    status: "progress" },
-  { catalogId: "l-bts",       status: "draft" }
-];
-
 /* =========================================================================
- *  Almacenamiento (localStorage; sustituible por backend con login)
+ *  Persistencia local (cache; backend en Supabase)
  * ========================================================================= */
 const store = {
   KEY: "abmedia_sequences_v3",
@@ -63,7 +49,13 @@ const store = {
     try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch {}
   }
 };
-// Guarda localmente (cache) Y en la nube (asíncrono, no bloquea).
+
+const storeIdeas = {
+  KEY: "abmedia_ideas_v1",
+  load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch { return []; } },
+  save(items) { try { localStorage.setItem(this.KEY, JSON.stringify(items)); } catch {} }
+};
+
 const persist = () => {
   store.save(state.sequences);
   if (state.user && state.active) {
@@ -82,9 +74,9 @@ function makeSlide(s) {
   return {
     body: s.body,
     overlay: s.overlay || "bottom",
-    pos: s.pos || { x: 0.05, y: 0.085 },   // por defecto: arriba-izquierda (esquina del bloque)
+    pos: s.pos || { x: 0.05, y: 0.085 },
     align: s.align || "left",
-    bg: s.bg ? { ...s.bg } : { zoom: 1, ox: 0, oy: 0 },  // zoom/desplazamiento del fondo
+    bg: s.bg ? { ...s.bg } : { zoom: 1, ox: 0, oy: 0 },
     bgIndex: -1, inset: null, _textBox: null
   };
 }
@@ -93,7 +85,7 @@ function instantiate(data) {
   const seq = {
     id: data.id || state.seq++,
     title: data.title || "Secuencia",
-    category: data.category || "valor",
+    category: data.category || "venta",
     status: data.status || "draft",
     submitted: !!data.submitted,
     style: data.style ? { ...newStyle(), ...data.style } : newStyle(),
@@ -109,9 +101,8 @@ function fromCatalog(catId, extra = {}) {
   return instantiate({ title: c.title, category: c.category, slides: c.slides, ...extra });
 }
 
-function fromStructure(key, category) {
-  const st = STRUCTURES[key];
-  const slides = Array.from({ length: st.frames }, (_, i) => ({ body: blankBody(i), overlay: "bottom" }));
+function fromStructure(frames, category) {
+  const slides = Array.from({ length: frames }, (_, i) => ({ body: blankBody(i), overlay: "bottom" }));
   return instantiate({ title: "Nueva secuencia", category, slides, status: "draft" });
 }
 
@@ -125,7 +116,7 @@ function assignRandomImages(seq) {
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 /* =========================================================================
- *  Imágenes de fondo (carpeta)
+ *  Imágenes
  * ========================================================================= */
 function loadFiles(fileList) {
   const files = Array.from(fileList).filter(f => f.type.startsWith("image/"));
@@ -148,8 +139,7 @@ function loadFiles(fileList) {
 }
 function updateImgCount() {
   const n = state.images.length;
-  $("#imgCount").textContent = n;
-  $("#imgState").classList.toggle("ok", n > 0);
+  const el = $("#galCount"); if (el) el.textContent = `${n} ${n === 1 ? "imagen" : "imágenes"}`;
 }
 
 /* =========================================================================
@@ -158,135 +148,100 @@ function updateImgCount() {
 function setView(view) {
   state.view = view;
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === view));
-  ["desk", "library", "mine", "admin"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
+  ["library", "gallery", "desk", "admin"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
+  if (view === "library") { state.libraryStage = "categories"; state.libraryCat = null; }
   renderAll();
 }
+
 function renderAll() {
-  if (state.view === "desk") { renderInbox(); renderGrid(); }
-  else if (state.view === "library") renderCatalog();
-  else if (state.view === "mine") renderMine();
+  if (state.view === "library") renderLibrary();
+  else if (state.view === "gallery") renderGallery();
+  else if (state.view === "desk") renderIdeas();
   else if (state.view === "admin") renderAdmin();
 }
 
-async function renderAdmin() {
-  const grid = $("#adminGrid"); grid.innerHTML = `<p class="empty">Cargando…</p>`;
-  const items = await sbDB.sbFetchTemplates("review");
-  grid.innerHTML = "";
-  if (!items.length) { grid.innerHTML = `<p class="empty">No hay plantillas pendientes.</p>`; return; }
-  items.forEach(row => {
-    const tpl = { id: "r" + row.id, cloudId: row.id, title: row.title, category: row.category, style: row.style, slides: row.slides };
-    const seq = fromTemplate(tpl);
-    const cat = CATEGORIES[tpl.category] || CATEGORIES.valor;
-    const card = document.createElement("div"); card.className = "card";
-    const cv = document.createElement("canvas"); cv.width = 270; cv.height = 480; cv.className = "card-canvas";
-    drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height, seq.style);
-    card.appendChild(cv);
-    const badge = document.createElement("span"); badge.className = "frames-badge"; badge.textContent = `${seq.slides.length} frames`;
-    card.appendChild(badge);
-    const info = document.createElement("div"); info.className = "card-info";
-    info.innerHTML = `<div class="card-row"><h3>${tpl.title}</h3>
-        <span class="cat-tag">${cat.emoji} ${cat.name}</span></div>
-        <p class="card-obj">Enviada para revisión</p>
-        <button class="btn btn-primary sm full" data-act="approve">✅ Aprobar y publicar</button>`;
-    info.querySelector('[data-act="approve"]').addEventListener("click", async () => {
-      await sbDB.sbApproveTemplate(row.id);
-      renderAdmin();
-    });
-    card.appendChild(info); grid.appendChild(card);
+/* ---------------------------------------------------------------------- *
+ *  BIBLIOTECA: categorías + listado
+ * ---------------------------------------------------------------------- */
+function getCategoryItems(catKey) {
+  // mezcla catálogo público (preestablecido + aprobado) y propias del usuario
+  // según el filtro libraryFilter
+  const fromCatalog = CATALOG.map(c => ({ ...c, isUser: false }));
+  const fromUser = state.userTemplates.map(t => ({
+    id: t.id, cloudId: t.cloudId, title: t.title, category: t.category,
+    slides: t.slides, style: t.style, isUser: true
+  }));
+  const all = [...fromCatalog, ...fromUser];
+  return all.filter(it => {
+    if (catKey && it.category !== catKey) return false;
+    if (state.libraryFilter === "mine" && !it.isUser) return false;
+    return true;
   });
 }
 
-/* ---- Production desk ---- */
-function renderInbox() {
-  const box = $("#inboxList");
-  box.innerHTML = "";
-  if (!state.inbox.length) { box.innerHTML = `<p class="empty">Bandeja vacía 🎉</p>`; return; }
-  state.inbox.forEach((item, i) => {
-    const frames = STRUCTURES[item.structure].frames;
-    const el = document.createElement("div");
-    el.className = "inbox-item";
-    el.innerHTML = `<p>${item.brief}</p>
-      <span class="meta">PENDIENTE · ${frames} frames</span>
-      <button class="btn btn-primary sm">Crear secuencia</button>`;
-    el.querySelector("button").addEventListener("click", () => {
-      const seq = fromStructure(item.structure, item.category);
-      seq.title = item.brief.length > 46 ? item.brief.slice(0, 46) + "…" : item.brief;
-      state.sequences.unshift(seq);
-      state.inbox.splice(i, 1);
-      persist(); renderAll(); openEditor(seq.id);
-    });
-    box.appendChild(el);
-  });
-}
-function renderGrid() {
-  const grid = $("#grid"); grid.innerHTML = "";
-  const list = state.sequences.filter(s => state.filter === "all" || s.status === state.filter);
-  if (!list.length) { grid.innerHTML = `<p class="empty">No hay secuencias en este estado.</p>`; updateCounts(); return; }
-  list.forEach(seq => grid.appendChild(makeCard(seq)));
-  updateCounts();
-}
-function makeCard(seq) {
-  const card = document.createElement("div");
-  card.className = "card";
-  const st = STATUS[seq.status], cat = CATEGORIES[seq.category];
-  const cv = document.createElement("canvas");
-  cv.width = 270; cv.height = 480; cv.className = "card-canvas";
-  drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height, seq.style);
-  card.appendChild(cv);
-  const badge = document.createElement("span");
-  badge.className = "frames-badge"; badge.textContent = `${seq.slides.length} frames`;
-  card.appendChild(badge);
-  if (seq.submitted) {
-    const rev = document.createElement("span");
-    rev.className = "review-badge"; rev.textContent = "⏳ En revisión";
-    card.appendChild(rev);
+function renderLibrary() {
+  // top bar
+  $("#libBack").classList.toggle("hidden", state.libraryStage === "categories");
+  if (state.libraryStage === "categories") {
+    $("#libTitle").textContent = "Biblioteca de secuencias";
+    $("#libSub").textContent = state.libraryFilter === "mine"
+      ? "Tus secuencias guardadas, organizadas por categoría."
+      : "Elige una categoría para ver sus secuencias.";
+  } else {
+    const cat = CATEGORIES[state.libraryCat];
+    $("#libTitle").textContent = `${cat.icon} ${cat.name}`;
+    $("#libSub").textContent = cat.desc;
   }
-  const info = document.createElement("div");
-  info.className = "card-info";
-  info.innerHTML = `<div class="card-row"><h3>${seq.title}</h3>
-      <span class="status ${st.cls}">${st.label}</span></div>
-      <span class="cat-tag">${cat ? cat.emoji + " " + cat.name : ""}</span>`;
-  card.appendChild(info);
-  card.addEventListener("click", () => openEditor(seq.id));
-  return card;
-}
-function updateCounts() {
-  const c = { all: state.sequences.length, draft: 0, progress: 0, scheduled: 0, published: 0 };
-  state.sequences.forEach(s => c[s.status]++);
-  $$(".tab").forEach(t => { t.querySelector(".count").textContent = c[t.dataset.filter] ?? 0; });
+
+  // filtro
+  $$(".lib-filter .seg").forEach(s => s.classList.toggle("active", s.dataset.libfilter === state.libraryFilter));
+
+  if (state.libraryStage === "categories") {
+    $("#catTiles").classList.remove("hidden");
+    $("#catalogGrid").classList.add("hidden");
+    renderCatTiles();
+  } else {
+    $("#catTiles").classList.add("hidden");
+    $("#catalogGrid").classList.remove("hidden");
+    renderCatalogList();
+  }
 }
 
-/* ---- Biblioteca ---- */
-function renderCatChips() {
-  const box = $("#catChips"); box.innerHTML = "";
-  const mk = (key, label) => {
-    const b = document.createElement("button");
-    b.className = "chip-btn" + (state.cat === key ? " active" : "");
-    b.innerHTML = label;
-    b.addEventListener("click", () => { state.cat = key; renderCatalog(); });
-    box.appendChild(b);
-  };
-  mk("all", "Todas");
-  Object.entries(CATEGORIES).forEach(([k, c]) => mk(k, `${c.emoji} ${c.name}`));
-  mk("mine", "⭐ Mías");
+function renderCatTiles() {
+  const box = $("#catTiles"); box.innerHTML = "";
+  Object.entries(CATEGORIES).forEach(([key, cat]) => {
+    const items = getCategoryItems(key);
+    const tile = document.createElement("button");
+    tile.className = "cat-tile";
+    tile.innerHTML = `
+      <span class="count">${items.length} ${items.length === 1 ? "secuencia" : "secuencias"}</span>
+      <div class="icon">${cat.icon}</div>
+      <h3>${cat.name}</h3>
+      <p>${cat.desc}</p>`;
+    tile.addEventListener("click", () => {
+      state.libraryStage = "list"; state.libraryCat = key; renderLibrary();
+    });
+    box.appendChild(tile);
+  });
 }
-function renderCatalog() {
-  renderCatChips();
+
+function renderCatalogList() {
   const grid = $("#catalogGrid"); grid.innerHTML = "";
-  if (state.cat === "mine") {
-    if (!state.userTemplates.length) {
-      grid.innerHTML = `<p class="empty">Aún no tienes plantillas propias. Abre una secuencia en el editor y pulsa "Guardar como plantilla".</p>`;
-      return;
-    }
-    state.userTemplates.forEach(item => grid.appendChild(makeLibCard(item, true)));
+  const items = getCategoryItems(state.libraryCat);
+  if (!items.length) {
+    grid.innerHTML = `<p class="empty">${state.libraryFilter === "mine"
+      ? "Todavía no tienes plantillas propias en esta categoría. Abre una secuencia y pulsa \"Guardar como plantilla\"."
+      : "No hay secuencias en esta categoría."}</p>`;
     return;
   }
-  CATALOG.filter(c => state.cat === "all" || c.category === state.cat)
-    .forEach(item => grid.appendChild(makeLibCard(item, false)));
+  items.forEach(item => grid.appendChild(makeLibCard(item)));
 }
-function makeLibCard(item, isUser) {
-  const seq = isUser ? fromTemplate(item) : fromCatalog(item.id);
-  const cat = CATEGORIES[item.category];
+
+function makeLibCard(item) {
+  const seq = item.isUser
+    ? fromTemplate(item)
+    : fromCatalog(item.id);
+  const cat = CATEGORIES[item.category] || CATEGORIES.venta;
   const card = document.createElement("div"); card.className = "card";
   const cv = document.createElement("canvas");
   cv.width = 270; cv.height = 480; cv.className = "card-canvas";
@@ -297,57 +252,123 @@ function makeLibCard(item, isUser) {
   card.appendChild(badge);
   const info = document.createElement("div"); info.className = "card-info";
   info.innerHTML = `<div class="card-row"><h3>${item.title}</h3>
-      <span class="cat-tag">${cat.emoji} ${cat.name}</span></div>
+      <span class="cat-tag">${cat.icon} ${cat.name}</span></div>
       ${item.objective ? `<p class="card-obj">${item.objective}</p>` : ""}
       <button class="btn btn-primary sm full" data-act="use">Usar esta secuencia →</button>
-      ${isUser ? `<button class="btn btn-ghost xs full danger" data-act="del">🗑 Borrar plantilla</button>` : ""}`;
+      ${item.isUser ? `<button class="btn btn-ghost xs full danger" data-act="del">🗑 Borrar plantilla</button>` : ""}`;
   info.querySelector('[data-act="use"]').addEventListener("click", () => {
-    const created = isUser ? fromTemplate(item, { status: "draft" }) : fromCatalog(item.id, { status: "draft" });
+    const created = item.isUser
+      ? fromTemplate(item, { status: "draft" })
+      : fromCatalog(item.id, { status: "draft" });
     state.sequences.unshift(created); persist(); openEditor(created.id);
   });
-  if (isUser) info.querySelector('[data-act="del"]').addEventListener("click", async () => {
+  if (item.isUser) info.querySelector('[data-act="del"]').addEventListener("click", async (e) => {
+    e.stopPropagation();
     if (!confirm("¿Borrar esta plantilla?")) return;
     if (state.user && item.cloudId) await sbDB.sbDeleteTemplate(item.cloudId);
     state.userTemplates = state.userTemplates.filter(t => t.id !== item.id);
-    storeT.save(state.userTemplates); renderCatalog();
+    storeT.save(state.userTemplates); renderLibrary();
   });
   card.appendChild(info);
   return card;
 }
 
-/* ---- Mis secuencias ---- */
-function renderMine() {
-  const grid = $("#mineGrid"); grid.innerHTML = "";
-  if (!state.sequences.length) { grid.innerHTML = `<p class="empty">Aún no has guardado secuencias. Crea una desde la Biblioteca.</p>`; return; }
-  state.sequences.forEach(seq => {
-    const card = makeCard(seq);
-    const tools = document.createElement("div");
-    tools.className = "mine-tools";
-    tools.innerHTML = `<button class="btn btn-ghost xs" data-act="submit" ${seq.submitted ? "disabled" : ""}>${seq.submitted ? "⏳ En revisión" : "📤 Enviar a revisión"}</button>
-      <button class="btn btn-ghost xs danger" data-act="del">🗑</button>`;
-    tools.querySelector('[data-act="submit"]').addEventListener("click", async e => {
-      e.stopPropagation(); seq.submitted = true; persist();
-      // crea una plantilla asociada a la secuencia y la manda a revisión
-      if (state.user) {
-        const tplRow = await sbDB.sbUpsertTemplate({
-          title: seq.title, category: seq.category, style: seq.style,
-          slides: seq.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay })),
-          submitted: true, is_public: false
-        });
-        if (tplRow) {
-          state.userTemplates.unshift({ id: "u" + tplRow.id, cloudId: tplRow.id, title: tplRow.title, category: tplRow.category, style: tplRow.style, slides: tplRow.slides, submitted: true, isUser: true });
-        }
-      }
-      renderMine();
-      alert("¡Enviada a revisión! ABMedia la podrá revisar y, con tu permiso, añadirla al catálogo general.");
+/* ---------------------------------------------------------------------- *
+ *  GALERÍA
+ * ---------------------------------------------------------------------- */
+function renderGallery() {
+  updateImgCount();
+  const grid = $("#galleryGrid"); grid.innerHTML = "";
+  if (!state.images.length) {
+    grid.innerHTML = `<p class="empty">Aún no has cargado imágenes. Pulsa el botón de arriba para elegir tu carpeta.</p>`;
+    return;
+  }
+  state.images.forEach(im => {
+    const cell = document.createElement("div"); cell.className = "gallery-cell";
+    const img = document.createElement("img"); img.src = im.img.src;
+    const name = document.createElement("div"); name.className = "name"; name.textContent = im.name;
+    cell.appendChild(img); cell.appendChild(name); grid.appendChild(cell);
+  });
+}
+
+/* ---------------------------------------------------------------------- *
+ *  IDEAS (antes Production Desk)
+ * ---------------------------------------------------------------------- */
+function renderIdeas() {
+  const box = $("#inboxList");
+  box.innerHTML = "";
+  if (!state.inbox.length) {
+    box.innerHTML = `<p class="empty">Aún no tienes ideas. Añade la primera con el formulario de arriba.</p>`;
+    return;
+  }
+  state.inbox.forEach((item, i) => {
+    const cat = CATEGORIES[item.category] || CATEGORIES.venta;
+    const el = document.createElement("div");
+    el.className = "inbox-item";
+    el.innerHTML = `
+      <span class="meta">${cat.icon} ${cat.name}</span>
+      <p>${escapeHtml(item.brief)}</p>
+      <div class="row">
+        <button class="btn btn-primary sm" data-act="use">Convertir en secuencia</button>
+        <button class="btn btn-ghost sm danger" data-act="del" title="Eliminar idea">🗑</button>
+      </div>`;
+    el.querySelector('[data-act="use"]').addEventListener("click", () => {
+      const seq = fromStructure(3, item.category);
+      seq.title = item.brief.length > 46 ? item.brief.slice(0, 46) + "…" : item.brief;
+      state.sequences.unshift(seq);
+      state.inbox.splice(i, 1); storeIdeas.save(state.inbox);
+      persist(); renderAll(); openEditor(seq.id);
     });
-    tools.querySelector('[data-act="del"]').addEventListener("click", async e => {
-      e.stopPropagation();
-      if (!confirm("¿Eliminar esta secuencia?")) return;
-      if (state.user && seq.cloudId) await sbDB.sbDeleteSequence(seq.cloudId);
-      state.sequences = state.sequences.filter(s => s.id !== seq.id); store.save(state.sequences); renderMine();
+    el.querySelector('[data-act="del"]').addEventListener("click", () => {
+      state.inbox.splice(i, 1); storeIdeas.save(state.inbox); renderIdeas();
     });
-    card.appendChild(tools); grid.appendChild(card);
+    box.appendChild(el);
+  });
+}
+
+function addIdea() {
+  const input = $("#ideaInput");
+  const txt = input.value.trim();
+  if (!txt) return;
+  const cat = $("#ideaCat").value;
+  state.inbox.unshift({ brief: txt, category: cat });
+  storeIdeas.save(state.inbox);
+  input.value = "";
+  renderIdeas();
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+}
+
+/* ---------------------------------------------------------------------- *
+ *  ADMIN
+ * ---------------------------------------------------------------------- */
+async function renderAdmin() {
+  const grid = $("#adminGrid"); grid.innerHTML = `<p class="empty">Cargando…</p>`;
+  const items = await sbDB.sbFetchTemplates("review");
+  grid.innerHTML = "";
+  if (!items.length) { grid.innerHTML = `<p class="empty">No hay plantillas pendientes.</p>`; return; }
+  items.forEach(row => {
+    const tpl = { id: "r" + row.id, cloudId: row.id, title: row.title, category: row.category, style: row.style, slides: row.slides };
+    const seq = fromTemplate(tpl);
+    const cat = CATEGORIES[tpl.category] || CATEGORIES.venta;
+    const card = document.createElement("div"); card.className = "card";
+    const cv = document.createElement("canvas"); cv.width = 270; cv.height = 480; cv.className = "card-canvas";
+    drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height, seq.style);
+    card.appendChild(cv);
+    const badge = document.createElement("span"); badge.className = "frames-badge"; badge.textContent = `${seq.slides.length} frames`;
+    card.appendChild(badge);
+    const info = document.createElement("div"); info.className = "card-info";
+    info.innerHTML = `<div class="card-row"><h3>${tpl.title}</h3>
+        <span class="cat-tag">${cat.icon} ${cat.name}</span></div>
+        <p class="card-obj">Enviada para revisión</p>
+        <button class="btn btn-primary sm full" data-act="approve">✅ Aprobar y publicar</button>`;
+    info.querySelector('[data-act="approve"]').addEventListener("click", async () => {
+      await sbDB.sbApproveTemplate(row.id);
+      renderAdmin();
+    });
+    card.appendChild(info); grid.appendChild(card);
   });
 }
 
@@ -394,7 +415,6 @@ function renderThumbs() {
     t.addEventListener("click", () => { state.current = i; renderThumbs(); drawEditor(); });
     box.appendChild(t);
   });
-  // botón añadir frame
   const add = document.createElement("button");
   add.className = "thumb add"; add.innerHTML = "<span>＋</span>";
   add.addEventListener("click", () => {
@@ -422,7 +442,7 @@ function renderEditPanel() {
 function renderBgPicker() {
   const box = $("#bgPicker"); if (!box) return;
   box.innerHTML = "";
-  if (!state.images.length) { box.innerHTML = `<span class="bg-empty">Sube fotos para elegir el fondo.</span>`; return; }
+  if (!state.images.length) { box.innerHTML = `<span class="bg-empty">Sube fotos en "Galería" para elegir el fondo.</span>`; return; }
   state.images.forEach((im, i) => {
     const t = document.createElement("button");
     t.className = "bg-thumb" + (i === curSlide().bgIndex ? " active" : "");
@@ -438,7 +458,6 @@ function drawEditor() { drawSlide(ctx(), curSlide(), CANVAS_W, CANVAS_H, state.a
 /* =========================================================================
  *  MOTOR DE RENDER
  * ========================================================================= */
-// Zona segura de Instagram Stories (fracciones del lienzo 1080x1920)
 const SAFE = { top: 0.075, bottom: 0.82, left: 0.05, right: 0.95 };
 function clampSafe(v, min, max) { return min > max ? (min + max) / 2 : Math.max(min, Math.min(max, v)); }
 
@@ -477,12 +496,11 @@ function drawCover(c, img, w, h, bg) {
   dw *= bg.zoom; dh *= bg.zoom;
   let dx = (w - dw) / 2 + bg.ox * w;
   let dy = (h - dh) / 2 + bg.oy * h;
-  dx = Math.min(0, Math.max(w - dw, dx));   // mantener cobertura (sin huecos)
+  dx = Math.min(0, Math.max(w - dw, dx));
   dy = Math.min(0, Math.max(h - dh, dy));
   c.drawImage(img, dx, dy, dw, dh);
 }
 function drawPlaceholder(c, w, h) {
-  // Fondo neutro vacío: aquí irá la imagen que suba el usuario.
   c.fillStyle = "#1b1b1e";
   c.fillRect(0, 0, w, h);
   c.fillStyle = "rgba(255,255,255,0.16)";
@@ -519,7 +537,6 @@ function drawInset(c, inset, w, h) {
   c.restore();
 }
 
-/* ---- Texto en párrafos con resaltado / subrayado ---- */
 function tokenizeLine(line) {
   const segs = []; let hl = false, ul = false, ac = false, buf = "";
   const flush = () => { if (buf) { segs.push({ text: buf, hl, ul, ac }); buf = ""; } };
@@ -541,11 +558,8 @@ function segsToWords(segs) {
   }));
   return words;
 }
-// Márgenes del lienzo para el texto (fracciones)
 const TXT = { left: 0.05, right: 0.95 };
 
-// Calcula el layout del texto: anclaje arriba-izquierda en slide.pos,
-// el ancho se adapta hasta el margen derecho => NUNCA se corta (añade líneas).
 function layoutBody(c, slide, style, scale, w, h) {
   const text = (slide.body || "").trim();
   if (!text) return null;
@@ -556,15 +570,14 @@ function layoutBody(c, slide, style, scale, w, h) {
   c.textAlign = "left";
   c.textBaseline = "alphabetic";
 
-  const lx = slide.pos.x;                         // esquina superior-izquierda (normalizada)
+  const lx = slide.pos.x;
   const left = lx * w;
-  const maxW = Math.max(size * 2.5, (TXT.right - lx) * w);  // ancho disponible hasta el margen derecho
+  const maxW = Math.max(size * 2.5, (TXT.right - lx) * w);
   const sp = c.measureText(" ").width;
 
   const layout = []; let blockW = 0;
   text.split("\n").forEach(par => {
     if (par.trim() === "") { layout.push({ gap: true }); return; }
-    // tokeniza y parte palabras más anchas que maxW (corte por caracteres)
     const fitted = [];
     segsToWords(tokenizeLine(par)).forEach(t => {
       const wd = c.measureText(t.text).width;
@@ -608,7 +621,6 @@ function drawBody(c, slide, style, scale, w, h) {
   layout.forEach(block => {
     if (block.gap) { y += parGap; return; }
     block.lines.forEach(ln => {
-      // 1) cajas de resaltado (siguen al texto: relativas a 'left')
       for (let i = 0; i < ln.words.length;) {
         if (ln.words[i].hl) {
           let j = i, sX = ln.words[i].x, eX = ln.words[i].x + ln.words[i].w;
@@ -620,14 +632,12 @@ function drawBody(c, slide, style, scale, w, h) {
           i = j;
         } else i++;
       }
-      // 2) texto
       ln.words.forEach(t => {
         c.fillStyle = t.hl ? style.highlightText : (t.ac ? style.highlightColor : style.textColor);
         if (!t.hl) { c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = size * 0.12; c.shadowOffsetY = size * 0.025; }
         c.fillText(t.text, left + t.x, y);
         c.shadowColor = "transparent"; c.shadowBlur = 0; c.shadowOffsetY = 0;
       });
-      // 3) subrayados
       for (let k = 0; k < ln.words.length;) {
         if (ln.words[k].ul) {
           let j = k, sX = ln.words[k].x, eX = ln.words[k].x + ln.words[k].w;
@@ -644,11 +654,11 @@ function drawBody(c, slide, style, scale, w, h) {
 }
 
 /* =========================================================================
- *  Imagen insertada (pantallazo): arrastrar y redimensionar
+ *  Drag (texto, foto, fondo)
  * ========================================================================= */
 function setupDrag() {
   const cv = editorCanvas;
-  let target = null, start = null;   // target: "inset" | "text" | "bg"
+  let target = null, start = null;
   const norm = e => { const r = cv.getBoundingClientRect(); return { nx: (e.clientX - r.left) / r.width, ny: (e.clientY - r.top) / r.height }; };
   const cl = (v, min, max) => (min > max ? (min + max) / 2 : Math.max(min, Math.min(max, v)));
 
@@ -669,7 +679,7 @@ function setupDrag() {
     if (b && px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) {
       target = "text"; start = { nx, ny, x: slide.pos.x, y: slide.pos.y }; cv.setPointerCapture(e.pointerId); return;
     }
-    if (slide.bgIndex >= 0) {  // arrastrar el fondo (pan)
+    if (slide.bgIndex >= 0) {
       target = "bg"; start = { nx, ny, ox: slide.bg.ox, oy: slide.bg.oy }; cv.setPointerCapture(e.pointerId);
     }
   });
@@ -683,8 +693,6 @@ function setupDrag() {
       ins.cx = cl(start.cx + (nx - start.nx), SAFE.left + hw, SAFE.right - hw);
       ins.cy = cl(start.cy + (ny - start.ny), SAFE.top + hh, SAFE.bottom - hh);
     } else if (target === "text") {
-      // pos = esquina arriba-izquierda. El ancho se reajusta solo, así que solo
-      // limitamos para que el bloque quede dentro de la zona segura sin cortarse.
       const b = slide._textBox, bh = b ? b.h / CANVAS_H : 0;
       slide.pos.x = cl(start.x + (nx - start.nx), 0.05, 0.70);
       slide.pos.y = cl(start.y + (ny - start.ny), SAFE.top, Math.max(SAFE.top, SAFE.bottom - bh));
@@ -722,7 +730,7 @@ function moveFrame(dir) {
   persist(); renderThumbs(); drawEditor();
 }
 
-/* ---- Plantillas propias del usuario ---- */
+/* ---- Plantillas propias ---- */
 const storeT = {
   KEY: "abmedia_user_templates_v2",
   load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch { return []; } },
@@ -731,13 +739,20 @@ const storeT = {
 function fromTemplate(tpl, extra = {}) {
   return instantiate({ title: tpl.title, category: tpl.category, slides: tpl.slides, style: tpl.style, ...extra });
 }
-async function saveAsTemplate() {
+
+function openSaveTplModal() {
   const s = state.active;
+  $("#saveTplName").value = s.title || "Plantilla";
+  $("#saveTplCat").value = s.category;
+  $("#saveTplModal").classList.remove("hidden");
+}
+async function confirmSaveTpl() {
+  const s = state.active;
+  const title = $("#saveTplName").value.trim() || "Plantilla";
+  const category = $("#saveTplCat").value;
   const tpl = {
     id: "u" + Date.now(),
-    title: s.title || "Plantilla",
-    category: s.category,
-    isUser: true,
+    title, category, isUser: true,
     style: JSON.parse(JSON.stringify(s.style)),
     slides: s.slides.map(sl => ({ body: sl.body, pos: { ...sl.pos }, align: sl.align, overlay: sl.overlay }))
   };
@@ -747,8 +762,8 @@ async function saveAsTemplate() {
   }
   state.userTemplates.unshift(tpl);
   storeT.save(state.userTemplates);
-  alert('Guardada en tus plantillas. La encontrarás en Biblioteca → "⭐ Mías".');
-  if (state.view === "library") renderCatalog();
+  $("#saveTplModal").classList.add("hidden");
+  if (state.view === "library") renderLibrary();
 }
 
 /* =========================================================================
@@ -776,7 +791,7 @@ async function downloadAll() {
       const content = await zip.generateAsync({ type: "blob" });
       const a = document.createElement("a"); a.href = URL.createObjectURL(content); a.download = `${base}.zip`; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 1500);
-    } else { // sin JSZip: descarga una a una
+    } else {
       const off = document.createElement("canvas"); off.width = CANVAS_W; off.height = CANVAS_H; const oc = off.getContext("2d");
       for (let i = 0; i < state.active.slides.length; i++) { drawSlide(oc, state.active.slides[i], CANVAS_W, CANVAS_H, state.active.style); await blobDownload(off, `${base}-${i + 1}.jpg`); }
     }
@@ -786,13 +801,19 @@ async function downloadAll() {
 /* =========================================================================
  *  Modal "Nueva secuencia"
  * ========================================================================= */
+const NEW_SEQ_OPTIONS = [
+  { frames: 1, name: "1 historia" },
+  { frames: 3, name: "3 historias" },
+  { frames: 5, name: "5 historias" }
+];
 function openTemplateModal() {
   const box = $("#tplList"); box.innerHTML = "";
-  Object.entries(STRUCTURES).forEach(([key, st]) => {
+  NEW_SEQ_OPTIONS.forEach(opt => {
     const b = document.createElement("button"); b.className = "tpl-card";
-    b.innerHTML = `<strong>${st.name}</strong><em>${st.frames} frames en blanco</em>`;
+    b.innerHTML = `<strong>${opt.name}</strong><em>${opt.frames} frame${opt.frames !== 1 ? "s" : ""} en blanco</em>`;
     b.addEventListener("click", () => {
-      const seq = fromStructure(key, "valor");
+      const cat = $("#newSeqCat").value;
+      const seq = fromStructure(opt.frames, cat);
       state.sequences.unshift(seq); persist();
       $("#tplModal").classList.add("hidden"); openEditor(seq.id);
     });
@@ -802,7 +823,7 @@ function openTemplateModal() {
 }
 
 /* =========================================================================
- *  Marcas inline en el textarea (resaltar / subrayar / acento)
+ *  Marcas inline
  * ========================================================================= */
 function wrapSelection(marker) {
   const ta = $("#bodyInput");
@@ -816,6 +837,61 @@ function wrapSelection(marker) {
 }
 
 /* =========================================================================
+ *  TOUR / ONBOARDING
+ * ========================================================================= */
+const TOUR_KEY = "abmedia_tour_done_v2";
+const TOUR_STEPS = [
+  { sel: '[data-tour="library"]', title: "Biblioteca",
+    body: "Aquí tienes tus secuencias y las que tenemos preestablecidas. Elige una categoría y luego una secuencia para empezar. Puedes filtrar entre 'Todas' o solo 'Mis secuencias'." },
+  { sel: '[data-tour="gallery"]', title: "Galería de imágenes",
+    body: "Sube tu carpeta de fotos. Las imágenes se quedan en tu dispositivo (no se suben a ningún servidor) y se usan como fondo de las stories." },
+  { sel: '[data-tour="desk"]', title: "Ideas de stories",
+    body: "Anota tus ideas para luego transformarlas en secuencias. Es tu cuaderno de inspiración." },
+  { sel: '#libTitle', title: "Empezar a crear",
+    body: "Pulsa cualquier secuencia, edita los textos con los marcadores ==resaltado==, __subrayado__ y **acento**, y descarga las imágenes listas para Instagram." }
+];
+let tourIdx = 0;
+let tourSpotEl = null;
+
+function startTour(force = false) {
+  if (!force && localStorage.getItem(TOUR_KEY)) return;
+  tourIdx = 0;
+  $("#tour").classList.remove("hidden");
+  showTourStep();
+}
+function showTourStep() {
+  const step = TOUR_STEPS[tourIdx];
+  $("#tourStep").textContent = `${tourIdx + 1} / ${TOUR_STEPS.length}`;
+  $("#tourTitle").textContent = step.title;
+  $("#tourBody").textContent = step.body;
+  $("#tourNext").textContent = tourIdx === TOUR_STEPS.length - 1 ? "Empezar →" : "Siguiente →";
+  positionTourSpot(step.sel);
+}
+function positionTourSpot(selector) {
+  if (tourSpotEl) tourSpotEl.remove();
+  const el = document.querySelector(selector);
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  tourSpotEl = document.createElement("div");
+  tourSpotEl.className = "tour-spot";
+  tourSpotEl.style.top = (r.top - 6) + "px";
+  tourSpotEl.style.left = (r.left - 6) + "px";
+  tourSpotEl.style.width = (r.width + 12) + "px";
+  tourSpotEl.style.height = (r.height + 12) + "px";
+  document.body.appendChild(tourSpotEl);
+}
+function nextTour() {
+  tourIdx++;
+  if (tourIdx >= TOUR_STEPS.length) { endTour(); return; }
+  showTourStep();
+}
+function endTour() {
+  $("#tour").classList.add("hidden");
+  if (tourSpotEl) { tourSpotEl.remove(); tourSpotEl = null; }
+  localStorage.setItem(TOUR_KEY, "1");
+}
+
+/* =========================================================================
  *  Eventos
  * ========================================================================= */
 function bind() {
@@ -824,53 +900,67 @@ function bind() {
 
   $$(".nav-item").forEach(n => n.addEventListener("click", () => setView(n.dataset.view)));
 
-  ["#fileInput", "#fileInput2"].forEach(sel => { const el = $(sel); if (el) el.addEventListener("change", e => loadFiles(e.target.files)); });
-  $("#uploadBtn").addEventListener("click", () => $("#fileInput").click());
+  // Filtro biblioteca
+  $$(".lib-filter .seg").forEach(s => s.addEventListener("click", () => {
+    state.libraryFilter = s.dataset.libfilter;
+    renderLibrary();
+  }));
+  $("#libBack").addEventListener("click", () => {
+    state.libraryStage = "categories"; state.libraryCat = null; renderLibrary();
+  });
+
+  // Galería: drop + botón grande
+  const gDrop = $("#galleryDrop");
+  gDrop.addEventListener("click", () => $("#galleryInput").click());
+  $("#galleryPickBtn").addEventListener("click", e => { e.stopPropagation(); $("#galleryInput").click(); });
+  $("#galleryInput").addEventListener("change", e => loadFiles(e.target.files));
+  ["dragover", "dragenter"].forEach(ev => gDrop.addEventListener(ev, e => { e.preventDefault(); gDrop.classList.add("hover"); }));
+  ["dragleave", "drop"].forEach(ev => gDrop.addEventListener(ev, e => { e.preventDefault(); gDrop.classList.remove("hover"); }));
+  gDrop.addEventListener("drop", e => loadFiles(e.dataTransfer.files));
+
+  // Drop dentro del editor
   const drop = $("#editorDrop");
   drop.addEventListener("click", () => $("#fileInput2").click());
+  $("#fileInput2").addEventListener("change", e => loadFiles(e.target.files));
   ["dragover", "dragenter"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("hover"); }));
   ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("hover"); }));
   drop.addEventListener("drop", e => loadFiles(e.dataTransfer.files));
 
-  $$(".tab").forEach(t => t.addEventListener("click", () => {
-    $$(".tab").forEach(x => x.classList.remove("active")); t.classList.add("active");
-    state.filter = t.dataset.filter; renderGrid();
-  }));
+  // Ideas
+  $("#addIdeaBtn").addEventListener("click", addIdea);
+  $("#ideaInput").addEventListener("keydown", e => { if (e.key === "Enter") addIdea(); });
 
+  // Nueva secuencia
   $("#newSeq").addEventListener("click", openTemplateModal);
   $("#tplClose").addEventListener("click", () => $("#tplModal").classList.add("hidden"));
   $("#tplModal").addEventListener("click", e => { if (e.target.id === "tplModal") $("#tplModal").classList.add("hidden"); });
 
+  // Editor
   $("#editorClose").addEventListener("click", closeEditor);
   $("#editorTitle").addEventListener("input", e => { state.active.title = e.target.value; });
   $("#statusSelect").addEventListener("change", e => { state.active.status = e.target.value; persist(); });
   $("#catSelect").addEventListener("change", e => { state.active.category = e.target.value; persist(); });
 
-  // Gestión de frames
   $("#dupFrame").addEventListener("click", duplicateFrame);
   $("#delFrame").addEventListener("click", deleteFrame);
   $("#moveFramePrev").addEventListener("click", () => moveFrame(-1));
   $("#moveFrameNext").addEventListener("click", () => moveFrame(1));
 
-  // Fondo del frame (zoom)
   $("#bgZoom").addEventListener("input", e => { curSlide().bg.zoom = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
   $("#bgZoom").addEventListener("change", persist);
 
-  // Texto del frame
   $("#bodyInput").addEventListener("input", e => { curSlide().body = e.target.value; drawEditor(); refreshActiveThumb(); });
   $("#overlaySelect").addEventListener("change", e => { curSlide().overlay = e.target.value; drawEditor(); refreshActiveThumb(); persist(); });
   $("#mkHighlight").addEventListener("click", () => wrapSelection("=="));
   $("#mkUnderline").addEventListener("click", () => wrapSelection("__"));
   $("#mkAccent").addEventListener("click", () => wrapSelection("**"));
 
-  // Estilo de la secuencia
   $("#fontSelect").addEventListener("change", e => { state.active.style.font = e.target.value; drawEditor(); renderThumbs(); persist(); });
   $("#highlightColor").addEventListener("input", e => { state.active.style.highlightColor = e.target.value; drawEditor(); renderThumbs(); persist(); });
   $("#textColor").addEventListener("input", e => { state.active.style.textColor = e.target.value; drawEditor(); renderThumbs(); persist(); });
   $("#sizeRange").addEventListener("input", e => { state.active.style.size = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
   $("#sizeRange").addEventListener("change", persist);
 
-  // Imágenes
   $("#shuffleAll").addEventListener("click", () => { assignRandomImages(state.active); drawEditor(); renderThumbs(); });
   $("#newImg").addEventListener("click", () => {
     const n = state.images.length; if (n <= 1) return;
@@ -878,7 +968,6 @@ function bind() {
     slide.bgIndex = next; drawEditor(); refreshActiveThumb();
   });
 
-  // Foto insertada (pantallazo)
   $("#insetBtn").addEventListener("click", () => $("#insetInput").click());
   $("#insetInput").addEventListener("change", e => {
     const f = e.target.files[0]; if (!f) return;
@@ -890,7 +979,6 @@ function bind() {
   $("#insetSize").addEventListener("input", e => { if (curSlide().inset) { curSlide().inset.scale = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); } });
   $("#insetRemove").addEventListener("click", () => { curSlide().inset = null; drawEditor(); refreshActiveThumb(); renderEditPanel(); });
 
-  // Guardar / revisión / descargas
   $("#saveBtn").addEventListener("click", () => {
     persist(); const b = $("#saveBtn"), prev = b.textContent;
     b.textContent = "✓ Guardada"; b.disabled = true;
@@ -898,22 +986,32 @@ function bind() {
   });
   $("#submitBtn").addEventListener("click", () => {
     state.active.submitted = true; persist();
-    alert("¡Enviada a revisión! Con cuentas activadas, ABMedia podrá revisarla y, con tu permiso, añadirla al catálogo general.");
+    alert("¡Enviada a revisión! ABMedia podrá añadirla al catálogo general.");
   });
-  $("#tplSaveBtn").addEventListener("click", saveAsTemplate);
+  $("#tplSaveBtn").addEventListener("click", openSaveTplModal);
+  $("#saveTplClose").addEventListener("click", () => $("#saveTplModal").classList.add("hidden"));
+  $("#saveTplCancel").addEventListener("click", () => $("#saveTplModal").classList.add("hidden"));
+  $("#saveTplOk").addEventListener("click", confirmSaveTpl);
   $("#dlOne").addEventListener("click", async () => {
-    const blob = await renderToBlob(curSlide());  // exporta sin las guías
+    const blob = await renderToBlob(curSlide());
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
     a.download = `story-${state.current + 1}.jpg`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
   $("#dlAll").addEventListener("click", downloadAll);
 
+  // Tour
+  $("#tourNext").addEventListener("click", nextTour);
+  $("#tourSkip").addEventListener("click", endTour);
+  $("#restartTourBtn").addEventListener("click", () => startTour(true));
+
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#overlay").classList.contains("hidden")) closeEditor(); });
+
+  window.addEventListener("resize", () => { if (!$("#tour").classList.contains("hidden")) showTourStep(); });
 }
 
 /* =========================================================================
- *  Controles de tipografía (poblar select)
+ *  Fuentes
  * ========================================================================= */
 function fillFontSelect() {
   const sel = $("#fontSelect"); sel.innerHTML = "";
@@ -931,7 +1029,6 @@ async function bootLoggedIn(user) {
   document.getElementById("userEmail").textContent = user.email || "";
   document.getElementById("adminTab").classList.toggle("hidden", !state.isAdminUser);
 
-  // Carga desde la nube
   const cloudSeqs = await sbDB.sbFetchSequences();
   if (cloudSeqs.length) {
     state.sequences = cloudSeqs.map(r => {
@@ -940,19 +1037,17 @@ async function bootLoggedIn(user) {
       return seq;
     });
   } else {
-    // primer uso: rellena con demos y los sube
-    state.sequences = DEMO_SEQS.map(d => fromCatalog(d.catalogId, { status: d.status }));
-    for (const s of state.sequences) {
-      const row = await sbDB.sbUpsertSequence(s);
-      if (row) s.cloudId = row.id;
-    }
+    state.sequences = [];
   }
   const cloudTpls = await sbDB.sbFetchTemplates("mine");
   state.userTemplates = cloudTpls.map(r => ({ id: "u" + r.id, cloudId: r.id, title: r.title, category: r.category, style: r.style, slides: r.slides, submitted: r.submitted, isUser: true }));
 
-  state.inbox = SEED_INBOX.map(x => ({ ...x }));
+  state.inbox = storeIdeas.load();
   updateImgCount();
-  setView("desk");
+  setView("library");
+
+  // Tour para usuarios nuevos
+  setTimeout(() => startTour(false), 600);
 }
 
 function showLogin() {
@@ -961,7 +1056,7 @@ function showLogin() {
 }
 
 function bindLogin() {
-  let mode = "signin"; // | "signup"
+  let mode = "signin";
   const err = document.getElementById("loginError");
   const setMode = m => {
     mode = m;
