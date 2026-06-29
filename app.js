@@ -34,6 +34,30 @@ const STATUS = {
   published: { label: "Publicado",   cls: "st-published" }
 };
 
+// Lazy rendering de canvases en tarjetas (solo dibuja cuando entra al viewport)
+const _cardObserver = (typeof IntersectionObserver !== "undefined")
+  ? new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting && e.target._drawFn) {
+          e.target._drawFn();
+          e.target._drawFn = null;
+          _cardObserver.unobserve(e.target);
+        }
+      });
+    }, { rootMargin: "300px" })
+  : null;
+
+function makeCardCanvas(slide, style, w = 270, h = 480) {
+  const cv = document.createElement("canvas");
+  cv.width = w; cv.height = h; cv.className = "card-canvas";
+  const fn = () => { try { drawSlide(cv.getContext("2d"), slide, w, h, style); } catch {} };
+  if (_cardObserver) {
+    cv._drawFn = fn;
+    _cardObserver.observe(cv);
+  } else { fn(); }
+  return cv;
+}
+
 /* =========================================================================
  *  IndexedDB para imágenes (persistente entre sesiones)
  * ========================================================================= */
@@ -58,12 +82,12 @@ const imgDB = {
     });
   },
   keyOf(name, size) { return `${name}|${size || 0}`; },
-  async put(name, blob) {
+  async put(name, blob, key) {
     const db = await this.open();
-    const key = this.keyOf(name, blob.size);
+    const k = key || this.keyOf(name, blob.size);
     return new Promise((res, rej) => {
       const tx = db.transaction(this.STORE, "readwrite");
-      tx.objectStore(this.STORE).put({ key, name, size: blob.size, blob, t: Date.now() });
+      tx.objectStore(this.STORE).put({ key: k, name, size: blob.size, blob, t: Date.now() });
       tx.oncomplete = () => res();
       tx.onerror = () => rej(tx.error);
     });
@@ -101,6 +125,31 @@ function blobToImage(blob, name) {
     img.onload = () => res({ name, img });
     img.onerror = () => res(null);
     img.src = URL.createObjectURL(blob);
+  });
+}
+
+// Reduce el peso de las fotos antes de guardarlas (target max 1920px lado mayor)
+async function resizeImageBlob(file, maxDim = 1920, quality = 0.85) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const w0 = img.width, h0 = img.height;
+      const ratio = Math.min(1, maxDim / Math.max(w0, h0));
+      const tw = Math.max(1, Math.round(w0 * ratio));
+      const th = Math.max(1, Math.round(h0 * ratio));
+      // si ya es pequeña, evita recodificar
+      if (ratio >= 1) { URL.revokeObjectURL(url); res(file); return; }
+      const c = document.createElement("canvas");
+      c.width = tw; c.height = th;
+      c.getContext("2d", { alpha: false }).drawImage(img, 0, 0, tw, th);
+      c.toBlob(b => {
+        URL.revokeObjectURL(url);
+        res(b || file);
+      }, "image/jpeg", quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); res(file); };
+    img.src = url;
   });
 }
 
@@ -203,17 +252,23 @@ async function loadFiles(fileList) {
   if (!files.length) return;
   let added = 0;
   for (const file of files) {
+    // Key con el tamaño ORIGINAL — re-subir el mismo archivo siempre dedup
     const key = imgDB.keyOf(file.name, file.size);
-    // dedupe en memoria
     if (state.images.some(i => i.key === key)) continue;
-    try { await imgDB.put(file.name, file); } catch (e) { console.warn("DB put", e); }
+    // Resize a 1920px para no cargar JPEGs de 5MB en memoria
+    let blob = file;
+    try { blob = await resizeImageBlob(file, 1920); } catch {}
+    try { await imgDB.put(file.name, blob, key); } catch (e) { console.warn("DB put", e); }
     await new Promise(res => {
       const img = new Image();
       img.onload = () => { state.images.push({ key, name: file.name, img }); added++; res(); };
       img.onerror = () => res();
-      img.src = URL.createObjectURL(file);
+      img.src = URL.createObjectURL(blob);
     });
   }
+  // Dedup defensivo final
+  const uniq = new Map(); state.images.forEach(im => uniq.set(im.key, im));
+  state.images = [...uniq.values()];
   updateImgCount();
   if (added > 0) {
     state.sequences.forEach(s => { if (s.slides.some(sl => sl.bgIndex < 0)) assignRandomImages(s); });
@@ -350,10 +405,7 @@ function makeLibCard(item) {
   const seq = item.isUser ? fromTemplate(item) : fromCatalog(item.id);
   const cat = CATEGORIES[item.category] || CATEGORIES.venta;
   const card = document.createElement("div"); card.className = "card";
-  const cv = document.createElement("canvas");
-  cv.width = 270; cv.height = 480; cv.className = "card-canvas";
-  drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height, seq.style);
-  card.appendChild(cv);
+  card.appendChild(makeCardCanvas(seq.slides[0], seq.style));
   const badge = document.createElement("span");
   badge.className = "frames-badge"; badge.textContent = `${seq.slides.length} frames`;
   card.appendChild(badge);
@@ -649,9 +701,7 @@ async function renderAdmin() {
     const seq = fromTemplate(tpl);
     const cat = CATEGORIES[tpl.category] || CATEGORIES.venta;
     const card = document.createElement("div"); card.className = "card";
-    const cv = document.createElement("canvas"); cv.width = 270; cv.height = 480; cv.className = "card-canvas";
-    drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height, seq.style);
-    card.appendChild(cv);
+    card.appendChild(makeCardCanvas(seq.slides[0], seq.style));
     const badge = document.createElement("span"); badge.className = "frames-badge"; badge.textContent = `${seq.slides.length} frames`;
     card.appendChild(badge);
     const info = document.createElement("div"); info.className = "card-info";
@@ -769,7 +819,18 @@ function renderBgPicker() {
     box.appendChild(t);
   });
 }
-function drawEditor() { drawSlide(ctx(), curSlide(), CANVAS_W, CANVAS_H, state.active.style, true); renderEditPanel(); }
+// RAF debouncer: múltiples drawEditor() en el mismo frame → un único render
+let _drawScheduled = false;
+function drawEditor() {
+  if (_drawScheduled) return;
+  _drawScheduled = true;
+  requestAnimationFrame(() => {
+    _drawScheduled = false;
+    if (!state.active) return;
+    drawSlide(ctx(), curSlide(), CANVAS_W, CANVAS_H, state.active.style, true);
+    renderEditPanel();
+  });
+}
 
 /* =========================================================================
  *  RENDER (igual que antes)
