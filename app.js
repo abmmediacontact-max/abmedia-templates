@@ -226,9 +226,9 @@ function updateImgCount() {
   const el = $("#galCount"); if (el) el.textContent = `${n} ${n === 1 ? "imagen" : "imágenes"}`;
 }
 async function loadImagesFromDB() {
+  state.images = []; // limpia siempre: si bootLoggedIn se llama 2 veces no se duplica
   try {
     const rows = await imgDB.getAll();
-    // dedupe defensivo por key
     const seen = new Set();
     for (const r of rows) {
       const key = r.key || imgDB.keyOf(r.name, r.size || 0);
@@ -1443,18 +1443,25 @@ function bindLogin() {
   document.getElementById("logoutBtn").addEventListener("click", async () => { await sbAuth.sbSignOut(); });
 }
 
+let _bootingFor = null;
+async function bootOnce(user) {
+  if (_bootingFor === user.id) return;
+  _bootingFor = user.id;
+  await bootLoggedIn(user);
+}
+
 async function init() {
   fillFontSelect();
   bind();
   bindLogin();
 
   sb.auth.onAuthStateChange(async (event, session) => {
-    if (session && session.user) await bootLoggedIn(session.user);
-    else { state.user = null; showLogin(); }
+    if (session && session.user) await bootOnce(session.user);
+    else { state.user = null; _bootingFor = null; showLogin(); }
   });
 
   const s = await sbAuth.sbGetSession();
-  if (s) await bootLoggedIn(s.user);
+  if (s) await bootOnce(s.user);
   else showLogin();
 }
 document.addEventListener("DOMContentLoaded", init);
