@@ -222,6 +222,8 @@ body {
   cursor: pointer; transition: .15s;
 }
 .cal-cell .seq:hover { background: var(--orange); color: #1a0f08; }
+.cal-cell .seq.dragging { opacity: .35; }
+.cal-cell.drop-target { border-color: var(--orange); background: var(--orange-soft); }
 .cal-cell .seq .ct { display: block; font-size: 10px; font-weight: 700; opacity: .8; letter-spacing: .5px; text-transform: uppercase; margin-bottom: 3px; }
 
 /* ---------------------------- Tarjetas (grid) ------------------------- */

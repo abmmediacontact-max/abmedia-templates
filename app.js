@@ -38,28 +38,32 @@ const STATUS = {
  *  IndexedDB para imágenes (persistente entre sesiones)
  * ========================================================================= */
 const imgDB = {
-  DB_NAME: "abmedia_images_v1",
+  DB_NAME: "abmedia_images_v2",
   STORE: "files",
   _db: null,
-  open() {
-    if (this._db) return Promise.resolve(this._db);
+  async open() {
+    if (this._db) return this._db;
+    // Migración: borra la v1 antigua (autoIncrement) para evitar duplicados acumulados
+    try { indexedDB.deleteDatabase("abmedia_images_v1"); } catch {}
     return new Promise((res, rej) => {
       const req = indexedDB.open(this.DB_NAME, 1);
       req.onupgradeneeded = e => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains(this.STORE)) {
-          db.createObjectStore(this.STORE, { autoIncrement: true });
+          db.createObjectStore(this.STORE, { keyPath: "key" });
         }
       };
       req.onsuccess = () => { this._db = req.result; res(req.result); };
       req.onerror = () => rej(req.error);
     });
   },
+  keyOf(name, size) { return `${name}|${size || 0}`; },
   async put(name, blob) {
     const db = await this.open();
+    const key = this.keyOf(name, blob.size);
     return new Promise((res, rej) => {
       const tx = db.transaction(this.STORE, "readwrite");
-      tx.objectStore(this.STORE).add({ name, blob, t: Date.now() });
+      tx.objectStore(this.STORE).put({ key, name, size: blob.size, blob, t: Date.now() });
       tx.oncomplete = () => res();
       tx.onerror = () => rej(tx.error);
     });
@@ -81,19 +85,12 @@ const imgDB = {
       tx.oncomplete = () => res();
     });
   },
-  async deleteAt(index) {
-    // Borra por posición (re-lee, filtra, re-graba)
-    const all = await this.getAll();
-    if (index < 0 || index >= all.length) return;
-    const keep = all.filter((_, i) => i !== index);
-    await this.clear();
+  async deleteByKey(key) {
     const db = await this.open();
-    return new Promise((res, rej) => {
+    return new Promise((res) => {
       const tx = db.transaction(this.STORE, "readwrite");
-      const store = tx.objectStore(this.STORE);
-      keep.forEach(r => store.add(r));
+      tx.objectStore(this.STORE).delete(key);
       tx.oncomplete = () => res();
-      tx.onerror = () => rej(tx.error);
     });
   }
 };
@@ -202,19 +199,25 @@ function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.fl
 async function loadFiles(fileList) {
   const files = Array.from(fileList).filter(f => f.type.startsWith("image/"));
   if (!files.length) return;
+  let added = 0;
   for (const file of files) {
+    const key = imgDB.keyOf(file.name, file.size);
+    // dedupe en memoria
+    if (state.images.some(i => i.key === key)) continue;
     try { await imgDB.put(file.name, file); } catch (e) { console.warn("DB put", e); }
     await new Promise(res => {
       const img = new Image();
-      img.onload = () => { state.images.push({ name: file.name, img }); res(); };
+      img.onload = () => { state.images.push({ key, name: file.name, img }); added++; res(); };
       img.onerror = () => res();
       img.src = URL.createObjectURL(file);
     });
   }
   updateImgCount();
-  state.sequences.forEach(s => { if (s.slides.some(sl => sl.bgIndex < 0)) assignRandomImages(s); });
-  renderAll();
-  if (state.active) { assignRandomImages(state.active); drawEditor(); renderThumbs(); }
+  if (added > 0) {
+    state.sequences.forEach(s => { if (s.slides.some(sl => sl.bgIndex < 0)) assignRandomImages(s); });
+    renderAll();
+    if (state.active) { assignRandomImages(state.active); drawEditor(); renderThumbs(); }
+  }
 }
 function updateImgCount() {
   const n = state.images.length;
@@ -223,9 +226,14 @@ function updateImgCount() {
 async function loadImagesFromDB() {
   try {
     const rows = await imgDB.getAll();
+    // dedupe defensivo por key
+    const seen = new Set();
     for (const r of rows) {
+      const key = r.key || imgDB.keyOf(r.name, r.size || 0);
+      if (seen.has(key)) continue;
+      seen.add(key);
       const o = await blobToImage(r.blob, r.name);
-      if (o) state.images.push(o);
+      if (o) { o.key = key; state.images.push(o); }
     }
   } catch (e) { console.warn("loadImagesFromDB", e); }
   updateImgCount();
@@ -239,7 +247,8 @@ async function clearGallery() {
   renderAll();
 }
 async function deleteImage(index) {
-  await imgDB.deleteAt(index);
+  const im = state.images[index];
+  if (im?.key) await imgDB.deleteByKey(im.key);
   state.images.splice(index, 1);
   state.sequences.forEach(s => assignRandomImages(s));
   updateImgCount();
@@ -467,6 +476,8 @@ function ensureScheduleFor(monthDate) {
   storeSched.save(state.schedule);
 }
 
+let _dragFromKey = null;
+
 function renderCalendar() {
   if (!state.calMonth) state.calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   ensureScheduleFor(state.calMonth);
@@ -474,11 +485,9 @@ function renderCalendar() {
   $("#calLabel").textContent = `${MONTHS_ES[m.getMonth()]} ${m.getFullYear()}`;
   const map = state.schedule[ymKey(m)] || {};
   const grid = $("#calGrid"); grid.innerHTML = "";
-  // Cabecera (L-D)
   DOW_ES.forEach(d => {
     const h = document.createElement("div"); h.className = "cal-head"; h.textContent = d; grid.appendChild(h);
   });
-  // padding inicial (Lunes = 1; si día 1 cae en domingo (0) -> 6 huecos)
   const first = new Date(m.getFullYear(), m.getMonth(), 1);
   const pad = (first.getDay() + 6) % 7;
   for (let i = 0; i < pad; i++) {
@@ -491,6 +500,7 @@ function renderCalendar() {
     const key = fmtDate(date);
     const cell = document.createElement("div");
     cell.className = "cal-cell" + (date.getTime() === today.getTime() ? " today" : "");
+    cell.dataset.key = key;
     const dn = document.createElement("div"); dn.className = "dnum"; dn.textContent = day; cell.appendChild(dn);
     const catId = map[key];
     if (catId) {
@@ -499,14 +509,46 @@ function renderCalendar() {
         const cat = CATEGORIES[c.category] || CATEGORIES.venta;
         const seqEl = document.createElement("div");
         seqEl.className = "seq";
+        seqEl.draggable = true;
         seqEl.innerHTML = `<span class="ct">${cat.name}</span>${c.title}`;
         seqEl.addEventListener("click", () => {
           const created = fromCatalog(c.id, { status: "scheduled" });
           state.sequences.unshift(created); persist(); openEditor(created.id);
         });
+        seqEl.addEventListener("dragstart", e => {
+          _dragFromKey = key;
+          e.dataTransfer.effectAllowed = "move";
+          try { e.dataTransfer.setData("text/plain", key); } catch {}
+          seqEl.classList.add("dragging");
+        });
+        seqEl.addEventListener("dragend", () => {
+          seqEl.classList.remove("dragging");
+          $$(".cal-cell.drop-target").forEach(c => c.classList.remove("drop-target"));
+        });
         cell.appendChild(seqEl);
       }
     }
+    // Cell como drop target
+    cell.addEventListener("dragover", e => {
+      if (!_dragFromKey) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = "move";
+      cell.classList.add("drop-target");
+    });
+    cell.addEventListener("dragleave", () => cell.classList.remove("drop-target"));
+    cell.addEventListener("drop", e => {
+      e.preventDefault(); cell.classList.remove("drop-target");
+      if (!_dragFromKey || _dragFromKey === key) { _dragFromKey = null; return; }
+      const fromMonth = _dragFromKey.slice(0,7);
+      const toMonth = key.slice(0,7);
+      const fromMap = state.schedule[fromMonth] || (state.schedule[fromMonth] = {});
+      const toMap = state.schedule[toMonth] || (state.schedule[toMonth] = {});
+      const a = fromMap[_dragFromKey], b = toMap[key];
+      if (b) { fromMap[_dragFromKey] = b; toMap[key] = a; }
+      else { delete fromMap[_dragFromKey]; toMap[key] = a; }
+      _dragFromKey = null;
+      storeSched.save(state.schedule);
+      renderCalendar();
+    });
     grid.appendChild(cell);
   }
 }
