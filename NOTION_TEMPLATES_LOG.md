@@ -48,6 +48,21 @@ desde este Notion, hay que actualizar la tabla de abajo.
 | 4 Buckets | Value | val-4tipos | 2026-07-14 |
 | Mental Models | Value | val-modelosmentales | 2026-07-14 |
 | Traits of the Successful | Value | val-rasgoexito | 2026-07-14 |
+| Traveling | Personal | p-vistaavion | 2026-07-14 |
+| Rate my X | Personal | p-puntuami | 2026-07-14 |
+| Expensive Hobbies | Personal | p-micapricho | 2026-07-14 |
+| Friendly Reminder | Sales | v-recordatorio | 2026-07-14 |
+| Enter 2026 Already Ahead | Sales | v-empiezaconventaja | 2026-07-14 |
+| Let's Play A Game… | Sales | v-juguemos | 2026-07-14 |
+| Drop a Bomb | Bridge | pu-suelolabomba | 2026-07-14 |
+| Common Tool PSA | Bridge | pu-avisoherramienta | 2026-07-14 |
+| Common Solution Sucks… | Bridge | pu-solucionnofunciona | 2026-07-14 |
+| Why Not You | Flex | f-porquenotu | 2026-07-14 |
+| Client Help | Flex | f-ayudandocliente | 2026-07-14 |
+| New Video Tease | Flex | f-adelantovideo | 2026-07-14 |
+| Biggest Lie | Value | val-lamayormentira | 2026-07-14 |
+| Struggle Solution | Value | val-luchaasolucion | 2026-07-14 |
+| Do The Boring Work | Value | val-trabajoaburrido | 2026-07-14 |
 
 ## Notas sobre adaptación
 
@@ -58,6 +73,17 @@ manteniendo el ángulo temático pero sin traducir literalmente el texto de
 Notion (política de no reproducir contenido con derechos de autor de forma
 verbatim). Esto aplica a: Book Quote, Client Onboarding, New Setup y Traits of
 the Successful.
+
+En la segunda ronda (15 plantillas nuevas), la mayoría de entradas de un único
+frame se mantuvieron como plantillas de 1 slide (Vista desde el avión, Puntúa
+mi…, Mi capricho, ¿Por qué no tú?, Ayudando a un cliente, Adelanto de vídeo,
+La mayor mentira, Haz el trabajo aburrido, Aviso sobre una herramienta, La
+solución típica no funciona), mientras que las de varios frames en Notion
+("Story 1/2/3") se mantuvieron con el mismo número de slides (Enter 2026
+Already Ahead → 3 slides, Let's Play A Game → 3 slides, Struggle Solution → 3
+slides, Drop a Bomb → 2 slides, Friendly Reminder se dividió en 2 slides para
+mejorar el ritmo). En todos los casos se redactó en español de forma original,
+sin copia literal del texto de Notion.
 
 ## Pendiente para próximas rondas
 
