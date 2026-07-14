@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=8" />
+  <link rel="stylesheet" href="styles.css?v=9" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -151,6 +151,8 @@
             <option value="personal">Personal</option>
             <option value="venta" selected>Venta</option>
             <option value="puente">Puente</option>
+            <option value="flex">Flex</option>
+            <option value="valor">Valor</option>
           </select>
           <button class="btn btn-primary" id="addIdeaBtn">＋ Añadir idea</button>
         </div>
@@ -171,6 +173,19 @@
             <button class="icon-btn" id="calNext">→</button>
           </div>
         </header>
+        <div class="cal-toolbar">
+          <div class="cal-toolbar-group">
+            <span class="cal-toolbar-label">Borrado masivo</span>
+            <button class="btn btn-ghost sm danger" id="calClearAll">🗑 Borrar todo</button>
+            <button class="btn btn-ghost sm danger" id="calClearMonth">🗑 Borrar este mes</button>
+          </div>
+          <div class="cal-toolbar-group">
+            <input type="date" id="calRangeFrom" class="status-select" title="Desde" />
+            <span class="cal-range-sep">→</span>
+            <input type="date" id="calRangeTo" class="status-select" title="Hasta" />
+            <button class="btn btn-ghost sm danger" id="calClearRange">Borrar rango</button>
+          </div>
+        </div>
         <div class="cal-grid" id="calGrid"></div>
       </section>
 
@@ -201,6 +216,8 @@
             <option value="personal">Personal</option>
             <option value="venta" selected>Venta</option>
             <option value="puente">Puente</option>
+            <option value="flex">Flex</option>
+            <option value="valor">Valor</option>
           </select>
         </label>
       </div>
@@ -221,6 +238,8 @@
           <option value="personal">Personal</option>
           <option value="venta">Venta</option>
           <option value="puente">Puente</option>
+          <option value="flex">Flex</option>
+          <option value="valor">Valor</option>
         </select>
       </label>
       <div class="save-row">
@@ -240,6 +259,8 @@
             <option value="personal">Personal</option>
             <option value="venta">Venta</option>
             <option value="puente">Puente</option>
+            <option value="flex">Flex</option>
+            <option value="valor">Valor</option>
           </select>
           <select id="statusSelect" class="status-select">
             <option value="draft">Borrador</option>
@@ -431,7 +452,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="supabase.js?v=8"></script>
   <script src="templates.js?v=8"></script>
-  <script src="catalog.js?v=8"></script>
-  <script src="app.js?v=8"></script>
+  <script src="catalog.js?v=9"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>
