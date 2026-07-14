@@ -127,6 +127,27 @@ const CATALOG = [
                                 { overlay: "bottom", body: "La leí en un momento en el que ==(*tu situación en ese momento*)==\n\nY desde entonces __(*cómo la aplicas*)__" }
                                               ]
         },
+        {
+                        id: "p-vistaavion", category: "personal", title: "Vista desde el avión",
+                        objective: "Compartir un momento de viaje real y generar conversación con una encuesta. Foto tomada desde la ventanilla del avión. Añade la ubicación a la story si puedes.",
+                        slides: [
+                                { overlay: "bottom", body: "==¿Cuenta como haber estado en un sitio nuevo si solo lo he sobrevolado?==\n\n**Encuesta:** Sí / No" }
+                                              ]
+        },
+        {
+                        id: "p-puntuami", category: "personal", title: "Puntúa mi…",
+                        objective: "Mostrar tu espacio de trabajo o casa y generar interacción con un elemento de puntuación (barra/emoji slider del 1 al 10). Foto de tu espacio de trabajo o casa.",
+                        slides: [
+                                { overlay: "bottom", body: "==Puntúa mi (*espacio de trabajo / salón / escritorio*)==\n\n__Del 1 al 10__" }
+                                              ]
+        },
+        {
+                        id: "p-micapricho", category: "personal", title: "Mi capricho",
+                        objective: "Compartir algo en lo que gastas más que la media para conectar de forma cercana. Añade una foto de tu última compra relacionada con ese capricho.",
+                        slides: [
+                                { overlay: "bottom", body: "¿En qué gastas ==mucho más dinero== que la persona media?\n\nPara mí es (*tu afición o gasto favorito*) 😅" }
+                                              ]
+        },
 
             /* ============================ VENTA ============================ */
         {
@@ -247,6 +268,32 @@ const CATALOG = [
                                 { overlay: "bottom", body: "Si quieres ser el próximo, **responde \"(*PALABRA*)\"**" }
                                               ]
         },
+        {
+                        id: "v-recordatorio", category: "venta", title: "Recordatorio amistoso",
+                        objective: "Recordar a tu audiencia el valor de no hacerlo todo solos, apoyándote en tu propio progreso. Añade imágenes que muestren tu evolución (antes/después).",
+                        slides: [
+                                { overlay: "full", body: "**Recordatorio amistoso**\n\nTardé años en ==(*conseguir tu resultado*)== porque intenté hacerlo todo yo solo/a." },
+                                { overlay: "bottom", body: "No cometas mi error.\n\n**Escríbeme \"(*PALABRA*)\"**" }
+                                              ]
+        },
+        {
+                        id: "v-empiezaconventaja", category: "venta", title: "Empieza el año con ventaja",
+                        objective: "Generar expectación de cierre/inicio de año contrastando a quienes esperan al último momento con quienes ya actuaron, apoyándote en resultados de clientes.",
+                        slides: [
+                                { overlay: "full", body: "Cada año, por estas fechas… ==la gente empieza a flojear==.\n\n(*El trabajo / la vida*) se complica, las rutinas se rompen. Y llega el momento en el que todo el mundo corre a empezar de cero… otra vez." },
+                                { overlay: "soft", body: "Aquí tienes a __(*X personas*)__ que no esperaron al momento perfecto…\n\n(*3-4 resultados de clientes*)\n\nEmpezaron, fueron constantes… y consiguieron lo que querían." },
+                                { overlay: "bottom", body: "Si quieres empezar ==ya por delante==… sin volver a empezar de cero…\n\n**Responde \"(*PALABRA*)\"** y te cuento cómo puedo ayudarte." }
+                                              ]
+        },
+        {
+                        id: "v-juguemos", category: "venta", title: "Juguemos a un juego",
+                        objective: "Generar interacción con una encuesta tipo \"adivina el resultado\" antes de revelar la transformación de un cliente. Repite el mismo formato con 1-2 resultados más si quieres alargar la secuencia.",
+                        slides: [
+                                { overlay: "full", body: "==Juguemos a un juego== 👉" },
+                                { overlay: "soft", body: "(*Antes y después de la transformación de un cliente*)\n\n¿__Cuánto tiempo__ tardó en conseguirlo?\n\n**Encuesta:** (*Opción correcta*) / (*Opción incorrecta 1*) / (*Opción incorrecta 2*)" },
+                                { overlay: "soft", body: "==(*Resultado*) en (*el tiempo real*)==\n\n✅ (*Beneficio 1*)\n✅ (*Beneficio 2*)\n✅ (*Beneficio 3*)" }
+                                              ]
+        },
 
             /* ============================ PUENTE ============================ */
         {
@@ -341,6 +388,28 @@ const CATALOG = [
                                 { overlay: "full", body: "(*Número*) tips prácticos de alguien que __(*lleva X tiempo/ha conseguido Y en tu sector*)__:\n\n1. (*Tip 1*)\n2. (*Tip 2*)\n3. (*Tip 3*)" }
                                               ]
         },
+        {
+                        id: "pu-suelolabomba", category: "puente", title: "Suelto la bomba",
+                        objective: "Contar el único cambio que te dio resultados y entregar un recurso gratuito a cambio de una palabra clave. Usa un vídeo o foto con texto tipo \"toca para continuar\" en el primer slide.",
+                        slides: [
+                                { overlay: "full", body: "==Lo único que cambié para (*conseguir tal resultado*)==\n\nFue dejar de __(*hacer la táctica común*)__\n\nToca 👉" },
+                                { overlay: "bottom", body: "Y (*hacer la acción alternativa*)\n\nTranquilo, no te voy a soltar la bomba y dejarte tirado…\n\n**Responde \"(*PALABRA*)\"** y te mando (*el recurso*)" }
+                                              ]
+        },
+        {
+                        id: "pu-avisoherramienta", category: "puente", title: "Aviso sobre una herramienta",
+                        objective: "Compartir lo poco que se aprovecha una herramienta común en tu sector y regalar un recurso para sacarle todo el partido. Foto tuya (cara visible).",
+                        slides: [
+                                { overlay: "full", body: "**PSA**\n\nLa mayoría solo usa 1/10 de lo que (*herramienta común*) puede hacer: automatizaciones básicas y poco más.\n\nPero cuando aprendes el 90% que nadie usa… ==de verdad cambia tu negocio==.\n\nHe conseguido __(*resultado usando la herramienta*)__.\n\nPreparé (*un recurso*) para que pases de usarla a medias a sacarle todo el partido en menos de (*X minutos*).\n\n**Responde \"(*PALABRA*)\"** y te lo mando." }
+                                              ]
+        },
+        {
+                        id: "pu-solucionnofunciona", category: "puente", title: "La solución típica no funciona",
+                        objective: "Cuestionar las soluciones típicas de tu nicho y usarlo como gancho para captar suscriptores a una lista exclusiva. Selfie o foto tuya.",
+                        slides: [
+                                { overlay: "full", body: "La mayoría de ==(*soluciones típicas*)== NO FUNCIONAN.\n\nSi quieres (*el resultado que ofrece tu solución*), estoy abriendo una lista exclusiva donde mando (*cantidad*) (*frecuencia*).\n\n**Responde \"(*PALABRA*)\"** para apuntarte." }
+                                              ]
+        },
 
             /* ============================= FLEX ============================= */
         {
@@ -403,6 +472,27 @@ const CATALOG = [
                                 { overlay: "bottom", body: "\"¿Y dónde estás __ahora__?\"\n\n(*Su respuesta*)" }
                                               ]
         },
+        {
+                        id: "f-porquenotu", category: "flex", title: "¿Por qué no tú?",
+                        objective: "Mostrar la transformación o testimonio de un cliente con una pregunta directa que invite a identificarse. Añade una captura que muestre el antes/después o el testimonio del cliente.",
+                        slides: [
+                                { overlay: "full", body: "==¿Por qué no tú?==" }
+                                              ]
+        },
+        {
+                        id: "f-ayudandocliente", category: "flex", title: "Ayudando a un cliente",
+                        objective: "Grabar un momento real dando feedback a un cliente en un punto clave, destacando el insight que le diste y algo valioso de trabajar contigo.",
+                        slides: [
+                                { overlay: "bottom", body: "(*Clip real dando feedback a un cliente en un momento clave, con el insight que le diste*)" }
+                                              ]
+        },
+        {
+                        id: "f-adelantovideo", category: "flex", title: "Adelanto de vídeo",
+                        objective: "Publicar el adelanto de un vídeo que subirás al día siguiente para generar expectación.",
+                        slides: [
+                                { overlay: "full", body: "(*Adelanto visual de un vídeo que publicarás mañana*)" }
+                                              ]
+        },
 
             /* ============================= VALOR ============================= */
         {
@@ -463,6 +553,29 @@ const CATALOG = [
                         slides: [
                                 { overlay: "bottom", body: "Hay ==un rasgo== que tienen en común todos mis (*mejores clientes/resultados*)" },
                                 { overlay: "bottom", body: "__(*El rasgo concreto*)__\n\nY es lo que les permite (*conseguir el resultado*), aunque (*obstáculo común*)" }
+                                              ]
+        },
+        {
+                        id: "val-lamayormentira", category: "valor", title: "La mayor mentira",
+                        objective: "Aportar valor respondiendo en formato Q&A a una pregunta directa sobre las creencias erróneas de tu sector.",
+                        slides: [
+                                { overlay: "bottom", body: "En un Q&A, pregúntate:\n\n**\"¿Cuál es ==la mayor mentira== en (*tu sector*)?\"**\n\nResponde como veas." }
+                                              ]
+        },
+        {
+                        id: "val-luchaasolucion", category: "valor", title: "De la lucha a la solución",
+                        objective: "Validar con una encuesta el punto de dolor de tu audiencia y guiarla hacia la claridad como solución real, mostrando autoridad. Slide 1: imagen limpia de fondo con contraste. Slide 2: foto de tu día a día. Slide 3: foto tuya en tu elemento + gráfico de un logro reciente.",
+                        slides: [
+                                { overlay: "bottom", body: "¿Con qué te atascas más en ==(*tema de tu sector*)==?\n\n**Encuesta:** (*Dificultad 1*) / (*Dificultad 2*)" },
+                                { overlay: "bottom", body: "Antes pensaba que necesitaba __(*un error común*)__.\n\nPero (*tu sector*) no premia (*el error*) primero. Premia ==la claridad==." },
+                                { overlay: "bottom", body: "La gente que gana (*en tu sector*) repite __un mensaje claro__.\n\nCon el tiempo, (*cómo llega el resultado soñado*)." }
+                                              ]
+        },
+        {
+                        id: "val-trabajoaburrido", category: "valor", title: "Haz el trabajo aburrido",
+                        objective: "Aportar valor identificando una tarea importante que la gente de tu nicho evita por ser aburrida, y compartiendo un tip para hacerla más llevadera.",
+                        slides: [
+                                { overlay: "bottom", body: "¿Cuál es esa tarea importante que la gente de tu nicho evita porque es aburrida?\n\nComparte un tip rápido para hacerla ==más fácil, más llevadera o más eficiente==." }
                                               ]
         }
           ];
