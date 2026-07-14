@@ -63,6 +63,21 @@ desde este Notion, hay que actualizar la tabla de abajo.
 | Biggest Lie | Value | val-lamayormentira | 2026-07-14 |
 | Struggle Solution | Value | val-luchaasolucion | 2026-07-14 |
 | Do The Boring Work | Value | val-trabajoaburrido | 2026-07-14 |
+| Emoji Equation | Personal | p-ecuacionemoji | 2026-07-14 |
+| Should I Buy? | Personal | p-deberiacomprar | 2026-07-14 |
+| What's Your Why? | Personal | p-tuporque | 2026-07-14 |
+| Classic Callout | Sales (Workshop) | v-llamadadirecta | 2026-07-14 |
+| Never Again | Sales | v-nomasconcesiones | 2026-07-14 |
+| Workshop Slot (Free) | Sales (Workshop) | v-plazagratisworkshop | 2026-07-14 |
+| A Lot Of You Have Been Asking… | Bridge | pu-muchospreguntando | 2026-07-14 |
+| Brand New Resource | Bridge (Long-Form) | pu-recursonuevo | 2026-07-14 |
+| Time Saver | Bridge | pu-ahorratiempo | 2026-07-14 |
+| Desired State | Flex | f-estadodeseado | 2026-07-14 |
+| Inevitable | Flex | f-inevitable | 2026-07-14 |
+| Quick Win Highlight | Flex | f-victoriarapida | 2026-07-14 |
+| Hidden Cost | Value | val-costeoculto | 2026-07-14 |
+| Instant Win | Value | val-victoriainstantanea | 2026-07-14 |
+| Traits of the Unsuccessful | Value | val-rasgofracaso | 2026-07-14 |
 
 ## Notas sobre adaptación
 
@@ -85,10 +100,22 @@ slides, Drop a Bomb → 2 slides, Friendly Reminder se dividió en 2 slides para
 mejorar el ritmo). En todos los casos se redactó en español de forma original,
 sin copia literal del texto de Notion.
 
+En la tercera ronda (15 plantillas nuevas), se incluyeron por primera vez
+candidatas de las categorías Sales (Workshop) y Bridge (Long-Form). La mayoría
+de entradas de un único frame se mantuvieron como plantillas de 1 slide
+(Ecuación en emojis, ¿Debería comprarlo?, ¿Cuál es tu porqué?, No más
+concesiones, Plaza gratis al taller, Recién salido del horno, Ahorra tiempo,
+El estado que quieres, Inevitable, Victoria rápida, El coste oculto, Victoria
+instantánea), mientras que Llamada directa, Muchos me habéis preguntado y El
+rasgo que frena a la mayoría se redactaron a 2 slides para dar más contexto
+narrativo. Como en rondas anteriores, todo el contenido se redactó en español
+de forma original, sin copia literal del texto de Notion.
+
 ## Pendiente para próximas rondas
 
-La base de Notion tiene decenas de entradas adicionales sin explorar todavía
-en las categorías Sales (Workshop) y Bridge (Long-Form), además de posibles
+La base de Notion tiene decenas de entradas adicionales sin explorar todavía,
+especialmente en las categorías Sales (Workshop) y Bridge (Long-Form) donde
+solo se han incorporado 2 títulos de cada una hasta ahora, además de posibles
 entradas nuevas que se añadan con el tiempo. Antes de la siguiente ronda:
 
 1. Abrir la base de Notion y filtrar por "Type".
