@@ -149,6 +149,28 @@ const CATALOG = [
                                               ]
         },
 
+        {
+                        id: "p-ecuacionemoji", category: "personal", title: "Ecuación en emojis",
+                        objective: "Resumir tu día o tu rutina en una ecuación de emojis para generar cercanía de forma visual y rápida.",
+                        slides: [
+                                { overlay: "bottom", body: "☕ + (*emoji de tu actividad*) + (*emoji de otra actividad*) = ==(*resultado: mi día perfecto, mi buen humor...*)==" }
+                                              ]
+        },
+        {
+                        id: "p-deberiacomprar", category: "personal", title: "¿Debería comprarlo?",
+                        objective: "Generar interacción preguntando si deberías darte un capricho relacionado con tu día a día. Foto del producto en cuestión.",
+                        slides: [
+                                { overlay: "bottom", body: "==¿Debería comprarme (*producto o capricho*)?==\n\n**Encuesta:** Sí, hazlo / No, ahorra" }
+                                              ]
+        },
+        {
+                        id: "p-tuporque", category: "personal", title: "¿Cuál es tu porqué?",
+                        objective: "Compartir tu motivación real detrás de tu trabajo o negocio y abrir conversación por DM.",
+                        slides: [
+                                { overlay: "bottom", body: "Mi porqué es ==(*tu motivación real*)==\n\n**Responde:** ¿Cuál es el tuyo?" }
+                                              ]
+        },
+
             /* ============================ VENTA ============================ */
         {
                         id: "v-objetivos", category: "venta", title: "Objetivos 2026",
@@ -295,6 +317,29 @@ const CATALOG = [
                                               ]
         },
 
+        {
+                        id: "v-llamadadirecta", category: "venta", title: "Llamada directa",
+                        objective: "Llamar la atención de tu cliente ideal con un mensaje directo y presentar tu solución.",
+                        slides: [
+                                { overlay: "full", body: "Si eres ==(*cliente ideal*)== y quieres (*resultado deseado*), sigue leyendo" },
+                                { overlay: "bottom", body: "Llevo (*X tiempo*) ayudando a (*avatar*) a conseguir __(*resultado*)__ con (*tu método*).\n\n**Responde \"(*PALABRA*)\"** y hablamos." }
+                                              ]
+        },
+        {
+                        id: "v-nomasconcesiones", category: "venta", title: "No más concesiones",
+                        objective: "Compartir una lección aprendida en forma de promesa personal, apoyándote en un resultado reciente.",
+                        slides: [
+                                { overlay: "full", body: "Después de (*una mala experiencia o error*), me prometí algo: ==nunca más (*volver a cometer ese error*)==.\n\nDesde entonces, __(*resultado positivo del cambio*)__.\n\n**Responde \"(*PALABRA*)\"** si tú también quieres dejar de (*cometer ese error*)." }
+                                              ]
+        },
+        {
+                        id: "v-plazagratisworkshop", category: "venta", title: "Plaza gratis al taller",
+                        objective: "Regalar una plaza a un taller o evento de pago como estrategia de venta indirecta.",
+                        slides: [
+                                { overlay: "bottom", body: "Voy a regalar ==(*X* plazas gratis)== para mi próximo (*taller/evento*) de (*tema*).\n\n**Responde \"(*PALABRA*)\"** y entras en el sorteo." }
+                                              ]
+        },
+
             /* ============================ PUENTE ============================ */
         {
                         id: "pu-netflix", category: "puente", title: "Netflix",
@@ -411,6 +456,29 @@ const CATALOG = [
                                               ]
         },
 
+        {
+                        id: "pu-muchospreguntando", category: "puente", title: "Muchos me habéis preguntado",
+                        objective: "Responder a una pregunta frecuente de tu audiencia y usarla como puente hacia un recurso.",
+                        slides: [
+                                { overlay: "bottom", body: "Muchos me habéis preguntado ==(*la pregunta frecuente*)==" },
+                                { overlay: "bottom", body: "Así que he preparado __(*recurso o respuesta*)__ con todo lo que necesitas saber.\n\n**Responde \"(*PALABRA*)\"** y te lo mando." }
+                                              ]
+        },
+        {
+                        id: "pu-recursonuevo", category: "puente", title: "Recién salido del horno",
+                        objective: "Anunciar un recurso nuevo con energía y urgencia, e invitar a pedirlo por DM.",
+                        slides: [
+                                { overlay: "full", body: "Acabo de terminar ==(*nombre del recurso*)== y todavía está calentito 🔥\n\nDentro encontrarás __(*beneficio 1*)__ y __(*beneficio 2*)__.\n\n**Responde \"(*PALABRA*)\"** para ser de los primeros en tenerlo." }
+                                              ]
+        },
+        {
+                        id: "pu-ahorratiempo", category: "puente", title: "Ahorra tiempo",
+                        objective: "Mostrar cuánto tiempo ahorra tu método o recurso y usarlo como gancho hacia el lead magnet.",
+                        slides: [
+                                { overlay: "bottom", body: "Esto me ahorra ==(*X horas / tiempo*)== a la semana.\n\nSi quieres __(*el mismo ahorro de tiempo*)__, tengo (*un recurso*) que lo explica paso a paso.\n\n**Responde \"(*PALABRA*)\"** para acceder." }
+                                              ]
+        },
+
             /* ============================= FLEX ============================= */
         {
                         id: "f-tehasunido", category: "flex", title: "POV: Te uniste",
@@ -491,6 +559,28 @@ const CATALOG = [
                         objective: "Publicar el adelanto de un vídeo que subirás al día siguiente para generar expectación.",
                         slides: [
                                 { overlay: "full", body: "(*Adelanto visual de un vídeo que publicarás mañana*)" }
+                                              ]
+        },
+
+        {
+                        id: "f-estadodeseado", category: "flex", title: "El estado que quieres",
+                        objective: "Mostrar visualmente cómo se siente conseguir el resultado que ofreces, sin venderlo directamente.",
+                        slides: [
+                                { overlay: "full", body: "==Así se siente (*el resultado que ofreces*)==" }
+                                              ]
+        },
+        {
+                        id: "f-inevitable", category: "flex", title: "Inevitable",
+                        objective: "Transmitir seguridad y consistencia mostrando que tu progreso es cuestión de tiempo, no de suerte.",
+                        slides: [
+                                { overlay: "bottom", body: "Con __(*tu sistema/proceso*)__, (*el resultado*) no es cuestión de suerte.\n\nEs ==inevitable==." }
+                                              ]
+        },
+        {
+                        id: "f-victoriarapida", category: "flex", title: "Victoria rápida",
+                        objective: "Destacar una pequeña victoria reciente (propia o de un cliente) sin necesidad de contexto largo.",
+                        slides: [
+                                { overlay: "full", body: "==(*Pequeña victoria reciente*)==\n\nDe esas que no se cuentan pero se disfrutan 🤍" }
                                               ]
         },
 
@@ -577,5 +667,27 @@ const CATALOG = [
                         slides: [
                                 { overlay: "bottom", body: "¿Cuál es esa tarea importante que la gente de tu nicho evita porque es aburrida?\n\nComparte un tip rápido para hacerla ==más fácil, más llevadera o más eficiente==." }
                                               ]
-        }
+        },
+        {
+                        id: "val-costeoculto", category: "valor", title: "El coste oculto",
+                        objective: "Aportar valor explicando un coste no evidente de una decisión común en tu nicho.",
+                        slides: [
+                                { overlay: "bottom", body: "(*Decisión o hábito común en tu nicho*) tiene un ==coste oculto== que casi nadie tiene en cuenta: __(*el coste real: tiempo, dinero, oportunidad*)__" }
+                                              ]
+        },
+        {
+                        id: "val-victoriainstantanea", category: "valor", title: "Victoria instantánea",
+                        objective: "Compartir un cambio pequeño y rápido de aplicar que da resultados casi inmediatos.",
+                        slides: [
+                                { overlay: "bottom", body: "Si quieres una ==victoria instantánea== en (*tu sector*), haz esto:\n\n__(*acción concreta y rápida*)__" }
+                                              ]
+        },
+        {
+                        id: "val-rasgofracaso", category: "valor", title: "El rasgo que frena a la mayoría",
+                        objective: "Explicar, en contraste con los rasgos de éxito, el rasgo común que impide el progreso en tu nicho.",
+                        slides: [
+                                { overlay: "bottom", body: "Hay ==un rasgo== que comparten los que nunca consiguen (*resultado deseado*)" },
+                                { overlay: "bottom", body: "__(*El rasgo negativo concreto*)__\n\nEvítalo y ya vas por delante del resto" }
+                                              ]
+        },
           ];
