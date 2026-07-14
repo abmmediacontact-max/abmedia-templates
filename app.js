@@ -413,7 +413,7 @@ function makeLibCard(item) {
   info.innerHTML = `<div class="card-row"><h3>${item.title}</h3>
       <span class="cat-tag">${cat.name}</span></div>
       ${item.objective ? `<p class="card-obj">${item.objective}</p>` : ""}
-      <button class="btn btn-primary sm full" data-act="use">Usar esta secuencia →</button>
+      <button class="btn btn-primary sm full card-cta" data-act="use">Usar esta secuencia →</button>
       ${item.isUser ? `<button class="btn btn-ghost xs full danger" data-act="del">🗑 Borrar plantilla</button>` : ""}`;
   info.querySelector('[data-act="use"]').addEventListener("click", (e) => {
     e.stopPropagation();
@@ -507,9 +507,13 @@ const DOW_ES = ["L","M","X","J","V","S","D"]; // empezamos en lunes
 function fmtDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function ymKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; }
 
+// Orden en el que rotan las categorías en la base del calendario.
+const CAL_CAT_ORDER = ["personal", "venta", "puente", "flex", "valor"];
+
 function ensureScheduleFor(monthDate) {
-  // Si ya hay schedule, lo respeta. Si no, asigna 3 secuencias/semana (Mon/Wed/Fri)
-  // rotando por CATALOG. Persistente por mes.
+  // Si ya hay schedule (aunque esté vacío tras un borrado manual), lo respeta.
+  // Si no, asigna 3 secuencias/semana (Mon/Wed/Fri) como base de ejemplo,
+  // rotando entre las 5 categorías del catálogo. Persistente por mes.
   // Las entradas pueden ser:
   //   "catalog-id"   → sugerencia desde catálogo
   //   "seq:<id>"     → secuencia del usuario programada en ese día
@@ -519,17 +523,61 @@ function ensureScheduleFor(monthDate) {
   const month = monthDate.getMonth();
   const first = new Date(year, month, 1);
   const last = new Date(year, month + 1, 0);
-  let idx = ((year * 12 + month) * 3) % CATALOG.length;
+  const byCat = {};
+  CAL_CAT_ORDER.forEach(k => { byCat[k] = CATALOG.filter(t => t.category === k); });
+  // Cada mes empieza rotando por una categoría distinta, para que con el
+  // tiempo se vean ejemplos de las cinco.
+  let catIdx = (year * 12 + month) % CAL_CAT_ORDER.length;
   const map = {};
   for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
     const dow = d.getDay();
     if (dow === 1 || dow === 3 || dow === 5) {
-      map[fmtDate(d)] = CATALOG[idx % CATALOG.length].id;
-      idx++;
+      const cat = CAL_CAT_ORDER[catIdx % CAL_CAT_ORDER.length];
+      const list = byCat[cat];
+      if (list && list.length) {
+        const dayOfYear = Math.floor((d - new Date(year, 0, 0)) / 86400000);
+        map[fmtDate(d)] = list[dayOfYear % list.length].id;
+      }
+      catIdx++;
     }
   }
   state.schedule[key] = map;
   storeSched.save(state.schedule);
+}
+
+/* ---------------------------------------------------------------------- *
+ *  BORRADO MASIVO DE PROGRAMACIONES
+ * ---------------------------------------------------------------------- */
+function clearAllSchedule() {
+  if (!confirm("¿Borrar TODAS las programaciones del calendario? Esta acción no se puede deshacer.")) return;
+  Object.keys(state.schedule).forEach(k => { state.schedule[k] = {}; });
+  storeSched.save(state.schedule);
+  renderCalendar();
+}
+
+function clearMonthSchedule() {
+  if (!state.calMonth) state.calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const label = `${MONTHS_ES[state.calMonth.getMonth()]} ${state.calMonth.getFullYear()}`;
+  if (!confirm(`¿Borrar todas las programaciones de ${label}?`)) return;
+  state.schedule[ymKey(state.calMonth)] = {};
+  storeSched.save(state.schedule);
+  renderCalendar();
+}
+
+function clearRangeSchedule() {
+  const fromInp = $("#calRangeFrom"), toInp = $("#calRangeTo");
+  let from = fromInp?.value, to = toInp?.value;
+  if (!from || !to) { alert("Elige una fecha de inicio y una de fin."); return; }
+  if (from > to) { const t = from; from = to; to = t; }
+  if (!confirm(`¿Borrar las programaciones entre ${from} y ${to}?`)) return;
+  Object.keys(state.schedule).forEach(ym => {
+    const map = state.schedule[ym];
+    Object.keys(map).forEach(day => {
+      if (day >= from && day <= to) delete map[day];
+    });
+  });
+  storeSched.save(state.schedule);
+  renderCalendar();
 }
 
 // Devuelve { title, category, isUserSeq, ref }  donde ref es seq-id o catalog-id
@@ -1294,6 +1342,9 @@ function bind() {
   // Calendar
   $("#calPrev").addEventListener("click", () => calMove(-1));
   $("#calNext").addEventListener("click", () => calMove(1));
+  $("#calClearAll").addEventListener("click", clearAllSchedule);
+  $("#calClearMonth").addEventListener("click", clearMonthSchedule);
+  $("#calClearRange").addEventListener("click", clearRangeSchedule);
 
   // Nueva secuencia
   $("#newSeq").addEventListener("click", openTemplateModal);
