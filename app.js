@@ -593,6 +593,29 @@ function calSet(map, key, list) {
   if (!list || !list.length) delete map[key];
   else map[key] = list;
 }
+// Días en los que aparece una secuencia del usuario, por todo el calendario
+function diasDeSecuencia(seqId) {
+  const tag = "seq:" + seqId;
+  const dias = [];
+  for (const ym in state.schedule) {
+    const map = state.schedule[ym];
+    for (const d in map) if (calList(map, d).includes(tag)) dias.push(d);
+  }
+  return dias.sort();
+}
+
+// scheduledDate solo guarda una fecha, así que se apunta a la primera vez
+// que aparece la secuencia. Si ya no está en ningún día, se vacía.
+function sincronizarFechaSecuencia(seqId) {
+  const seq = state.sequences.find(x => x.id === seqId);
+  if (!seq) return;
+  const dias = diasDeSecuencia(seqId);
+  const fecha = dias.length ? dias[0] : undefined;
+  seq.scheduledDate = fecha;
+  if (seq.style) seq.style.scheduledDate = fecha;
+  persist();
+}
+
 function calPush(map, key, entry) {
   const l = calList(map, key);
   l.push(entry);
@@ -711,8 +734,7 @@ function renderCalendar() {
         cur.splice(idx, 1);
         calSet(map, key, cur);
         if (typeof entry === "string" && entry.startsWith("seq:")) {
-          const seq = state.sequences.find(x => x.id === parseInt(entry.slice(4)));
-          if (seq) { seq.scheduledDate = undefined; if (seq.style) seq.style.scheduledDate = undefined; persist(); }
+          sincronizarFechaSecuencia(parseInt(entry.slice(4)));
         }
         storeSched.save(state.schedule);
         renderCalendar();
@@ -759,12 +781,7 @@ function renderCalendar() {
       calPush(toMap, key, movida);
       // Si es una secuencia del usuario, se actualiza su fecha
       if (typeof movida === "string" && movida.startsWith("seq:")) {
-        const seq = state.sequences.find(x => x.id === parseInt(movida.slice(4)));
-        if (seq) {
-          seq.scheduledDate = key;
-          if (seq.style) seq.style.scheduledDate = key;
-          persist();
-        }
+        sincronizarFechaSecuencia(parseInt(movida.slice(4)));
       }
       storeSched.save(state.schedule);
       renderCalendar();
@@ -850,8 +867,7 @@ function peekRemoveFromDay() {
     cur.splice(idx, 1);
     calSet(map, key, cur);
     if (typeof entry === "string" && entry.startsWith("seq:")) {
-      const seq = state.sequences.find(x => x.id === parseInt(entry.slice(4)));
-      if (seq) { seq.scheduledDate = undefined; if (seq.style) seq.style.scheduledDate = undefined; persist(); }
+      sincronizarFechaSecuencia(parseInt(entry.slice(4)));
     }
     storeSched.save(state.schedule);
   }
@@ -907,14 +923,7 @@ function renderCalPickList() {
       const ym = _calPickKey.slice(0, 7);
       state.schedule[ym] = state.schedule[ym] || {};
       calPush(state.schedule[ym], _calPickKey, x.entry);
-      if (x.mine) {
-        const seq = state.sequences.find(z => "seq:" + z.id === x.entry);
-        if (seq) {
-          seq.scheduledDate = _calPickKey;
-          if (seq.style) seq.style.scheduledDate = _calPickKey;
-          persist();
-        }
-      }
+      if (x.mine) sincronizarFechaSecuencia(parseInt(x.entry.slice(4)));
       storeSched.save(state.schedule);
       closeCalPicker();
       renderCalendar();
