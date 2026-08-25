@@ -536,7 +536,7 @@ function ensureScheduleFor(monthDate) {
       const list = byCat[cat];
       if (list && list.length) {
         const dayOfYear = Math.floor((d - new Date(year, 0, 0)) / 86400000);
-        map[fmtDate(d)] = list[dayOfYear % list.length].id;
+        map[fmtDate(d)] = [list[dayOfYear % list.length].id];
       }
       catIdx++;
     }
@@ -580,6 +580,24 @@ function clearRangeSchedule() {
   renderCalendar();
 }
 
+/* Un día puede tener varias secuencias. Históricamente guardábamos un solo
+   valor por día, así que al leer se normaliza a lista y al escribir siempre
+   se guarda lista: los calendarios antiguos siguen funcionando. */
+function calList(map, key) {
+  const v = map ? map[key] : null;
+  if (v == null) return [];
+  return Array.isArray(v) ? v.slice() : [v];
+}
+function calSet(map, key, list) {
+  if (!list || !list.length) delete map[key];
+  else map[key] = list;
+}
+function calPush(map, key, entry) {
+  const l = calList(map, key);
+  l.push(entry);
+  calSet(map, key, l);
+}
+
 // Devuelve { title, category, isUserSeq, ref }  donde ref es seq-id o catalog-id
 function resolveCalEntry(entry) {
   if (typeof entry === "string" && entry.startsWith("seq:")) {
@@ -597,8 +615,9 @@ function resolveCalEntry(entry) {
 function removeScheduleEntriesForSeq(seqId) {
   const tag = "seq:" + seqId;
   for (const ym in state.schedule) {
-    for (const d in state.schedule[ym]) {
-      if (state.schedule[ym][d] === tag) delete state.schedule[ym][d];
+    const map = state.schedule[ym];
+    for (const d in map) {
+      calSet(map, d, calList(map, d).filter(e => e !== tag));
     }
   }
 }
@@ -609,7 +628,7 @@ function setScheduleForSequence(seq, date) {
   if (date) {
     const ym = date.slice(0, 7);
     state.schedule[ym] = state.schedule[ym] || {};
-    state.schedule[ym][date] = "seq:" + seq.id;
+    calPush(state.schedule[ym], date, "seq:" + seq.id);
   }
   storeSched.save(state.schedule);
   if (state.view === "calendar") renderCalendar();
@@ -621,14 +640,19 @@ function rebuildScheduleFromSequences() {
     if (s.scheduledDate) {
       const ym = s.scheduledDate.slice(0,7);
       state.schedule[ym] = state.schedule[ym] || {};
-      // No sobreescribe si ya hay algo distinto (respeta cambios)
-      state.schedule[ym][s.scheduledDate] = "seq:" + s.id;
+      // Se añade a lo que ya hubiera ese día, sin pisarlo
+      const tag = "seq:" + s.id;
+      if (!calList(state.schedule[ym], s.scheduledDate).includes(tag)) {
+        calPush(state.schedule[ym], s.scheduledDate, tag);
+      }
     }
   });
   storeSched.save(state.schedule);
 }
 
-let _dragFromKey = null;
+/* Arrastre: guardamos día de origen e índice, porque un día puede tener
+   varias secuencias y hay que mover exactamente la que se coge. */
+let _dragFrom = null;
 
 function renderCalendar() {
   if (!state.calMonth) state.calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -647,87 +671,184 @@ function renderCalendar() {
   }
   const last = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
   const today = new Date(); today.setHours(0,0,0,0);
+
   for (let day = 1; day <= last; day++) {
     const date = new Date(m.getFullYear(), m.getMonth(), day);
     const key = fmtDate(date);
     const cell = document.createElement("div");
     cell.className = "cal-cell" + (date.getTime() === today.getTime() ? " today" : "");
     cell.dataset.key = key;
-    const dn = document.createElement("div"); dn.className = "dnum"; dn.textContent = day; cell.appendChild(dn);
-    const entry = map[key];
-    if (entry) {
+
+    const head = document.createElement("div");
+    head.className = "cal-cell-head";
+    const dn = document.createElement("span"); dn.className = "dnum"; dn.textContent = day;
+    head.appendChild(dn);
+    const add = document.createElement("button");
+    add.className = "cal-add"; add.type = "button";
+    add.title = "Añadir una secuencia a este día";
+    add.textContent = "+";
+    add.addEventListener("click", e => { e.stopPropagation(); openCalPicker(key); });
+    head.appendChild(add);
+    cell.appendChild(head);
+
+    const list = calList(map, key);
+    list.forEach((entry, idx) => {
       const r = resolveCalEntry(entry);
-      if (r) {
-        const cat = CATEGORIES[r.category] || CATEGORIES.venta;
-        const seqEl = document.createElement("div");
-        seqEl.className = "seq" + (r.isUserSeq ? " mine" : "");
-        seqEl.setAttribute("draggable", "true");
-        seqEl.innerHTML = `<span class="ct">${cat.name}${r.isUserSeq ? " · tuya" : ""}</span>${escapeHtml(r.title)}`;
-        seqEl.addEventListener("click", () => {
-          if (r.isUserSeq) {
-            openEditor(r.ref);
-          } else {
-            // Crea una instancia editable y la fija en este día
-            const created = fromCatalog(r.ref, { status: "scheduled" });
-            created.scheduledDate = key;
-            state.sequences.unshift(created);
-            state.schedule[ymKey(state.calMonth)][key] = "seq:" + created.id;
-            storeSched.save(state.schedule);
-            persist();
-            openEditor(created.id);
-          }
-        });
-        seqEl.addEventListener("dragstart", e => {
-          _dragFromKey = key;
-          e.dataTransfer.effectAllowed = "move";
-          try { e.dataTransfer.setData("text/plain", key); } catch {}
-          setTimeout(() => seqEl.classList.add("dragging"), 0);
-        });
-        seqEl.addEventListener("dragend", () => {
-          _dragFromKey = null;
-          seqEl.classList.remove("dragging");
-          $$(".cal-cell.drop-target").forEach(c => c.classList.remove("drop-target"));
-        });
-        cell.appendChild(seqEl);
-      }
-    }
-    // Cell como drop target (sirve tanto si vacía como si tiene seq)
-    cell.addEventListener("dragenter", e => { if (_dragFromKey) { e.preventDefault(); cell.classList.add("drop-target"); } });
+      if (!r) return;
+      const cat = CATEGORIES[r.category] || CATEGORIES.venta;
+      const seqEl = document.createElement("div");
+      seqEl.className = "seq" + (r.isUserSeq ? " mine" : "");
+      seqEl.setAttribute("draggable", "true");
+      seqEl.innerHTML =
+        `<span class="ct">${cat.name}${r.isUserSeq ? " · tuya" : ""}</span>` +
+        `<span class="sq-t">${escapeHtml(r.title)}</span>` +
+        `<button class="sq-x" title="Quitar de este día">✕</button>`;
+
+      seqEl.querySelector(".sq-x").addEventListener("click", e => {
+        e.stopPropagation();
+        const cur = calList(map, key);
+        cur.splice(idx, 1);
+        calSet(map, key, cur);
+        if (typeof entry === "string" && entry.startsWith("seq:")) {
+          const seq = state.sequences.find(x => x.id === parseInt(entry.slice(4)));
+          if (seq) { seq.scheduledDate = undefined; if (seq.style) seq.style.scheduledDate = undefined; persist(); }
+        }
+        storeSched.save(state.schedule);
+        renderCalendar();
+      });
+
+      seqEl.addEventListener("click", () => {
+        if (r.isUserSeq) {
+          openEditor(r.ref);
+        } else {
+          // Crea una instancia editable y la deja fija en este día
+          const created = fromCatalog(r.ref, { status: "scheduled" });
+          created.scheduledDate = key;
+          state.sequences.unshift(created);
+          const cur = calList(map, key);
+          cur[idx] = "seq:" + created.id;
+          calSet(map, key, cur);
+          storeSched.save(state.schedule);
+          persist();
+          openEditor(created.id);
+        }
+      });
+
+      seqEl.addEventListener("dragstart", e => {
+        _dragFrom = { key, idx };
+        e.dataTransfer.effectAllowed = "move";
+        try { e.dataTransfer.setData("text/plain", key + "#" + idx); } catch {}
+        setTimeout(() => seqEl.classList.add("dragging"), 0);
+      });
+      seqEl.addEventListener("dragend", () => {
+        _dragFrom = null;
+        seqEl.classList.remove("dragging");
+        $$(".cal-cell.drop-target").forEach(c => c.classList.remove("drop-target"));
+      });
+      cell.appendChild(seqEl);
+    });
+
+    // Toda la celda acepta soltar, tenga o no secuencias
+    cell.addEventListener("dragenter", e => { if (_dragFrom) { e.preventDefault(); cell.classList.add("drop-target"); } });
     cell.addEventListener("dragover", e => {
-      if (!_dragFromKey) return;
+      if (!_dragFrom) return;
       e.preventDefault(); e.dataTransfer.dropEffect = "move";
     });
     cell.addEventListener("dragleave", e => {
-      // sólo quitar si salimos completamente de la celda
       if (!cell.contains(e.relatedTarget)) cell.classList.remove("drop-target");
     });
     cell.addEventListener("drop", e => {
       e.preventDefault();
       $$(".cal-cell.drop-target").forEach(c => c.classList.remove("drop-target"));
-      const from = _dragFromKey;
-      _dragFromKey = null;
-      if (!from || from === key) return;
-      const fromMonth = from.slice(0,7);
-      const toMonth = key.slice(0,7);
-      const fromMap = state.schedule[fromMonth] || (state.schedule[fromMonth] = {});
-      const toMap = state.schedule[toMonth] || (state.schedule[toMonth] = {});
-      const a = fromMap[from], b = toMap[key];
-      if (b) { fromMap[from] = b; toMap[key] = a; }
-      else { delete fromMap[from]; toMap[key] = a; }
-      // Si lo movido es una secuencia del usuario, actualiza scheduledDate
-      if (typeof a === "string" && a.startsWith("seq:")) {
-        const seq = state.sequences.find(s => s.id === parseInt(a.slice(4)));
-        if (seq) { seq.scheduledDate = key; persist(); }
-      }
-      if (typeof b === "string" && b.startsWith("seq:")) {
-        const seq = state.sequences.find(s => s.id === parseInt(b.slice(4)));
-        if (seq) { seq.scheduledDate = from; persist(); }
+      const from = _dragFrom;
+      _dragFrom = null;
+      if (!from || from.key === key) return;
+      const fromMap = state.schedule[from.key.slice(0,7)] || (state.schedule[from.key.slice(0,7)] = {});
+      const toMap   = state.schedule[key.slice(0,7)]      || (state.schedule[key.slice(0,7)] = {});
+      const origen = calList(fromMap, from.key);
+      const movida = origen.splice(from.idx, 1)[0];
+      if (movida == null) return;
+      calSet(fromMap, from.key, origen);
+      calPush(toMap, key, movida);
+      // Si es una secuencia del usuario, se actualiza su fecha
+      if (typeof movida === "string" && movida.startsWith("seq:")) {
+        const seq = state.sequences.find(x => x.id === parseInt(movida.slice(4)));
+        if (seq) {
+          seq.scheduledDate = key;
+          if (seq.style) seq.style.scheduledDate = key;
+          persist();
+        }
       }
       storeSched.save(state.schedule);
       renderCalendar();
     });
+
     grid.appendChild(cell);
   }
+}
+
+/* ------------------ Elegir qué secuencia va en un día ------------------- */
+let _calPickKey = null;
+
+function openCalPicker(key) {
+  _calPickKey = key;
+  const [y, mo, d] = key.split("-");
+  const fecha = new Date(+y, +mo - 1, +d);
+  $("#calPickDate").textContent =
+    `${fecha.getDate()} de ${MONTHS_ES[fecha.getMonth()]}`;
+  $("#calPickSearch").value = "";
+  renderCalPickList();
+  $("#calPickModal").classList.remove("hidden");
+  setTimeout(() => $("#calPickSearch").focus(), 40);
+}
+
+function closeCalPicker() {
+  $("#calPickModal").classList.add("hidden");
+  _calPickKey = null;
+}
+
+function renderCalPickList() {
+  const q = ($("#calPickSearch").value || "").trim().toLowerCase();
+  const cont = $("#calPickList");
+  const mias = state.sequences.map(s => ({
+    entry: "seq:" + s.id, title: s.title, category: s.category, mine: true
+  }));
+  const cat = CATALOG.map(c => ({
+    entry: c.id, title: c.title, category: c.category, mine: false
+  }));
+  const todo = mias.concat(cat).filter(x => !q || x.title.toLowerCase().includes(q));
+
+  if (!todo.length) {
+    cont.innerHTML = `<p class="empty">No hay ninguna secuencia con ese nombre.</p>`;
+    return;
+  }
+  cont.innerHTML = "";
+  todo.slice(0, 60).forEach(x => {
+    const c = CATEGORIES[x.category] || CATEGORIES.venta;
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "cal-pick-row";
+    row.innerHTML =
+      `<span class="cp-t">${escapeHtml(x.title)}</span>` +
+      `<span class="cp-c">${c.name}${x.mine ? " · tuya" : ""}</span>`;
+    row.addEventListener("click", () => {
+      const ym = _calPickKey.slice(0, 7);
+      state.schedule[ym] = state.schedule[ym] || {};
+      calPush(state.schedule[ym], _calPickKey, x.entry);
+      if (x.mine) {
+        const seq = state.sequences.find(z => "seq:" + z.id === x.entry);
+        if (seq) {
+          seq.scheduledDate = _calPickKey;
+          if (seq.style) seq.style.scheduledDate = _calPickKey;
+          persist();
+        }
+      }
+      storeSched.save(state.schedule);
+      closeCalPicker();
+      renderCalendar();
+    });
+    cont.appendChild(row);
+  });
 }
 
 function calMove(delta) {
@@ -1345,6 +1466,16 @@ function bind() {
   $("#calClearAll").addEventListener("click", clearAllSchedule);
   $("#calClearMonth").addEventListener("click", clearMonthSchedule);
   $("#calClearRange").addEventListener("click", clearRangeSchedule);
+
+  // Elegir qué secuencia se añade a un día concreto
+  $("#calPickClose").addEventListener("click", closeCalPicker);
+  $("#calPickSearch").addEventListener("input", renderCalPickList);
+  $("#calPickModal").addEventListener("click", e => {
+    if (e.target.id === "calPickModal") closeCalPicker();
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !$("#calPickModal").classList.contains("hidden")) closeCalPicker();
+  });
 
   // Nueva secuencia
   $("#newSeq").addEventListener("click", openTemplateModal);
