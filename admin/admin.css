@@ -7,7 +7,7 @@
   border-radius: 12px; padding: 12px 16px;
   transition: .15s;
 }
-.user-row:hover { border-color: var(--orange); }
+.user-row:hover { border-color: rgba(255,255,255,.28); }
 .user-row .em {
   font-size: 14px; font-weight: 600; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -20,7 +20,7 @@
   background: transparent; border: none; color: var(--muted);
   width: 100%; font-family: inherit; font-size: 13px; padding: 4px 0;
 }
-.user-row .nt input:focus { outline: none; color: var(--text); border-bottom: 1px solid var(--orange); }
+.user-row .nt input:focus { outline: none; color: var(--text); border-bottom: 1px solid rgba(255,255,255,.28); }
 .user-row .when { font-size: 11px; color: var(--faint); white-space: nowrap; }
 .user-row .toggle {
   position: relative; width: 44px; height: 24px;
@@ -32,8 +32,8 @@
   width: 18px; height: 18px; border-radius: 999px;
   background: var(--muted); transition: .2s;
 }
-.user-row .toggle.on { background: var(--orange-soft); border-color: var(--orange); }
-.user-row .toggle.on::after { left: 22px; background: var(--orange); }
+.user-row .toggle.on { background: var(--acento-soft); border-color: var(--acento); }
+.user-row .toggle.on::after { left: 22px; background: var(--acento); }
 .user-row .icon-btn { width: 32px; height: 32px; font-size: 13px; }
 .user-row.inactive .em { color: var(--muted); text-decoration: line-through; }
 
