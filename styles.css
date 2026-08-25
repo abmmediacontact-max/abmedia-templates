@@ -925,3 +925,33 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.02); }
     background: var(--orange-soft); border: 1px solid var(--border);
     padding: 4px 9px; border-radius: 999px; white-space: nowrap; flex-shrink: 0;
 }
+
+/* ---------------- Vista rápida de una secuencia del calendario --------- */
+.peek-head { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.peek-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.peek-cat {
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    background: var(--orange-soft); border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+}
+.peek-when { font-size: 12.5px; color: var(--faint); }
+/* Los frames en fila, como se verán en el móvil */
+.peek-frames {
+    display: flex; gap: 12px; overflow-x: auto;
+    padding: 18px 2px 14px; margin: 0 -2px;
+    scrollbar-width: thin;
+}
+.peek-frame { display: flex; flex-direction: column; align-items: center; gap: 7px; flex: 0 0 auto; }
+.peek-frame .card-canvas {
+    width: 150px; height: 267px; border-radius: 12px;
+    background: #101010; border: 1px solid var(--border);
+    display: block; object-fit: cover;
+}
+.peek-n { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 700; }
+.peek-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.peek-actions .btn-ghost.danger:hover { border-color: #e5484d; color: #ff6b6e; }
+@media (max-width: 760px) {
+    .peek-frame .card-canvas { width: 116px; height: 206px; }
+    .peek-actions { justify-content: stretch; }
+    .peek-actions .btn { flex: 1; }
+}

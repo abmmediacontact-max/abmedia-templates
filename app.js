@@ -504,6 +504,7 @@ function escapeAttr(s) { return escapeHtml(s); }
  * ---------------------------------------------------------------------- */
 const MONTHS_ES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const DOW_ES = ["L","M","X","J","V","S","D"]; // empezamos en lunes
+const DOW_LARGO = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"];
 function fmtDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function ymKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; }
 
@@ -717,22 +718,8 @@ function renderCalendar() {
         renderCalendar();
       });
 
-      seqEl.addEventListener("click", () => {
-        if (r.isUserSeq) {
-          openEditor(r.ref);
-        } else {
-          // Crea una instancia editable y la deja fija en este día
-          const created = fromCatalog(r.ref, { status: "scheduled" });
-          created.scheduledDate = key;
-          state.sequences.unshift(created);
-          const cur = calList(map, key);
-          cur[idx] = "seq:" + created.id;
-          calSet(map, key, cur);
-          storeSched.save(state.schedule);
-          persist();
-          openEditor(created.id);
-        }
-      });
+      // Al pulsar se ve de qué va la secuencia antes de abrir nada
+      seqEl.addEventListener("click", () => openSeqPeek(entry, key, idx));
 
       seqEl.addEventListener("dragstart", e => {
         _dragFrom = { key, idx };
@@ -785,6 +772,91 @@ function renderCalendar() {
 
     grid.appendChild(cell);
   }
+}
+
+/* --------- Vista rápida: de qué va la secuencia de ese día -------------- */
+let _peek = null;   // { entry, key, idx }
+
+function openSeqPeek(entry, key, idx) {
+  const r = resolveCalEntry(entry);
+  if (!r) return;
+  _peek = { entry, key, idx };
+
+  const cat = CATEGORIES[r.category] || CATEGORIES.venta;
+  $("#seqPeekTitle").textContent = r.title;
+  $("#seqPeekCat").textContent = cat.name + (r.isUserSeq ? " · tuya" : " · del catálogo");
+
+  const [y, mo, d] = key.split("-");
+  const fecha = new Date(+y, +mo - 1, +d);
+  $("#seqPeekWhen").textContent =
+    `${DOW_LARGO[(fecha.getDay() + 6) % 7]} ${fecha.getDate()} de ${MONTHS_ES[fecha.getMonth()]}`;
+
+  // Se monta una copia solo para pintar; no entra en el estado de la app
+  const seq = r.isUserSeq
+    ? state.sequences.find(x => x.id === r.ref)
+    : fromCatalog(r.ref, { id: -1 });
+
+  const cont = $("#seqPeekFrames");
+  cont.innerHTML = "";
+  (seq ? seq.slides : []).forEach((slide, i) => {
+    const fr = document.createElement("div");
+    fr.className = "peek-frame";
+    fr.appendChild(makeCardCanvas(slide, seq.style, 150, 267));
+    const n = document.createElement("span");
+    n.className = "peek-n";
+    n.textContent = `Frame ${i + 1}`;
+    fr.appendChild(n);
+    cont.appendChild(fr);
+  });
+  if (!cont.children.length) {
+    cont.innerHTML = `<p class="empty">Esta secuencia todavía no tiene frames.</p>`;
+  }
+
+  $("#seqPeekModal").classList.remove("hidden");
+}
+
+function closeSeqPeek() {
+  $("#seqPeekModal").classList.add("hidden");
+  _peek = null;
+}
+
+// Abre de verdad: si es del catálogo, primero se hace tuya
+function peekOpenInEditor() {
+  if (!_peek) return;
+  const { entry, key, idx } = _peek;
+  const r = resolveCalEntry(entry);
+  closeSeqPeek();
+  if (!r) return;
+  if (r.isUserSeq) { openEditor(r.ref); return; }
+  const created = fromCatalog(r.ref, { status: "scheduled" });
+  created.scheduledDate = key;
+  if (created.style) created.style.scheduledDate = key;
+  state.sequences.unshift(created);
+  const map = state.schedule[key.slice(0, 7)] || (state.schedule[key.slice(0, 7)] = {});
+  const cur = calList(map, key);
+  cur[idx] = "seq:" + created.id;
+  calSet(map, key, cur);
+  storeSched.save(state.schedule);
+  persist();
+  openEditor(created.id);
+}
+
+function peekRemoveFromDay() {
+  if (!_peek) return;
+  const { entry, key, idx } = _peek;
+  const map = state.schedule[key.slice(0, 7)];
+  if (map) {
+    const cur = calList(map, key);
+    cur.splice(idx, 1);
+    calSet(map, key, cur);
+    if (typeof entry === "string" && entry.startsWith("seq:")) {
+      const seq = state.sequences.find(x => x.id === parseInt(entry.slice(4)));
+      if (seq) { seq.scheduledDate = undefined; if (seq.style) seq.style.scheduledDate = undefined; persist(); }
+    }
+    storeSched.save(state.schedule);
+  }
+  closeSeqPeek();
+  renderCalendar();
 }
 
 /* ------------------ Elegir qué secuencia va en un día ------------------- */
@@ -1468,6 +1540,16 @@ function bind() {
   $("#calClearRange").addEventListener("click", clearRangeSchedule);
 
   // Elegir qué secuencia se añade a un día concreto
+  $("#seqPeekClose").addEventListener("click", closeSeqPeek);
+  $("#seqPeekOpen").addEventListener("click", peekOpenInEditor);
+  $("#seqPeekRemove").addEventListener("click", peekRemoveFromDay);
+  $("#seqPeekModal").addEventListener("click", e => {
+    if (e.target.id === "seqPeekModal") closeSeqPeek();
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && !$("#seqPeekModal").classList.contains("hidden")) closeSeqPeek();
+  });
+
   $("#calPickClose").addEventListener("click", closeCalPicker);
   $("#calPickSearch").addEventListener("input", renderCalPickList);
   $("#calPickModal").addEventListener("click", e => {
