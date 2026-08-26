@@ -59,3 +59,31 @@
   .user-row { grid-template-columns: 1fr 90px 36px; gap: 8px; }
   .user-row .nt, .user-row .when { display: none; }
 }
+
+/* ------------------ Pendientes de aprobación --------------------------- */
+/* Contador en el menú: sólo aparece si hay alguien esperando */
+.nav-badge {
+  margin-left: auto;
+  min-width: 20px; height: 20px; padding: 0 6px;
+  display: grid; place-items: center;
+  border-radius: 999px;
+  background: var(--acento); color: #fff;
+  font-size: 11px; font-weight: 700; line-height: 1;
+}
+.pending-row { grid-template-columns: 1fr 1.2fr 90px 120px; }
+.pending-row .btn { white-space: nowrap; }
+.pend-warn {
+  margin-left: 8px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--acento-lit);
+  background: var(--acento-soft);
+  border: 1px solid rgba(255,82,8,.28);
+  padding: 2px 7px; border-radius: 999px;
+}
+.seq-owner { color: var(--orange-2); font-weight: 600; }
+
+@media (max-width: 760px) {
+  .pending-row { grid-template-columns: 1fr auto; row-gap: 8px; }
+  .pending-row .nt { grid-column: 1 / -1; }
+  .pending-row .when { display: none; }
+}

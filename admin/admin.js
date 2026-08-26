@@ -21,7 +21,10 @@ async function bootSession(user) {
   $("#notAdmin").classList.add("hidden");
   $("#appRoot").classList.remove("hidden");
   $("#userEmail").textContent = user.email || "";
-  setView("users");
+  setView("pending");
+  // el contador del menú se actualiza aunque estés en otra sección
+  fetchUsuariosRegistrados({ refrescar: true })
+    .then(l => pintarContadorPendientes(l.filter(u => !u.aprobado).length));
 }
 function showLogin() {
   $("#appRoot").classList.add("hidden");
@@ -46,10 +49,80 @@ function bindLogin() {
 function setView(v) {
   state.view = v;
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === v));
-  ["users", "seqs", "review"].forEach(x => $("#view-" + x).classList.toggle("hidden", x !== v));
-  if (v === "users") renderUsers();
+  ["pending", "users", "seqs", "review"].forEach(x => $("#view-" + x).classList.toggle("hidden", x !== v));
+  if (v === "pending") renderPending();
+  else if (v === "users") renderUsers();
   else if (v === "seqs") renderAllSequences();
   else if (v === "review") renderReview();
+}
+
+/* --------------------- Pendientes de aprobación ---------------------- *
+ * admin_usuarios() cruza quién se ha registrado con la lista de acceso.
+ * La base de datos sólo responde si quien pregunta es admin.
+ * ---------------------------------------------------------------------*/
+let _usuariosCache = null;
+
+async function fetchUsuariosRegistrados({ refrescar = false } = {}) {
+  if (_usuariosCache && !refrescar) return _usuariosCache;
+  const { data, error } = await sb.rpc("admin_usuarios");
+  if (error) { console.error("admin_usuarios", error); return []; }
+  _usuariosCache = data || [];
+  return _usuariosCache;
+}
+
+function pintarContadorPendientes(n) {
+  const b = $("#pendingBadge");
+  if (!b) return;
+  b.textContent = n;
+  b.classList.toggle("hidden", n === 0);
+}
+
+async function renderPending() {
+  const cont = $("#pendingList");
+  cont.innerHTML = `<p class="empty">Cargando…</p>`;
+  const todos = await fetchUsuariosRegistrados({ refrescar: true });
+  const pendientes = todos.filter(u => !u.aprobado);
+  pintarContadorPendientes(pendientes.length);
+
+  if (!pendientes.length) {
+    cont.innerHTML = `<p class="empty">No hay nadie esperando. Todos los registrados tienen acceso.</p>`;
+    return;
+  }
+  cont.innerHTML = "";
+  pendientes.forEach(u => cont.appendChild(filaPendiente(u)));
+}
+
+function filaPendiente(u) {
+  const fila = document.createElement("div");
+  fila.className = "user-row pending-row";
+  const desde = u.creado ? new Date(u.creado).toLocaleDateString("es-ES") : "—";
+  const dias = u.creado
+    ? Math.floor((Date.now() - new Date(u.creado).getTime()) / 86400000)
+    : null;
+  const espera = dias === null ? "" : dias === 0 ? "hoy" : dias === 1 ? "hace 1 día" : `hace ${dias} días`;
+  const sinConfirmar = u.confirmado ? "" : `<span class="pend-warn">sin confirmar</span>`;
+
+  fila.innerHTML =
+    `<span class="em">${escapeHtml(u.email)}</span>` +
+    `<span class="nt">Se registró ${escapeHtml(espera)} ${sinConfirmar}</span>` +
+    `<span class="when">${desde}</span>` +
+    `<button class="btn btn-primary xs" data-act="dar-acceso">Dar acceso</button>`;
+
+  fila.querySelector('[data-act="dar-acceso"]').addEventListener("click", async e => {
+    const btn = e.currentTarget;
+    btn.disabled = true; btn.textContent = "Dando acceso…";
+    const { error } = await sb.from("allowed_users")
+      .insert({ email: u.email.toLowerCase(), notes: "Aprobado desde Pendientes" });
+    if (error) {
+      console.error(error);
+      alert("No se ha podido dar acceso: " + error.message);
+      btn.disabled = false; btn.textContent = "Dar acceso";
+      return;
+    }
+    _usuariosCache = null;
+    renderPending();
+  });
+  return fila;
 }
 
 /* ------------------------------ Usuarios --------------------------- */
@@ -86,6 +159,7 @@ function renderUserRow(r) {
   row.querySelector(".icon-btn").addEventListener("click", async () => {
     if (!confirm(`¿Quitar acceso a ${r.email}? No se borran sus secuencias.`)) return;
     await sb.from("allowed_users").delete().eq("email", r.email);
+    _usuariosCache = null;
     row.remove();
   });
   return row;
@@ -95,6 +169,7 @@ async function addUser() {
   const n = $("#newUserNotes").value.trim();
   if (!e) return;
   const { error } = await sb.from("allowed_users").insert({ email: e, notes: n || null });
+  _usuariosCache = null;
   if (error) { alert("Error: " + error.message); return; }
   $("#newUserEmail").value = ""; $("#newUserNotes").value = "";
   renderUsers();
@@ -113,11 +188,13 @@ async function renderAllSequences() {
   $("#seqsCount").textContent = `${rows.length} secuencias`;
   grid.innerHTML = "";
   if (!rows.length) { grid.innerHTML = `<p class="empty">Aún no hay secuencias creadas.</p>`; return; }
-  // Necesitamos sacar el email del owner — usamos auth.users vía RPC sería ideal,
-  // pero por simplicidad mostramos uuid corto si no tenemos email.
-  rows.forEach(r => grid.appendChild(makeSeqCard(r)));
+  // Para poner el email del cliente en vez de su identificador interno
+  const usuarios = await fetchUsuariosRegistrados();
+  const porId = {};
+  usuarios.forEach(u => { porId[u.id] = u.email; });
+  rows.forEach(r => grid.appendChild(makeSeqCard(r, porId)));
 }
-function makeSeqCard(row) {
+function makeSeqCard(row, emailsPorId = {}) {
   const card = document.createElement("div"); card.className = "card admin-card";
   const seq = {
     title: row.title || "Secuencia",
@@ -132,11 +209,12 @@ function makeSeqCard(row) {
   const badge = document.createElement("span"); badge.className = "frames-badge"; badge.textContent = `${seq.slides.length} frames`;
   card.appendChild(badge);
   const info = document.createElement("div"); info.className = "card-info";
-  const ownerShort = (row.owner || "").slice(0, 8);
+  const email = emailsPorId[row.owner];
+  const quien = email ? escapeHtml(email) : `<code>${(row.owner || "").slice(0, 8)}</code>`;
   const when = new Date(row.updated_at).toLocaleDateString("es-ES");
   info.innerHTML = `<div class="card-row"><h3>${escapeHtml(seq.title)}</h3>
       <span class="cat-tag">${cat.name}</span></div>
-      <p class="card-obj">Cliente <code>${ownerShort}</code> · ${when}</p>`;
+      <p class="card-obj"><span class="seq-owner">${quien}</span> · ${when}</p>`;
   card.appendChild(info);
   const tools = document.createElement("div");
   tools.className = "mine-tools";

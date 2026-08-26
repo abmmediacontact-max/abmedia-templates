@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../styles.css?v=12" />
-  <link rel="stylesheet" href="admin.css?v=10" />
+  <link rel="stylesheet" href="../styles.css?v=13" />
+  <link rel="stylesheet" href="admin.css?v=13" />
 </head>
 <body>
   <!-- LOGIN -->
@@ -54,7 +54,12 @@
         </div>
       </div>
       <nav class="nav">
-        <a class="nav-item active" data-view="users">
+        <a class="nav-item active" data-view="pending">
+          <svg class="ni" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15.5 14" fill="none" stroke="#0c0a09" stroke-width="2" stroke-linecap="round"/></svg>
+          <span>Pendientes</span>
+          <span class="nav-badge hidden" id="pendingBadge">0</span>
+        </a>
+        <a class="nav-item" data-view="users">
           <svg class="ni" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21 C2 16 5 14 9 14 S16 16 16 21 Z"/><circle cx="17" cy="7" r="3"/><path d="M14 16 C16 14 19 14 22 16 V21"/></svg>
           <span>Usuarios</span>
         </a>
@@ -77,8 +82,19 @@
     </aside>
 
     <main class="content">
+      <!-- PENDIENTES DE APROBACIÓN -->
+      <section id="view-pending">
+        <header class="topbar">
+          <div>
+            <h1>Pendientes de aprobación</h1>
+            <p>Se han registrado y están esperando a que les des acceso.</p>
+          </div>
+        </header>
+        <div id="pendingList" class="ideas-list"></div>
+      </section>
+
       <!-- USERS -->
-      <section id="view-users">
+      <section id="view-users" class="hidden">
         <header class="topbar">
           <div>
             <h1>Usuarios autorizados</h1>
@@ -119,9 +135,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../supabase.js?v=8"></script>
-  <script src="../templates.js?v=8"></script>
-  <script src="../catalog.js?v=8"></script>
-  <script src="admin.js?v=8"></script>
+  <script src="../supabase.js?v=13"></script>
+  <script src="../templates.js?v=13"></script>
+  <script src="../catalog.js?v=13"></script>
+  <script src="admin.js?v=13"></script>
 </body>
 </html>
