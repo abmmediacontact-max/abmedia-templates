@@ -351,12 +351,16 @@ body {
     border: 1px solid var(--border);
     border-radius: 14px; padding: 12px 14px;
 }
-/* el grupo de rango se lee como una sola pieza */
+/* El rango de fechas, como una sola pieza y con su aire */
 .cal-toolbar-group:last-child {
     background: rgba(255,255,255,.03);
     border: 1px solid var(--border);
-    border-radius: 999px; padding: 5px 6px 5px 12px;
+    border-radius: 999px;
+    padding: 6px 6px 6px 14px;
+    gap: 10px;
 }
+.cal-toolbar-group:last-child .btn { margin-left: 2px; white-space: nowrap; }
+.cal-range-sep { margin: 0 2px; }
 .cal-toolbar-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cal-toolbar-label { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); font-weight: 700; margin-right: 2px; }
 /* Los campos de fecha, sin caja: se leen como texto editable */

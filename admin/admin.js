@@ -21,7 +21,7 @@ async function bootSession(user) {
   $("#notAdmin").classList.add("hidden");
   $("#appRoot").classList.remove("hidden");
   $("#userEmail").textContent = user.email || "";
-  setView("pending");
+  setView("review");
   // el contador del menú se actualiza aunque estés en otra sección
   fetchUsuariosRegistrados({ refrescar: true })
     .then(l => pintarContadorPendientes(l.filter(u => !u.aprobado).length));
@@ -241,6 +241,46 @@ function makeSeqCard(row, emailsPorId = {}) {
   return card;
 }
 
+/* Abre un frame a tamaño completo: en la revisión hay que poder leer los
+   textos, y en miniatura no se distinguen. */
+function abrirFrameGrande(src, indice, total) {
+  let v = document.getElementById("frameViewer");
+  if (!v) {
+    v = document.createElement("div");
+    v.id = "frameViewer";
+    v.className = "frame-viewer hidden";
+    v.innerHTML = `
+      <button class="fv-cerrar" id="fvClose" aria-label="Cerrar">✕</button>
+      <button class="fv-nav fv-prev" id="fvPrev" aria-label="Anterior">‹</button>
+      <img id="fvImg" alt="" />
+      <button class="fv-nav fv-next" id="fvNext" aria-label="Siguiente">›</button>
+      <span class="fv-contador" id="fvCount"></span>`;
+    document.body.appendChild(v);
+    v.querySelector("#fvClose").addEventListener("click", () => v.classList.add("hidden"));
+    v.addEventListener("click", e => { if (e.target === v) v.classList.add("hidden"); });
+    document.addEventListener("keydown", e => {
+      if (v.classList.contains("hidden")) return;
+      if (e.key === "Escape") v.classList.add("hidden");
+      if (e.key === "ArrowLeft")  v.querySelector("#fvPrev").click();
+      if (e.key === "ArrowRight") v.querySelector("#fvNext").click();
+    });
+  }
+  const pintar = i => {
+    const lista = v._urls || [];
+    const n = ((i % lista.length) + lista.length) % lista.length;
+    v._i = n;
+    v.querySelector("#fvImg").src = lista[n];
+    v.querySelector("#fvCount").textContent = `${n + 1} / ${lista.length}`;
+    v.querySelector("#fvPrev").classList.toggle("hidden", lista.length < 2);
+    v.querySelector("#fvNext").classList.toggle("hidden", lista.length < 2);
+  };
+  v._urls = total;
+  v.querySelector("#fvPrev").onclick = e => { e.stopPropagation(); pintar(v._i - 1); };
+  v.querySelector("#fvNext").onclick = e => { e.stopPropagation(); pintar(v._i + 1); };
+  pintar(indice);
+  v.classList.remove("hidden");
+}
+
 async function openPreview(seq, row) {
   let m = $("#previewModal");
   if (!m) {
@@ -251,6 +291,7 @@ async function openPreview(seq, row) {
       <div class="modal-head"><h2 id="pmTitle">Secuencia</h2><button class="icon-btn" id="pmClose">✕</button></div>
       <div class="meta-row" id="pmMeta"></div>
       <div class="frames-row" id="pmFrames"></div>
+      <p class="pm-pista">Pulsa un frame para verlo a pantalla completa.</p>
     </div>`;
     document.body.appendChild(m);
     m.addEventListener("click", e => { if (e.target.id === "previewModal") m.classList.add("hidden"); });
@@ -272,11 +313,13 @@ async function openPreview(seq, row) {
 
   fr.innerHTML = "";
   if (urls.length) {
-    urls.forEach(u => {
+    urls.forEach((u, i) => {
       const im = document.createElement("img");
       im.className = "frame-img";
       im.src = u; im.alt = "";
       im.loading = "lazy";
+      im.title = "Ver a pantalla completa";
+      im.addEventListener("click", () => abrirFrameGrande(u, i, urls));
       fr.appendChild(im);
     });
   } else {
@@ -527,14 +570,25 @@ function bind() {
   $("#newUserNotes").addEventListener("keydown", e => { if (e.key === "Enter") addUser(); });
 }
 
+/* Supabase renueva la sesión cada cierto tiempo y avisa. Sin esta guarda el
+   panel se arrancaba otra vez y te devolvía a la primera sección mientras
+   estabas trabajando. */
+let _arrancadoPara = null;
+
 async function init() {
   bind(); bindLogin();
   sb.auth.onAuthStateChange(async (event, session) => {
-    if (session && session.user) await bootSession(session.user);
-    else { state.user = null; showLogin(); }
+    if (session && session.user) {
+      if (_arrancadoPara === session.user.id) return;
+      _arrancadoPara = session.user.id;
+      await bootSession(session.user);
+    } else {
+      _arrancadoPara = null; state.user = null; showLogin();
+    }
   });
   const s = await sbAuth.sbGetSession();
-  if (s) await bootSession(s.user);
-  else showLogin();
+  if (s) {
+    if (_arrancadoPara !== s.user.id) { _arrancadoPara = s.user.id; await bootSession(s.user); }
+  } else showLogin();
 }
 document.addEventListener("DOMContentLoaded", init);

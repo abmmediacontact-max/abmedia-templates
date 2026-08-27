@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../styles.css?v=25" />
-  <link rel="stylesheet" href="admin.css?v=25" />
+  <link rel="stylesheet" href="../styles.css?v=26" />
+  <link rel="stylesheet" href="admin.css?v=26" />
 </head>
 <body>
   <!-- LOGIN -->
@@ -54,7 +54,11 @@
         </div>
       </div>
       <nav class="nav">
-        <a class="nav-item active" data-view="pending">
+        <a class="nav-item active" data-view="review">
+          <svg class="ni" viewBox="0 0 24 24"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z M9 12 L11 14 L15 10"/></svg>
+          <span>Secuencias a revisar</span>
+        </a>
+        <a class="nav-item" data-view="pending">
           <svg class="ni" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15.5 14" fill="none" stroke="#0c0a09" stroke-width="2" stroke-linecap="round"/></svg>
           <span>Usuarios pendientes</span>
           <span class="nav-badge hidden" id="pendingBadge">0</span>
@@ -62,10 +66,6 @@
         <a class="nav-item" data-view="users">
           <svg class="ni" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21 C2 16 5 14 9 14 S16 16 16 21 Z"/><circle cx="17" cy="7" r="3"/><path d="M14 16 C16 14 19 14 22 16 V21"/></svg>
           <span>Usuarios</span>
-        </a>
-        <a class="nav-item" data-view="review">
-          <svg class="ni" viewBox="0 0 24 24"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z M9 12 L11 14 L15 10"/></svg>
-          <span>Secuencias a revisar</span>
         </a>
       </nav>
       <div class="sidebar-foot">
@@ -77,7 +77,7 @@
 
     <main class="content">
       <!-- PENDIENTES DE APROBACIÓN -->
-      <section id="view-pending">
+      <section id="view-pending" class="hidden">
         <header class="topbar">
           <div>
             <h1>Pendientes de aprobación</h1>
@@ -105,7 +105,7 @@
 
 
       <!-- REVIEW -->
-      <section id="view-review" class="hidden">
+      <section id="view-review">
         <header class="topbar">
           <div>
             <h1>Secuencias a revisar</h1>
@@ -118,9 +118,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../supabase.js?v=25"></script>
-  <script src="../templates.js?v=25"></script>
-  <script src="../catalog.js?v=25"></script>
-  <script src="admin.js?v=25"></script>
+  <script src="../supabase.js?v=26"></script>
+  <script src="../templates.js?v=26"></script>
+  <script src="../catalog.js?v=26"></script>
+  <script src="admin.js?v=26"></script>
 </body>
 </html>
