@@ -247,15 +247,18 @@ const storeT = {
   save(t) { try { localStorage.setItem(this.KEY, JSON.stringify(t)); } catch {} }
 };
 
-const persist = () => {
+/* Guarda en el navegador y, si hay sesión, en la nube. */
+async function persistAhora() {
   store.save(state.sequences);
-  if (state.user && state.active) {
-    const ref = state.active;
-    sbDB.sbUpsertSequence(ref).then(row => {
-      if (row && ref && !ref.cloudId) ref.cloudId = row.id;
-    }).catch(() => {});
-  }
-};
+  if (!state.user || !state.active) return;
+  const ref = state.active;
+  const row = await sbDB.sbUpsertSequence(ref);
+  if (row && ref && !ref.cloudId) ref.cloudId = row.id;
+  return row;
+}
+
+/* Igual, pero sin esperar: para los guardados automáticos de cada retoque. */
+const persist = () => { persistAhora().catch(() => {}); };
 
 /* =========================================================================
  *  Construcción de secuencias
@@ -576,8 +579,12 @@ function makeLibCard(item) {
   info.innerHTML = `<div class="card-row"><h3>${item.title}</h3>
       <span class="cat-tag">${cat.name}</span></div>
       ${item.objective ? `<p class="card-obj">${item.objective}</p>` : ""}
-      <button class="btn btn-primary sm full card-cta" data-act="use">Usar esta secuencia →</button>
-      ${item.isUser ? `<button class="btn btn-ghost xs full danger" data-act="del">🗑 Borrar plantilla</button>` : ""}`;
+      <div class="card-acciones">
+        <button class="btn btn-primary sm card-cta" data-act="use">Usar esta secuencia →</button>
+        ${item.isUser ? `<button class="card-borrar" data-act="del" title="Borrar" aria-label="Borrar">
+            <svg viewBox="0 0 24 24"><path d="M4 7 H20 M9 7 V5 a1 1 0 0 1 1 -1 h4 a1 1 0 0 1 1 1 v2 M6.5 7 L7.5 20 a1 1 0 0 0 1 1 h7 a1 1 0 0 0 1 -1 L18 7"/></svg>
+          </button>` : ""}
+      </div>`;
   info.querySelector('[data-act="use"]').addEventListener("click", (e) => {
     e.stopPropagation();
     const created = item.isUser
@@ -1902,10 +1909,20 @@ function bind() {
   $("#insetSize").addEventListener("input", e => { if (curSlide().inset) { curSlide().inset.scale = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); } });
   $("#insetRemove").addEventListener("click", () => { curSlide().inset = null; drawEditor(); refreshActiveThumb(); renderEditPanel(); });
 
-  $("#saveBtn").addEventListener("click", () => {
-    persist(); const b = $("#saveBtn"), prev = b.textContent;
-    b.textContent = "✓ Guardada"; b.disabled = true;
-    setTimeout(() => { b.textContent = prev; b.disabled = false; }, 1400);
+  $("#saveBtn").addEventListener("click", async () => {
+    const b = $("#saveBtn"), prev = b.innerHTML;
+    b.disabled = true; b.textContent = "Guardando…";
+    try {
+      await persistAhora();
+      b.textContent = "✓ Guardada en Mis secuencias";
+      // La biblioteca se repinta: antes había que refrescar la página para
+      // ver la secuencia recién guardada en "Mis secuencias".
+      renderAll();
+    } catch (e) {
+      console.error("guardar", e);
+      b.textContent = "No se ha podido guardar";
+    }
+    setTimeout(() => { b.innerHTML = prev; b.disabled = false; }, 1800);
   });
   $("#submitBtn").addEventListener("click", abrirRevisionModal);
   $("#revisionClose").addEventListener("click", cerrarRevisionModal);

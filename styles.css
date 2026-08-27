@@ -121,7 +121,7 @@ body {
 .nav-item.active .ni { fill: var(--acento); color: var(--acento); }
 
 .sidebar > #newSeq { margin-top: 4px; }
-.sidebar-foot { margin-top: auto; display: flex; align-items: center; gap: 8px; }
+.sidebar-foot { margin-top: 2px; display: flex; align-items: center; gap: 8px; }
 .foot-btn {
     position: relative;
     width: 38px; height: 38px; flex-shrink: 0;
@@ -443,19 +443,31 @@ body {
     background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
     padding: 4px 9px; border-radius: 6px;
 }
-.card-info { padding: 13px 14px 15px; display: flex; flex-direction: column; flex: 1; }
-.card-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.card-info h3 { font-size: 13.5px; font-weight: 600; line-height: 1.3; color: #fff; }
+.card-info { padding: 15px 16px 16px; display: flex; flex-direction: column; flex: 1; gap: 2px; position: relative; }
+.card-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 2px; }
+.card-info h3 { font-size: 14px; font-weight: 600; line-height: 1.35; color: #fff; letter-spacing: -.015em; }
 .review-badge {
     position: absolute; top: 10px; left: 10px;
     font-size: 10px; font-weight: 600; color: #101010;
     background: var(--orange-2); padding: 4px 8px; border-radius: 6px;
 }
 .cat-tag { font-size: 11px; color: var(--orange-2); font-weight: 600; white-space: nowrap; }
-.card-obj { font-size: 12px; color: var(--muted); line-height: 1.4; margin: 8px 0 12px; }
+.card-obj { font-size: 12px; color: var(--muted); line-height: 1.45; margin: 6px 0 14px; }
 /* El botón principal de la tarjeta siempre se ancla al fondo, sin importar
    cuánto ocupe la descripción por encima (misma altura de tarjeta en toda la fila) */
+/* El principal ocupa la fila; el de borrar es sólo una papelera al lado */
 .card-cta { margin-top: auto; }
+.card-acciones { margin-top: auto; display: flex; align-items: stretch; gap: 8px; }
+.card-acciones .card-cta { margin-top: 0; flex: 1; }
+.card-borrar {
+    width: 36px; flex: 0 0 36px;
+    display: grid; place-items: center;
+    border-radius: 10px; cursor: pointer;
+    background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--muted); transition: .15s;
+}
+.card-borrar svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.card-borrar:hover { color: #ff6b6e; border-color: #e5484d; background: rgba(229,72,77,.10); }
 
 .btn.xs { padding: 7px 10px; font-size: 12px; }
 .btn.danger { flex: 0 0 auto; }
@@ -512,9 +524,9 @@ body {
 
 /* ---------------------------- Modal plantillas ------------------------ */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: grid; place-items: center; z-index: 40; padding: 20px; }
-/* El editor está en la capa 50: este aviso va encima para no perder lo
-   que se esté editando. */
-#revisionModal { z-index: 60; background: rgba(0,0,0,.72); }
+/* El editor está en la capa 50: los avisos que se abren desde dentro van
+   encima, para no perder lo que se esté editando. */
+#revisionModal, #saveTplModal { z-index: 60; background: rgba(0,0,0,.72); }
 .modal-box { background: var(--bg-2); border: 1px solid var(--border); border-radius: 18px; width: min(720px, 92vw); padding: 24px; box-shadow: var(--shadow); }
 .modal-box.small { width: min(440px, 92vw); display: flex; flex-direction: column; gap: 14px; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
