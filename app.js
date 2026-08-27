@@ -8,7 +8,6 @@ const state = {
   images: [],
   sequences: [],
   userTemplates: [],
-  publicTemplates: [],
   reviewQueue: [],
   inbox: [],
   active: null,
@@ -488,7 +487,7 @@ function setView(view) {
   try { localStorage.setItem("abmedia_vista", view); } catch {}
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === view));
   $("#avisosTab").classList.toggle("activo", view === "avisos");
-  ["library", "mias", "gallery", "desk", "calendar", "avisos", "admin"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
+  ["library", "mias", "gallery", "desk", "calendar", "avisos"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
   if (view === "avisos") renderAvisos();
   if (view === "mias") renderMias();
   if (view === "library") { state.libraryStage = "categories"; state.libraryCat = null; }
@@ -500,7 +499,6 @@ function renderAll() {
   else if (state.view === "gallery") renderGallery();
   else if (state.view === "desk") renderIdeas();
   else if (state.view === "calendar") renderCalendar();
-  else if (state.view === "admin") renderAdmin();
 }
 
 /* ---------------------------------------------------------------------- *
@@ -1250,34 +1248,6 @@ function calMove(delta) {
   renderCalendar();
 }
 
-/* ---------------------------------------------------------------------- *
- *  ADMIN
- * ---------------------------------------------------------------------- */
-async function renderAdmin() {
-  const grid = $("#adminGrid"); grid.innerHTML = `<p class="empty">Cargando…</p>`;
-  const items = await sbDB.sbFetchTemplates("review");
-  grid.innerHTML = "";
-  if (!items.length) { grid.innerHTML = `<p class="empty">No hay plantillas pendientes.</p>`; return; }
-  items.forEach(row => {
-    const tpl = { id: "r" + row.id, cloudId: row.id, title: row.title, category: row.category, style: row.style, slides: row.slides };
-    const seq = fromTemplate(tpl);
-    const cat = CATEGORIES[tpl.category] || CATEGORIES.venta;
-    const card = document.createElement("div"); card.className = "card";
-    card.appendChild(makeCardCanvas(seq.slides[0], seq.style));
-    const badge = document.createElement("span"); badge.className = "frames-badge"; badge.textContent = `${seq.slides.length} frames`;
-    card.appendChild(badge);
-    const info = document.createElement("div"); info.className = "card-info";
-    info.innerHTML = `<div class="card-row"><h3>${tpl.title}</h3>
-        <span class="cat-tag">${cat.name}</span></div>
-        <p class="card-obj">Enviada para revisión</p>
-        <button class="btn btn-primary sm full" data-act="approve">✅ Aprobar y publicar</button>`;
-    info.querySelector('[data-act="approve"]').addEventListener("click", async () => {
-      await sbDB.sbApproveTemplate(row.id);
-      renderAdmin();
-    });
-    card.appendChild(info); grid.appendChild(card);
-  });
-}
 
 /* =========================================================================
  *  EDITOR

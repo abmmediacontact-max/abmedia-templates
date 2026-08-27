@@ -11,7 +11,7 @@
   <!-- Figtree = interfaz (misma que abmedia.es). El resto las usa el
        generador de stories en el canvas, no se pueden quitar. -->
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=29" />
+  <link rel="stylesheet" href="styles.css?v=30" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -82,9 +82,9 @@
           <svg class="ni" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><rect x="3" y="5" width="18" height="5" fill="#0c0a09"/><rect x="6.5" y="3" width="2" height="4" rx="1"/><rect x="15.5" y="3" width="2" height="4" rx="1"/><circle cx="8" cy="14" r="1.1" fill="#0c0a09"/><circle cx="12" cy="14" r="1.1" fill="#0c0a09"/><circle cx="16" cy="14" r="1.1" fill="#0c0a09"/><circle cx="8" cy="18" r="1.1" fill="#0c0a09"/><circle cx="12" cy="18" r="1.1" fill="#0c0a09"/></svg>
           <span>Calendario de stories</span>
         </a>
-        <a class="nav-item hidden" data-view="admin" id="adminTab">
+        <a class="nav-item hidden" id="adminTab" href="/admin/">
           <svg class="ni" viewBox="0 0 24 24"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z"/></svg>
-          <span>Revisar enviadas</span>
+          <span>Panel de ABMedia</span>
         </a>
       </nav>
       <button class="btn btn-primary full" id="newSeq" data-tour="new">＋ Nueva secuencia</button>
@@ -228,16 +228,6 @@
         <div id="avisosList" class="avisos-list"></div>
       </section>
 
-      <!-- ---------- VISTA: ADMIN ---------- -->
-      <section id="view-admin" class="hidden">
-        <header class="topbar">
-          <div>
-            <h1>Revisar enviadas</h1>
-            <p>Plantillas enviadas por los clientes pendientes de aprobación.</p>
-          </div>
-        </header>
-        <div id="adminGrid" class="grid"></div>
-      </section>
     </main>
   </div>
 
@@ -524,9 +514,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase.js?v=29"></script>
-  <script src="templates.js?v=29"></script>
-  <script src="catalog.js?v=29"></script>
-  <script src="app.js?v=29"></script>
+  <script src="supabase.js?v=30"></script>
+  <script src="templates.js?v=30"></script>
+  <script src="catalog.js?v=30"></script>
+  <script src="app.js?v=30"></script>
 </body>
 </html>
