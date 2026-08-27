@@ -62,9 +62,21 @@ function makeCardCanvas(slide, style, w = 270, h = 480) {
  *  IndexedDB para imágenes (persistente entre sesiones)
  * ========================================================================= */
 const imgDB = {
-  DB_NAME: "abmedia_images_v2",
+  // Una base por cuenta: si dos personas usan el mismo navegador, cada una
+  // ve sólo sus fotos. Antes compartían galería sin querer.
+  DB_BASE: "abmedia_images_v2",
+  _uid: null,
+  get DB_NAME() { return this._uid ? `${this.DB_BASE}_${this._uid}` : this.DB_BASE; },
   STORE: "files",
   _db: null,
+  /* Se llama al iniciar sesión. Si la cuenta cambia, se cierra la base
+     anterior para no mezclar galerías. */
+  usarCuenta(uid) {
+    if (this._uid === uid) return;
+    if (this._db) { try { this._db.close(); } catch {} }
+    this._db = null;
+    this._uid = uid || null;
+  },
   async open() {
     if (this._db) return this._db;
     // Migración: borra la v1 antigua (autoIncrement) para evitar duplicados acumulados
@@ -280,6 +292,37 @@ function updateImgCount() {
   const n = state.images.length;
   const el = $("#galCount"); if (el) el.textContent = `${n} ${n === 1 ? "imagen" : "imágenes"}`;
 }
+/* La galería vieja era común a todo el navegador. La primera vez que alguien
+   entra tras el cambio, sus fotos se mueven a su propia galería y la común se
+   borra, para que no queden fotos de nadie sueltas. */
+async function migrarGaleriaAntigua() {
+  const YA = "abmedia_galeria_migrada";
+  if (localStorage.getItem(YA)) return;
+  try {
+    const filas = await new Promise((res) => {
+      const req = indexedDB.open("abmedia_images_v2", 1);
+      req.onupgradeneeded = () => { try { req.transaction.abort(); } catch {} res([]); };
+      req.onerror = () => res([]);
+      req.onsuccess = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains("files")) { db.close(); return res([]); }
+        const tx = db.transaction("files", "readonly");
+        const g = tx.objectStore("files").getAll();
+        g.onsuccess = () => { const r = g.result || []; db.close(); res(r); };
+        g.onerror = () => { db.close(); res([]); };
+      };
+    });
+    for (const r of filas) {
+      if (r && r.blob) await imgDB.put(r.name, r.blob, r.key);
+    }
+    if (filas.length) console.info(`Galería: ${filas.length} fotos movidas a tu cuenta.`);
+    try { indexedDB.deleteDatabase("abmedia_images_v2"); } catch {}
+  } catch (e) {
+    console.warn("migrarGaleriaAntigua", e);
+  }
+  localStorage.setItem(YA, "1");
+}
+
 async function loadImagesFromDB() {
   state.images = []; // limpia siempre: si bootLoggedIn se llama 2 veces no se duplica
   try {
@@ -318,7 +361,8 @@ async function deleteImage(index) {
 function setView(view) {
   state.view = view;
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === view));
-  ["library", "gallery", "desk", "calendar", "admin"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
+  ["library", "gallery", "desk", "calendar", "avisos", "admin"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
+  if (view === "avisos") renderAvisos();
   if (view === "library") { state.libraryStage = "categories"; state.libraryCat = null; }
   renderAll();
 }
@@ -1358,25 +1402,35 @@ function openSaveTplModal() {
  * Antes esto sólo marcaba la secuencia como "submitted", pero la cola del
  * admin lee la tabla de plantillas: el envío no llegaba a ninguna parte.
  * Ahora crea la plantilla candidata, que es lo que ABMedia revisa y publica. */
-async function enviarARevision() {
-  const s = state.active;
-  if (!s) return;
+function abrirRevisionModal() {
+  if (!state.active) return;
   if (!state.user) {
     alert("Necesitas haber iniciado sesión para enviar una secuencia a revisión.");
     return;
   }
-  const btn = $("#submitBtn");
-  const textoPrevio = btn.textContent;
+  $("#revisionShare").checked = false;
+  $("#revisionModal").classList.remove("hidden");
+}
+function cerrarRevisionModal() { $("#revisionModal").classList.add("hidden"); }
+
+async function enviarARevision() {
+  const s = state.active;
+  if (!s || !state.user) return;
+  const compartir = $("#revisionShare").checked;
+  const btn = $("#revisionOk");
   btn.disabled = true;
   btn.textContent = "Enviando…";
 
+  // Sólo viajan los textos y la estructura. Las fotos no salen del dispositivo.
   const tpl = {
     title: s.title || "Secuencia",
     category: s.category,
     style: JSON.parse(JSON.stringify(s.style)),
     slides: s.slides.map(sl => ({ body: sl.body, pos: { ...sl.pos }, align: sl.align, overlay: sl.overlay })),
     submitted: true,
-    is_public: false
+    is_public: false,
+    share_ok: compartir,
+    review_status: "pendiente"
   };
 
   try {
@@ -1384,16 +1438,75 @@ async function enviarARevision() {
     if (!row) throw new Error("La base de datos no ha aceptado el envío.");
     s.submitted = true;
     persist();
-    btn.textContent = "✓ Enviada";
-    alert("¡Enviada a revisión! ABMedia la verá en su panel y decidirá si la publica para todos.");
+    cerrarRevisionModal();
+    alert("¡Enviada! Cuando ABMedia la revise te avisaremos en el apartado Avisos.");
   } catch (e) {
     console.error("enviarARevision", e);
     alert("No se ha podido enviar: " + (e.message || e));
-    btn.textContent = textoPrevio;
   } finally {
     btn.disabled = false;
-    setTimeout(() => { btn.textContent = textoPrevio; }, 2500);
+    btn.textContent = "Enviar";
   }
+}
+
+/* --------------------------- Avisos del cliente ----------------------- *
+ * Aquí ve el veredicto de cada secuencia que mandó a revisión.
+ * ---------------------------------------------------------------------- */
+const AVISO_ESTADOS = {
+  aprobada:  { icono: "✅", texto: "Aprobada",                       clase: "ok" },
+  publicada: { icono: "✅", texto: "Aprobada y añadida a la biblioteca", clase: "ok guardada" },
+  cambios:   { icono: "❌", texto: "Hay cambios que hacer",           clase: "ko" }
+};
+
+async function contarAvisos() {
+  if (!state.user) return;
+  const filas = await sbDB.sbFetchAvisos();
+  state.avisos = filas;
+  const sinLeer = filas.filter(f => !f.seen_by_owner).length;
+  $("#avisosTab").classList.toggle("hidden", filas.length === 0);
+  const b = $("#avisosBadge");
+  b.textContent = sinLeer;
+  b.classList.toggle("hidden", sinLeer === 0);
+}
+
+async function renderAvisos() {
+  const cont = $("#avisosList");
+  cont.innerHTML = `<p class="empty">Cargando…</p>`;
+  const filas = await sbDB.sbFetchAvisos();
+  state.avisos = filas;
+  if (!filas.length) {
+    cont.innerHTML = `<p class="empty">Todavía no has enviado ninguna secuencia a revisión.</p>`;
+    return;
+  }
+  cont.innerHTML = "";
+  filas.forEach(f => cont.appendChild(filaAviso(f)));
+
+  // Al abrir la sección se dan por leídos
+  const sinLeer = filas.filter(f => !f.seen_by_owner);
+  if (sinLeer.length) {
+    await Promise.all(sinLeer.map(f => sbDB.sbMarcarAvisoLeido(f.id)));
+    contarAvisos();
+  }
+}
+
+function filaAviso(f) {
+  const e = AVISO_ESTADOS[f.review_status] || AVISO_ESTADOS.aprobada;
+  const cuando = f.reviewed_at ? new Date(f.reviewed_at).toLocaleDateString("es-ES") : "";
+  const el = document.createElement("div");
+  el.className = "aviso" + (f.seen_by_owner ? "" : " nuevo");
+  el.innerHTML =
+    `<div class="aviso-top">
+       <span class="aviso-icono ${e.clase}">${e.icono}</span>
+       <div class="aviso-txt">
+         <strong>${escapeHtml(f.title || "Secuencia")}</strong>
+         <span class="aviso-estado ${e.clase}">${e.texto}</span>
+       </div>
+       <span class="aviso-fecha">${cuando}</span>
+     </div>` +
+    (f.review_note
+      ? `<p class="aviso-nota">${escapeHtml(f.review_note).replace(/\n/g, "<br>")}</p>`
+      : "");
+  return el;
 }
 
 async function confirmSaveTpl() {
@@ -1678,7 +1791,13 @@ function bind() {
     b.textContent = "✓ Guardada"; b.disabled = true;
     setTimeout(() => { b.textContent = prev; b.disabled = false; }, 1400);
   });
-  $("#submitBtn").addEventListener("click", enviarARevision);
+  $("#submitBtn").addEventListener("click", abrirRevisionModal);
+  $("#revisionClose").addEventListener("click", cerrarRevisionModal);
+  $("#revisionCancel").addEventListener("click", cerrarRevisionModal);
+  $("#revisionOk").addEventListener("click", enviarARevision);
+  $("#revisionModal").addEventListener("click", e => {
+    if (e.target.id === "revisionModal") cerrarRevisionModal();
+  });
   $("#tplSaveBtn").addEventListener("click", openSaveTplModal);
   $("#saveTplClose").addEventListener("click", () => $("#saveTplModal").classList.add("hidden"));
   $("#saveTplCancel").addEventListener("click", () => $("#saveTplModal").classList.add("hidden"));
@@ -1751,6 +1870,14 @@ async function bootLoggedIn(user) {
   document.getElementById("userEmail").textContent = user.email || "";
   document.getElementById("adminTab").classList.toggle("hidden", !state.isAdminUser);
 
+  // Cada cuenta tiene su propia galería en este navegador
+  imgDB.usarCuenta(user.id);
+  // Pide al navegador que no borre las fotos si va justo de espacio
+  try {
+    if (navigator.storage && navigator.storage.persist) await navigator.storage.persist();
+  } catch {}
+  await migrarGaleriaAntigua();
+
   // Carga imágenes persistidas ANTES de pintar
   await loadImagesFromDB();
 
@@ -1773,6 +1900,7 @@ async function bootLoggedIn(user) {
   rebuildScheduleFromSequences();
 
   setView("library");
+  contarAvisos();
   setTimeout(() => startTour(false), 600);
 }
 
@@ -1813,7 +1941,14 @@ function bindLogin() {
       }
     } catch (e) { err.textContent = e.message || "Error al iniciar sesión."; }
   });
-  document.getElementById("logoutBtn").addEventListener("click", async () => { await sbAuth.sbSignOut(); });
+  document.getElementById("logoutBtn").addEventListener("click", async () => {
+    // Al salir se suelta la galería de esta cuenta: si entra otra persona en
+    // el mismo navegador no ve ni por un momento las fotos de la anterior.
+    state.images = [];
+    state.avisos = [];
+    imgDB.usarCuenta(null);
+    await sbAuth.sbSignOut();
+  });
 }
 
 let _bootingFor = null;

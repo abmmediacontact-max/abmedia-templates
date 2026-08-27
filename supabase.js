@@ -72,10 +72,11 @@ async function sbDeleteSequence(cloudId) {
 /* ------------------------- Plantillas ---------------------------------- */
 
 async function sbFetchTemplates(scope = "mine") {
-  // scope: "mine" => propias, "public" => aprobadas, "review" => admin: pendientes
+  // scope: "mine" => propias, "public" => aprobadas,
+  //        "review" => admin: las que esperan veredicto
   let q = sb.from("templates").select("*").order("created_at", { ascending: false });
   if (scope === "public") q = q.eq("is_public", true);
-  else if (scope === "review") q = q.eq("submitted", true).eq("is_public", false);
+  else if (scope === "review") q = q.eq("submitted", true).eq("review_status", "pendiente");
   const { data, error } = await q;
   if (error) { console.error(error); return []; }
   return data || [];
@@ -88,6 +89,8 @@ async function sbUpsertTemplate(tpl) {
     style: tpl.style, slides: tpl.slides,
     submitted: !!tpl.submitted, is_public: !!tpl.is_public
   };
+  if (tpl.share_ok !== undefined) row.share_ok = !!tpl.share_ok;
+  if (tpl.review_status) row.review_status = tpl.review_status;
   if (!row.id) delete row.id;
   const { data, error } = await sb.from("templates").upsert(row).select().single();
   if (error) { console.error("upsert tpl", error); return null; }
@@ -99,10 +102,35 @@ async function sbDeleteTemplate(cloudId) {
   await sb.from("templates").delete().eq("id", cloudId);
 }
 
-async function sbApproveTemplate(cloudId) {
-  const { data, error } = await sb.from("templates").update({ is_public: true }).eq("id", cloudId).select().single();
-  if (error) { console.error(error); return null; }
+/* Veredicto de ABMedia sobre una secuencia enviada.
+ *   estado: "aprobada" | "publicada" | "cambios"
+ *   nota:   comentario para el cliente (obligatorio si se piden cambios) */
+async function sbRevisarTemplate(cloudId, estado, nota) {
+  const cambios = {
+    review_status: estado,
+    review_note: nota || null,
+    reviewed_at: new Date().toISOString(),
+    seen_by_owner: false,
+    is_public: estado === "publicada"
+  };
+  const { data, error } = await sb.from("templates")
+    .update(cambios).eq("id", cloudId).select().single();
+  if (error) { console.error("sbRevisarTemplate", error); return null; }
   return data;
+}
+
+/* Avisos del cliente: sus envíos ya revisados que todavía no ha leído. */
+async function sbFetchAvisos() {
+  const { data, error } = await sb.from("templates")
+    .select("id,title,category,review_status,review_note,reviewed_at,seen_by_owner")
+    .neq("review_status", "pendiente")
+    .order("reviewed_at", { ascending: false });
+  if (error) { console.error("sbFetchAvisos", error); return []; }
+  return data || [];
+}
+
+async function sbMarcarAvisoLeido(cloudId) {
+  await sb.from("templates").update({ seen_by_owner: true }).eq("id", cloudId);
 }
 
 /* ---- Whitelist (allowed_users) ---- */
@@ -116,4 +144,4 @@ async function sbIsAllowed(email) {
 }
 
 window.sbAuth = { sbGetSession, sbSignIn, sbSignUp, sbSignOut, isAdmin, sbIsAllowed };
-window.sbDB = { sbFetchSequences, sbUpsertSequence, sbDeleteSequence, sbFetchTemplates, sbUpsertTemplate, sbDeleteTemplate, sbApproveTemplate };
+window.sbDB = { sbFetchSequences, sbUpsertSequence, sbDeleteSequence, sbFetchTemplates, sbUpsertTemplate, sbDeleteTemplate, sbRevisarTemplate, sbFetchAvisos, sbMarcarAvisoLeido };

@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../styles.css?v=14" />
-  <link rel="stylesheet" href="admin.css?v=14" />
+  <link rel="stylesheet" href="../styles.css?v=15" />
+  <link rel="stylesheet" href="admin.css?v=15" />
 </head>
 <body>
   <!-- LOGIN -->
@@ -56,7 +56,7 @@
       <nav class="nav">
         <a class="nav-item active" data-view="pending">
           <svg class="ni" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7 V12 L15.5 14" fill="none" stroke="#0c0a09" stroke-width="2" stroke-linecap="round"/></svg>
-          <span>Pendientes</span>
+          <span>Usuarios pendientes</span>
           <span class="nav-badge hidden" id="pendingBadge">0</span>
         </a>
         <a class="nav-item" data-view="users">
@@ -69,7 +69,7 @@
         </a>
         <a class="nav-item" data-view="review">
           <svg class="ni" viewBox="0 0 24 24"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z M9 12 L11 14 L15 10"/></svg>
-          <span>Plantillas pendientes</span>
+          <span>Secuencias a revisar</span>
         </a>
       </nav>
       <div class="sidebar-foot">
@@ -125,8 +125,8 @@
       <section id="view-review" class="hidden">
         <header class="topbar">
           <div>
-            <h1>Plantillas pendientes</h1>
-            <p>Plantillas enviadas por los clientes para que las apruebes y publiques.</p>
+            <h1>Secuencias a revisar</h1>
+            <p>Lo que te mandan tus clientes para que les digas si está bien planteado.</p>
           </div>
         </header>
         <div id="reviewGrid" class="grid"></div>
@@ -135,9 +135,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../supabase.js?v=14"></script>
-  <script src="../templates.js?v=14"></script>
-  <script src="../catalog.js?v=14"></script>
-  <script src="admin.js?v=14"></script>
+  <script src="../supabase.js?v=15"></script>
+  <script src="../templates.js?v=15"></script>
+  <script src="../catalog.js?v=15"></script>
+  <script src="admin.js?v=15"></script>
 </body>
 </html>

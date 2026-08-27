@@ -87,3 +87,48 @@
   .pending-row .nt { grid-column: 1 / -1; }
   .pending-row .when { display: none; }
 }
+
+/* ------------------- Secuencias a revisar ------------------------------ */
+/* La tarjeta es más ancha para que los tres botones se lean bien */
+#reviewGrid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.review-card .card-info { padding-bottom: 6px; }
+.share-ok  { font-size: 11.5px; color: #6ee79a; font-weight: 600; }
+.share-no  { font-size: 11.5px; color: var(--faint); font-weight: 600; }
+
+.review-tools { display: flex; flex-direction: column; gap: 10px; padding: 0 14px 14px; }
+
+/* Los tres veredictos, del mismo tamaño y con la estética del resto */
+.verdicto { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.vbtn {
+    position: relative;
+    height: 42px; border-radius: 12px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    transition: .15s;
+}
+.vbtn svg {
+    width: 19px; height: 19px;
+    fill: none; stroke: currentColor;
+    stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round;
+}
+.vbtn svg.v2 { width: 15px; height: 15px; fill: currentColor; stroke: none; }
+.vbtn.ok      { color: #6ee79a; }
+.vbtn.guardar { color: #6ee79a; }
+.vbtn.ko      { color: #ff8f92; }
+.vbtn:hover:not(:disabled) {
+    border-color: currentColor;
+    background: rgba(255,255,255,.06);
+    transform: translateY(-1px);
+}
+.vbtn:disabled { opacity: .3; cursor: not-allowed; }
+
+.comentario { display: flex; flex-direction: column; gap: 8px; }
+.comentario.hidden { display: none; }
+.comentario textarea {
+    font-family: inherit; font-size: 13px; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px; resize: vertical; line-height: 1.5;
+}
+.comentario textarea:focus { outline: none; border-color: rgba(255,255,255,.28); }
+.comentario-row { display: flex; gap: 8px; }
+.comentario-row .btn { flex: 1; }

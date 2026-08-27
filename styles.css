@@ -955,3 +955,58 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.02); }
     .peek-actions { justify-content: stretch; }
     .peek-actions .btn { flex: 1; }
 }
+
+/* ------------------ Enviar a revisión: consentimiento ------------------ */
+.consent {
+    display: flex; align-items: flex-start; gap: 11px;
+    background: linear-gradient(180deg, rgba(255,255,255,.03), transparent);
+    border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; cursor: pointer;
+}
+.consent input[type=checkbox] {
+    appearance: none; -webkit-appearance: none;
+    width: 19px; height: 19px; flex-shrink: 0; margin-top: 1px;
+    border: 1px solid rgba(255,255,255,.28); border-radius: 6px;
+    background: rgba(0,0,0,.35); cursor: pointer; position: relative;
+    transition: .15s;
+}
+.consent input[type=checkbox]:checked {
+    background: var(--acento); border-color: var(--acento);
+}
+.consent input[type=checkbox]:checked::after {
+    content: ""; position: absolute; left: 6px; top: 2px;
+    width: 5px; height: 10px; border: solid #fff;
+    border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.consent span { font-size: 13.5px; line-height: 1.55; color: var(--text); }
+.consent em { display: block; margin-top: 5px; font-style: normal; font-size: 12px; color: var(--faint); }
+
+/* ---------------------------- Avisos ---------------------------------- */
+.nav-badge {
+    margin-left: auto;
+    min-width: 20px; height: 20px; padding: 0 6px;
+    display: grid; place-items: center; border-radius: 999px;
+    background: var(--acento); color: #fff;
+    font-size: 11px; font-weight: 700; line-height: 1;
+}
+.avisos-list { display: flex; flex-direction: column; gap: 10px; max-width: 720px; }
+.aviso {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; padding: 15px 17px;
+}
+/* Los que aún no había leído se marcan con un filo de acento */
+.aviso.nuevo { box-shadow: inset 2px 0 0 var(--acento); }
+.aviso-top { display: flex; align-items: center; gap: 12px; }
+.aviso-icono { font-size: 17px; line-height: 1; flex-shrink: 0; }
+.aviso-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.aviso-txt strong { font-size: 14.5px; font-weight: 600; }
+.aviso-estado { font-size: 12.5px; color: var(--muted); }
+.aviso-estado.ok { color: #6ee79a; }
+.aviso-estado.ko { color: #ff8f92; }
+.aviso-fecha { font-size: 11.5px; color: var(--faint); white-space: nowrap; }
+.aviso-nota {
+    margin-top: 12px; padding: 12px 14px;
+    background: rgba(255,255,255,.04); border-radius: 10px;
+    border-left: 2px solid var(--acento);
+    font-size: 13.5px; line-height: 1.6; color: var(--text);
+}

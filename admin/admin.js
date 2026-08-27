@@ -274,49 +274,116 @@ async function renderReview() {
   const grid = $("#reviewGrid"); grid.innerHTML = `<p class="empty">Cargando…</p>`;
   const items = await sbDB.sbFetchTemplates("review");
   grid.innerHTML = "";
-  if (!items.length) { grid.innerHTML = `<p class="empty">No hay plantillas pendientes.</p>`; return; }
-  items.forEach(row => {
-    const seq = {
-      title: row.title || "Plantilla",
-      category: row.category || "venta",
-      style: { ...DEFAULT_STYLE, ...(row.style || {}) },
-      slides: (row.slides || []).map(s => ({ ...s, bg: s.bg || { zoom: 1, ox: 0, oy: 0 }, bgIndex: -1, inset: null }))
-    };
-    const cat = CATEGORIES[seq.category] || CATEGORIES.venta;
-    const card = document.createElement("div"); card.className = "card admin-card";
-    const cv = document.createElement("canvas"); cv.width = 270; cv.height = 480; cv.className = "card-canvas";
-    if (seq.slides[0]) drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height, seq.style);
-    card.appendChild(cv);
-    const badge = document.createElement("span"); badge.className = "frames-badge"; badge.textContent = `${seq.slides.length} frames`;
-    card.appendChild(badge);
-    const info = document.createElement("div"); info.className = "card-info";
-    info.innerHTML = `<div class="card-row"><h3>${escapeHtml(seq.title)}</h3><span class="cat-tag">${cat.name}</span></div>
-      <p class="card-obj">Enviada para revisión</p>`;
-    card.appendChild(info);
-    const tools = document.createElement("div"); tools.className = "mine-tools";
-    tools.innerHTML = `
-      <button class="btn btn-ghost xs" data-act="preview">Ver frames</button>
-      <button class="btn btn-primary xs" data-act="approve">✅ Publicar</button>
-      <button class="btn btn-ghost xs danger" data-act="reject">Rechazar</button>`;
-    tools.querySelector('[data-act="preview"]').addEventListener("click", e => { e.stopPropagation(); openPreview(seq); });
-    tools.querySelector('[data-act="approve"]').addEventListener("click", async e => {
-      e.stopPropagation();
-      await sbDB.sbApproveTemplate(row.id);
-      renderReview();
-    });
-    tools.querySelector('[data-act="reject"]').addEventListener("click", async e => {
-      e.stopPropagation();
-      if (!confirm("¿Rechazar y borrar esta plantilla enviada?")) return;
-      await sbDB.sbDeleteTemplate(row.id);
-      renderReview();
-    });
-    card.appendChild(tools); grid.appendChild(card);
-  });
+  if (!items.length) { grid.innerHTML = `<p class="empty">No hay ninguna secuencia esperando revisión.</p>`; return; }
+  const usuarios = await fetchUsuariosRegistrados();
+  const porId = {};
+  usuarios.forEach(u => { porId[u.id] = u.email; });
+  items.forEach(row => grid.appendChild(tarjetaRevision(row, porId)));
 }
 
-/* -------------------- Render mínimo de slide ----------------------- */
-const _images = []; // admin no tiene galería; los previews salen sin fotos
-const SAFE = { top: 0.075, bottom: 0.82, left: 0.05, right: 0.95 };
+function tarjetaRevision(row, emailsPorId) {
+  const seq = {
+    title: row.title || "Secuencia",
+    category: row.category || "venta",
+    style: { ...DEFAULT_STYLE, ...(row.style || {}) },
+    slides: (row.slides || []).map(s => ({ ...s, bg: s.bg || { zoom: 1, ox: 0, oy: 0 }, bgIndex: -1, inset: null }))
+  };
+  const cat = CATEGORIES[seq.category] || CATEGORIES.venta;
+
+  const card = document.createElement("div");
+  card.className = "card admin-card review-card";
+
+  const cv = document.createElement("canvas");
+  cv.width = 270; cv.height = 480; cv.className = "card-canvas";
+  if (seq.slides[0]) drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height, seq.style);
+  card.appendChild(cv);
+
+  const badge = document.createElement("span");
+  badge.className = "frames-badge";
+  badge.textContent = `${seq.slides.length} frames`;
+  card.appendChild(badge);
+
+  const quien = emailsPorId[row.owner] || "cliente";
+  const permiso = row.share_ok
+    ? `<span class="share-ok">Autoriza compartirla</span>`
+    : `<span class="share-no">No autoriza compartirla</span>`;
+
+  const info = document.createElement("div");
+  info.className = "card-info";
+  info.innerHTML =
+    `<div class="card-row"><h3>${escapeHtml(seq.title)}</h3><span class="cat-tag">${cat.name}</span></div>
+     <p class="card-obj">${escapeHtml(quien)}</p>
+     <p class="card-obj">${permiso}</p>`;
+  card.appendChild(info);
+
+  const tools = document.createElement("div");
+  tools.className = "review-tools";
+  tools.innerHTML = `
+    <button class="btn btn-ghost xs full" data-act="preview">Ver frames</button>
+    <div class="verdicto">
+      <button class="vbtn ok"       data-act="aprobar"  title="Está bien">
+        <svg viewBox="0 0 24 24"><path d="M4 12.5 L9.5 18 L20 6.5"/></svg>
+      </button>
+      <button class="vbtn guardar"  data-act="publicar" title="Está bien y la añado a la biblioteca"${row.share_ok ? "" : " disabled"}>
+        <svg viewBox="0 0 24 24"><path d="M4 12.5 L9.5 18 L20 6.5"/></svg>
+        <svg class="v2" viewBox="0 0 24 24"><path d="M6 3 H18 V21 L12 16.5 L6 21 Z"/></svg>
+      </button>
+      <button class="vbtn ko"       data-act="cambios"  title="Hay cambios que hacer">
+        <svg viewBox="0 0 24 24"><path d="M6 6 L18 18 M18 6 L6 18"/></svg>
+      </button>
+    </div>
+    <div class="comentario hidden">
+      <textarea rows="4" placeholder="Qué cambiarías. Ej: en el frame 1 añadiría…, el 2 lo quitaría, el CTA del 3 lo haría más directo."></textarea>
+      <div class="comentario-row">
+        <button class="btn btn-ghost xs" data-act="cancelar">Cancelar</button>
+        <button class="btn btn-primary xs" data-act="enviar-cambios">Enviar comentario</button>
+      </div>
+    </div>`;
+
+  const zona = tools.querySelector(".comentario");
+  const area = zona.querySelector("textarea");
+
+  tools.querySelector('[data-act="preview"]').addEventListener("click", e => {
+    e.stopPropagation(); openPreview(seq);
+  });
+
+  async function veredicto(estado, nota) {
+    const res = await sbDB.sbRevisarTemplate(row.id, estado, nota);
+    if (!res) { alert("No se ha podido guardar la revisión."); return; }
+    // El email al cliente lo dispara la base de datos, no el navegador:
+    // así la clave de envío no viaja nunca al front.
+    renderReview();
+  }
+
+  tools.querySelector('[data-act="aprobar"]').addEventListener("click", e => {
+    e.stopPropagation(); veredicto("aprobada", null);
+  });
+  tools.querySelector('[data-act="publicar"]').addEventListener("click", e => {
+    e.stopPropagation();
+    if (!row.share_ok) {
+      alert("Este cliente no ha autorizado compartir esta secuencia en la biblioteca.");
+      return;
+    }
+    veredicto("publicada", null);
+  });
+  tools.querySelector('[data-act="cambios"]').addEventListener("click", e => {
+    e.stopPropagation();
+    zona.classList.remove("hidden");
+    area.focus();
+  });
+  tools.querySelector('[data-act="cancelar"]').addEventListener("click", e => {
+    e.stopPropagation(); zona.classList.add("hidden"); area.value = "";
+  });
+  tools.querySelector('[data-act="enviar-cambios"]').addEventListener("click", e => {
+    e.stopPropagation();
+    const nota = area.value.trim();
+    if (!nota) { alert("Escribe qué hay que cambiar: es lo que va a leer el cliente."); area.focus(); return; }
+    veredicto("cambios", nota);
+  });
+
+  card.appendChild(tools);
+  return card;
+}
 
 function drawSlide(c, slide, w, h, style) {
   const scale = w / 1080;
