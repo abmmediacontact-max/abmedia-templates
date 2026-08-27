@@ -345,17 +345,66 @@ async function openPreview(seq, row) {
  * Lo que está publicado para todos. Desde aquí se retoca o se retira: antes,
  * una vez publicada una secuencia no había forma de tocarla.
  * ----------------------------------------------------------------------- */
-async function renderBiblioteca() {
+let _biblio = null;              // lo traído de la base de datos
+state.biblioCat = "todas";
+state.biblioBusca = "";
+
+async function renderBiblioteca({ refrescar = true } = {}) {
   const grid = $("#biblioGrid");
-  grid.innerHTML = `<p class="empty">Cargando…</p>`;
-  const items = await sbDB.sbFetchTemplates("public");
-  $("#biblioCount").textContent = `${items.length} ${items.length === 1 ? "secuencia" : "secuencias"}`;
+  if (refrescar || !_biblio) {
+    grid.innerHTML = `<p class="empty">Cargando…</p>`;
+    _biblio = await sbDB.sbFetchTemplates("public");
+  }
+  pintarFiltrosBiblio();
+
+  const q = (state.biblioBusca || "").trim().toLowerCase();
+  const lista = _biblio.filter(r => {
+    if (state.biblioCat !== "todas" && r.category !== state.biblioCat) return false;
+    if (q && !(r.title || "").toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  $("#biblioCount").textContent =
+    lista.length === _biblio.length
+      ? `${_biblio.length} ${_biblio.length === 1 ? "secuencia" : "secuencias"}`
+      : `${lista.length} de ${_biblio.length}`;
+
   grid.innerHTML = "";
-  if (!items.length) {
-    grid.innerHTML = `<p class="empty">Todavía no has publicado ninguna secuencia en la biblioteca.</p>`;
+  if (!_biblio.length) {
+    grid.innerHTML = `<p class="empty">Todavía no hay ninguna secuencia en la biblioteca.</p>`;
     return;
   }
-  items.forEach(row => grid.appendChild(tarjetaBiblioteca(row)));
+  if (!lista.length) {
+    grid.innerHTML = `<p class="empty">Ninguna secuencia coincide con esa búsqueda.</p>`;
+    return;
+  }
+  lista.forEach(row => grid.appendChild(tarjetaBiblioteca(row)));
+}
+
+function pintarFiltrosBiblio() {
+  const box = $("#biblioCats");
+  if (box.dataset.listo) {
+    $$("#biblioCats .seg").forEach(b =>
+      b.classList.toggle("active", b.dataset.cat === state.biblioCat));
+    return;
+  }
+  const cuenta = k => _biblio.filter(r => r.category === k).length;
+  box.innerHTML =
+    `<button class="seg active" data-cat="todas">Todas</button>` +
+    Object.entries(CATEGORIES)
+      .map(([k, c]) => `<button class="seg" data-cat="${k}">${c.name} <em>${cuenta(k)}</em></button>`)
+      .join("");
+  $$("#biblioCats .seg").forEach(b => b.addEventListener("click", () => {
+    state.biblioCat = b.dataset.cat;
+    renderBiblioteca({ refrescar: false });
+  }));
+  let t = null;
+  $("#biblioBuscar").addEventListener("input", e => {
+    clearTimeout(t);
+    const v = e.target.value;
+    t = setTimeout(() => { state.biblioBusca = v; renderBiblioteca({ refrescar: false }); }, 180);
+  });
+  box.dataset.listo = "1";
 }
 
 function tarjetaBiblioteca(row) {

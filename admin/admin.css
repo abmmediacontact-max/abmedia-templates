@@ -220,3 +220,23 @@
     border-radius: 9px; padding: 9px 11px; width: 100%;
 }
 .biblio-edit input:focus, .biblio-edit select:focus { outline: none; border-color: rgba(255,255,255,.28); }
+
+/* ------------------- Filtros de la biblioteca -------------------------- */
+.biblio-filtros {
+    display: flex; align-items: center; gap: 14px;
+    flex-wrap: wrap; margin-bottom: 22px;
+}
+.biblio-buscar {
+    font-family: inherit; font-size: 14px; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 999px; padding: 11px 18px;
+    min-width: 260px; flex: 0 1 320px;
+}
+.biblio-buscar::placeholder { color: var(--faint); }
+.biblio-buscar:focus { outline: none; border-color: rgba(255,255,255,.28); }
+#biblioCats { margin-bottom: 0; flex-wrap: wrap; }
+#biblioCats .seg em {
+    font-style: normal; font-size: 11px; color: var(--faint);
+    margin-left: 5px;
+}
+#biblioCats .seg.active em { color: var(--muted); }
