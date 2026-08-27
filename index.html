@@ -11,7 +11,7 @@
   <!-- Figtree = interfaz (misma que abmedia.es). El resto las usa el
        generador de stories en el canvas, no se pueden quitar. -->
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=16" />
+  <link rel="stylesheet" href="styles.css?v=18" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -78,11 +78,6 @@
           <svg class="ni" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><rect x="3" y="5" width="18" height="5" fill="#0c0a09"/><rect x="6.5" y="3" width="2" height="4" rx="1"/><rect x="15.5" y="3" width="2" height="4" rx="1"/><circle cx="8" cy="14" r="1.1" fill="#0c0a09"/><circle cx="12" cy="14" r="1.1" fill="#0c0a09"/><circle cx="16" cy="14" r="1.1" fill="#0c0a09"/><circle cx="8" cy="18" r="1.1" fill="#0c0a09"/><circle cx="12" cy="18" r="1.1" fill="#0c0a09"/></svg>
           <span>Calendario de stories</span>
         </a>
-        <a class="nav-item hidden" data-view="avisos" id="avisosTab">
-          <svg class="ni" viewBox="0 0 24 24"><path d="M12 3 C8.7 3 6 5.7 6 9 v4 l-2 3 v1 h16 v-1 l-2-3 V9 c0-3.3-2.7-6-6-6 Z"/><path d="M10 18 a2 2 0 0 0 4 0 Z"/></svg>
-          <span>Avisos</span>
-          <span class="nav-badge hidden" id="avisosBadge">0</span>
-        </a>
         <a class="nav-item hidden" data-view="admin" id="adminTab">
           <svg class="ni" viewBox="0 0 24 24"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z"/></svg>
           <span>Revisar enviadas</span>
@@ -90,11 +85,17 @@
       </nav>
       <button class="btn btn-primary full" id="newSeq" data-tour="new">＋ Nueva secuencia</button>
       <div class="sidebar-foot">
-        <button class="btn btn-ghost xs full" id="restartTourBtn">↻ Repetir tutorial</button>
-        <div class="user-mini">
-          <span id="userEmail"></span>
-          <button class="btn btn-ghost xs" id="logoutBtn">Salir</button>
-        </div>
+        <button class="foot-btn" id="avisosTab" data-view="avisos" title="Notificaciones" aria-label="Notificaciones">
+          <svg viewBox="0 0 24 24"><path d="M12 3.5 C8.9 3.5 6.4 6 6.4 9.1 v3.6 l-1.7 2.6 v1.1 h14.6 v-1.1 l-1.7-2.6 V9.1 C17.6 6 15.1 3.5 12 3.5 Z"/><path d="M10.1 18.2 a1.9 1.9 0 0 0 3.8 0 Z"/></svg>
+          <span class="foot-dot hidden" id="avisosBadge"></span>
+        </button>
+        <button class="foot-btn" id="restartTourBtn" title="Repetir tutorial" aria-label="Repetir tutorial">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5 a8 8 0 1 1 -2.5 -5.6"/><path d="M20 4 v4.5 h-4.5"/></svg>
+        </button>
+        <button class="foot-btn" id="logoutBtn" title="Cerrar sesión" aria-label="Cerrar sesión">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4 h3 a2 2 0 0 1 2 2 v12 a2 2 0 0 1 -2 2 h-3"/><path d="M10 8 L6 12 L10 16 M6 12 H16"/></svg>
+        </button>
+        <span id="userEmail" class="hidden"></span>
       </div>
     </aside>
 
@@ -138,7 +139,7 @@
             <button class="btn btn-primary" id="galleryPickBtn">＋ Elegir imágenes</button>
             <button class="btn btn-ghost" id="galleryClearBtn">🗑 Vaciar galería</button>
           </div>
-          <input type="file" id="galleryInput" accept="image/*" multiple hidden />
+          <input type="file" id="galleryInput" accept="image/*,.heic,.heif" multiple hidden />
         </div>
         <div id="galleryGrid" class="gallery-grid"></div>
       </section>
@@ -202,8 +203,8 @@
       <section id="view-avisos" class="hidden">
         <header class="topbar">
           <div>
-            <h1>Avisos</h1>
-            <p>Respuestas de ABMedia a las secuencias que has enviado a revisión.</p>
+            <h1>Notificaciones</h1>
+            <p>Nuestras respuestas a las secuencias que has enviado a revisión.</p>
           </div>
         </header>
         <div id="avisosList" class="avisos-list"></div>
@@ -277,8 +278,9 @@
         <button class="icon-btn" id="revisionClose">✕</button>
       </div>
       <p class="modal-sub">
-        ABMedia mirará esta secuencia y te dirá si está bien planteada o qué
-        cambiarías. La respuesta te llegará en <strong>Avisos</strong>.
+        Revisaremos tu secuencia y te diremos si está validada para publicar
+        o, si no lo está, qué te recomendamos modificar para mejorar su
+        resultado. La respuesta te llegará en <strong>notificaciones</strong>.
       </p>
       <label class="consent">
         <input type="checkbox" id="revisionShare" />
@@ -383,7 +385,7 @@
             <svg class="ic" viewBox="0 0 24 24"><path d="M3 7 V19 C3 20 4 21 5 21 H19 C20 21 21 20 21 19 V9 C21 8 20 7 19 7 H12 L10 5 H5 C4 5 3 6 3 7 Z"/></svg>
             <strong>Arrastra tus fotos de fondo aquí</strong>
             <span>o haz clic para elegir una carpeta</span>
-            <input type="file" id="fileInput2" accept="image/*" multiple hidden />
+            <input type="file" id="fileInput2" accept="image/*,.heic,.heif" multiple hidden />
           </div>
 
           <div class="frame-bar">
@@ -482,7 +484,7 @@
               <button class="btn btn-ghost xs danger full" id="insetRemove">Quitar foto insertada</button>
               <p class="mark-hint">Arrástrala sobre la vista previa para colocarla.</p>
             </div>
-            <input type="file" id="insetInput" accept="image/*" hidden />
+            <input type="file" id="insetInput" accept="image/*,.heic,.heif" hidden />
           </div>
 
           <div class="actions-bar">
@@ -530,9 +532,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase.js?v=16"></script>
-  <script src="templates.js?v=16"></script>
-  <script src="catalog.js?v=16"></script>
-  <script src="app.js?v=16"></script>
+  <script src="supabase.js?v=18"></script>
+  <script src="templates.js?v=18"></script>
+  <script src="catalog.js?v=18"></script>
+  <script src="app.js?v=18"></script>
 </body>
 </html>

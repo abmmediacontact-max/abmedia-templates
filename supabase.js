@@ -150,5 +150,64 @@ async function sbIsAllowed(email) {
   return !!(data && data.active);
 }
 
+/* ---- Galería en la nube ----------------------------------------------- *
+ * Las fotos viven en la carpeta del propio usuario dentro del bucket
+ * "galeria". Las reglas de Supabase impiden entrar en la carpeta de otro.
+ * Así la galería le sigue aunque cambie de ordenador.
+ * ----------------------------------------------------------------------- */
+const BUCKET = "galeria";
+
+async function sbUidActual() {
+  const { data } = await sb.auth.getUser();
+  return data && data.user ? data.user.id : null;
+}
+
+// El nombre del fichero es la propia clave, saneada para que valga como ruta
+function rutaDeFoto(uid, key) {
+  return `${uid}/${encodeURIComponent(key).replace(/%/g, "_")}.jpg`;
+}
+
+async function sbSubirFoto(key, blob) {
+  const uid = await sbUidActual();
+  if (!uid) return null;
+  const { error } = await sb.storage.from(BUCKET)
+    .upload(rutaDeFoto(uid, key), blob, { upsert: true, contentType: "image/jpeg" });
+  if (error) { console.warn("sbSubirFoto", error.message); return null; }
+  return true;
+}
+
+async function sbListarFotos() {
+  const uid = await sbUidActual();
+  if (!uid) return [];
+  const { data, error } = await sb.storage.from(BUCKET)
+    .list(uid, { limit: 1000, sortBy: { column: "created_at", order: "asc" } });
+  if (error) { console.warn("sbListarFotos", error.message); return []; }
+  return (data || []).filter(o => o.name && !o.name.startsWith("."));
+}
+
+async function sbDescargarFoto(nombre) {
+  const uid = await sbUidActual();
+  if (!uid) return null;
+  const { data, error } = await sb.storage.from(BUCKET).download(`${uid}/${nombre}`);
+  if (error) { console.warn("sbDescargarFoto", error.message); return null; }
+  return data;
+}
+
+async function sbBorrarFoto(key) {
+  const uid = await sbUidActual();
+  if (!uid) return;
+  await sb.storage.from(BUCKET).remove([rutaDeFoto(uid, key)]);
+}
+
+async function sbBorrarTodasLasFotos() {
+  const uid = await sbUidActual();
+  if (!uid) return;
+  const fotos = await sbListarFotos();
+  if (!fotos.length) return;
+  await sb.storage.from(BUCKET).remove(fotos.map(f => `${uid}/${f.name}`));
+}
+
+window.sbFotos = { sbSubirFoto, sbListarFotos, sbDescargarFoto, sbBorrarFoto, sbBorrarTodasLasFotos, rutaDeFoto };
+
 window.sbAuth = { sbGetSession, sbSignIn, sbSignUp, sbSignOut, isAdmin, sbIsAllowed };
 window.sbDB = { sbFetchSequences, sbUpsertSequence, sbDeleteSequence, sbFetchTemplates, sbUpsertTemplate, sbDeleteTemplate, sbRevisarTemplate, sbFetchAvisos, sbMarcarAvisoLeido };

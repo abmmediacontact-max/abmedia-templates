@@ -141,6 +141,57 @@ function blobToImage(blob, name) {
 }
 
 // Reduce el peso de las fotos antes de guardarlas (target max 1920px lado mayor)
+/* Las fotos del iPhone vienen en HEIC y sólo Safari sabe abrirlas. En el
+   resto de navegadores hay que convertirlas antes de tocarlas. La librería
+   se carga sólo cuando hace falta, para no penalizar al que no las usa. */
+function esHeic(file) {
+  const t = (file.type || "").toLowerCase();
+  const n = (file.name || "").toLowerCase();
+  return t.includes("heic") || t.includes("heif") ||
+         n.endsWith(".heic") || n.endsWith(".heif");
+}
+
+let _heicCargando = null;
+function cargarConversorHeic() {
+  if (window.heic2any) return Promise.resolve(true);
+  if (_heicCargando) return _heicCargando;
+  _heicCargando = new Promise(res => {
+    const sc = document.createElement("script");
+    sc.src = "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js";
+    sc.onload = () => res(!!window.heic2any);
+    sc.onerror = () => res(false);
+    document.head.appendChild(sc);
+  });
+  return _heicCargando;
+}
+
+/* Devuelve un blob que el navegador sepa dibujar, o null si no ha podido. */
+async function normalizarImagen(file) {
+  if (!esHeic(file)) return file;
+  // Safari abre HEIC de forma nativa: si puede, no hace falta convertir
+  if (await sePuedeDibujar(file)) return file;
+  const ok = await cargarConversorHeic();
+  if (!ok) return null;
+  try {
+    const out = await window.heic2any({ blob: file, toType: "image/jpeg", quality: 0.9 });
+    const b = Array.isArray(out) ? out[0] : out;
+    return new File([b], file.name.replace(/\.(heic|heif)$/i, ".jpg"), { type: "image/jpeg" });
+  } catch (e) {
+    console.warn("heic2any", e);
+    return null;
+  }
+}
+
+function sePuedeDibujar(blob) {
+  return new Promise(res => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload  = () => { URL.revokeObjectURL(url); res(true); };
+    img.onerror = () => { URL.revokeObjectURL(url); res(false); };
+    img.src = url;
+  });
+}
+
 async function resizeImageBlob(file, maxDim = 1920, quality = 0.85) {
   return new Promise((res, rej) => {
     const img = new Image();
@@ -260,23 +311,33 @@ function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.fl
  *  Imágenes (subida + persistencia)
  * ========================================================================= */
 async function loadFiles(fileList) {
-  const files = Array.from(fileList).filter(f => f.type.startsWith("image/"));
+  const files = Array.from(fileList)
+    .filter(f => f.type.startsWith("image/") || esHeic(f));
   if (!files.length) return;
   let added = 0;
+  const fallidas = [];
   for (const file of files) {
     // Key con el tamaño ORIGINAL — re-subir el mismo archivo siempre dedup
     const key = imgDB.keyOf(file.name, file.size);
     if (state.images.some(i => i.key === key)) continue;
+
+    const original = await normalizarImagen(file);
+    if (!original) { fallidas.push(file.name); continue; }
+
     // Resize a 1920px para no cargar JPEGs de 5MB en memoria
-    let blob = file;
-    try { blob = await resizeImageBlob(file, 1920); } catch {}
+    let blob = original;
+    try { blob = await resizeImageBlob(original, 1920); } catch {}
     try { await imgDB.put(file.name, blob, key); } catch (e) { console.warn("DB put", e); }
+    try { subirFotoANube(key, file.name, blob); } catch {}
     await new Promise(res => {
       const img = new Image();
       img.onload = () => { state.images.push({ key, name: file.name, img }); added++; res(); };
-      img.onerror = () => res();
+      img.onerror = () => { fallidas.push(file.name); res(); };
       img.src = URL.createObjectURL(blob);
     });
+  }
+  if (fallidas.length) {
+    alert("No se han podido abrir estas imágenes:\n\n" + fallidas.join("\n"));
   }
   // Dedup defensivo final
   const uniq = new Map(); state.images.forEach(im => uniq.set(im.key, im));
@@ -323,6 +384,57 @@ async function migrarGaleriaAntigua() {
   localStorage.setItem(YA, "1");
 }
 
+/* Sube la foto a la nube sin frenar la interfaz. Si falla, la foto sigue
+   estando en este equipo; se reintentará al volver a entrar. */
+function subirFotoANube(key, nombre, blob) {
+  if (!state.user || !window.sbFotos) return;
+  sbFotos.sbSubirFoto(key, blob).catch(e => console.warn("subir foto", e));
+}
+
+/* Trae de la nube las fotos que no estén ya en este equipo, para que la
+   galería sea la misma desde cualquier ordenador. */
+async function sincronizarFotos() {
+  if (!state.user || !window.sbFotos) return;
+  try {
+    const remotas = await sbFotos.sbListarFotos();
+    if (!remotas.length) { await subirPendientes(); return; }
+
+    const locales = new Set(state.images.map(i => i.key));
+    const uid = state.user.id;
+    let traidas = 0;
+    for (const obj of remotas) {
+      // el nombre del objeto contiene la clave original
+      const key = decodeURIComponent(obj.name.replace(/\.jpg$/, "").replace(/_/g, "%"));
+      if (locales.has(key)) continue;
+      const blob = await sbFotos.sbDescargarFoto(obj.name);
+      if (!blob) continue;
+      const nombre = key.split("|")[0] || obj.name;
+      try { await imgDB.put(nombre, blob, key); } catch {}
+      const o = await blobToImage(blob, nombre);
+      if (o) { o.key = key; state.images.push(o); traidas++; }
+    }
+    if (traidas) { updateImgCount(); if (state.view === "gallery") renderAll(); }
+    await subirPendientes();
+  } catch (e) {
+    console.warn("sincronizarFotos", e);
+  }
+}
+
+/* Las que están en este equipo pero todavía no en la nube. */
+async function subirPendientes() {
+  try {
+    const remotas = await sbFotos.sbListarFotos();
+    const yaSubidas = new Set(remotas.map(o =>
+      decodeURIComponent(o.name.replace(/\.jpg$/, "").replace(/_/g, "%"))));
+    const filas = await imgDB.getAll();
+    for (const r of filas) {
+      const key = r.key || imgDB.keyOf(r.name, r.size || 0);
+      if (yaSubidas.has(key) || !r.blob) continue;
+      await sbFotos.sbSubirFoto(key, r.blob);
+    }
+  } catch (e) { console.warn("subirPendientes", e); }
+}
+
 async function loadImagesFromDB() {
   state.images = []; // limpia siempre: si bootLoggedIn se llama 2 veces no se duplica
   try {
@@ -339,8 +451,11 @@ async function loadImagesFromDB() {
   updateImgCount();
 }
 async function clearGallery() {
-  if (!confirm("¿Vaciar toda la galería de imágenes?")) return;
+  if (!confirm("¿Vaciar toda la galería de imágenes?\n\nSe borrarán también de la nube, así que desaparecerán de todos tus dispositivos.")) return;
   await imgDB.clear();
+  if (state.user && window.sbFotos) {
+    try { await sbFotos.sbBorrarTodasLasFotos(); } catch (e) { console.warn("borrar nube", e); }
+  }
   state.images = [];
   state.sequences.forEach(s => assignRandomImages(s));
   updateImgCount();
@@ -349,6 +464,9 @@ async function clearGallery() {
 async function deleteImage(index) {
   const im = state.images[index];
   if (im?.key) await imgDB.deleteByKey(im.key);
+  if (im?.key && state.user && window.sbFotos) {
+    try { await sbFotos.sbBorrarFoto(im.key); } catch (e) { console.warn("borrar foto nube", e); }
+  }
   state.images.splice(index, 1);
   state.sequences.forEach(s => assignRandomImages(s));
   updateImgCount();
@@ -361,6 +479,7 @@ async function deleteImage(index) {
 function setView(view) {
   state.view = view;
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === view));
+  $("#avisosTab").classList.toggle("activo", view === "avisos");
   ["library", "gallery", "desk", "calendar", "avisos", "admin"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
   if (view === "avisos") renderAvisos();
   if (view === "library") { state.libraryStage = "categories"; state.libraryCat = null; }
@@ -1463,10 +1582,7 @@ async function contarAvisos() {
   const filas = await sbDB.sbFetchAvisos();
   state.avisos = filas;
   const sinLeer = filas.filter(f => !f.seen_by_owner).length;
-  $("#avisosTab").classList.toggle("hidden", filas.length === 0);
-  const b = $("#avisosBadge");
-  b.textContent = sinLeer;
-  b.classList.toggle("hidden", sinLeer === 0);
+  $("#avisosBadge").classList.toggle("hidden", sinLeer === 0);
 }
 
 async function renderAvisos() {
@@ -1814,6 +1930,7 @@ function bind() {
   $("#tourNext").addEventListener("click", nextTour);
   $("#tourSkip").addEventListener("click", endTour);
   $("#restartTourBtn").addEventListener("click", () => startTour(true));
+  $("#avisosTab").addEventListener("click", () => setView("avisos"));
 
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#overlay").classList.contains("hidden")) closeEditor(); });
   window.addEventListener("resize", () => { if (!$("#tour").classList.contains("hidden")) positionTourSpot(TOUR_STEPS[tourIdx]?.sel); });
@@ -1878,8 +1995,10 @@ async function bootLoggedIn(user) {
   } catch {}
   await migrarGaleriaAntigua();
 
-  // Carga imágenes persistidas ANTES de pintar
+  // Primero lo que ya está en este equipo, para pintar cuanto antes
   await loadImagesFromDB();
+  // y después se completa con lo que haya en la nube
+  sincronizarFotos();
 
   const cloudSeqs = await sbDB.sbFetchSequences();
   if (cloudSeqs.length) {

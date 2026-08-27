@@ -67,6 +67,8 @@ body {
     border-right: 1px solid var(--border);
     padding: 26px 20px;
     display: flex; flex-direction: column; gap: 18px;
+    position: sticky; top: 0;
+    height: 100vh; overflow-y: auto;
 }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand .logo {
@@ -119,7 +121,27 @@ body {
 .nav-item.active .ni { fill: var(--acento); color: var(--acento); }
 
 .sidebar > #newSeq { margin-top: 4px; }
-.sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+.sidebar-foot { margin-top: auto; display: flex; align-items: center; gap: 8px; }
+.foot-btn {
+    position: relative;
+    width: 38px; height: 38px; flex-shrink: 0;
+    display: grid; place-items: center;
+    border-radius: 11px; cursor: pointer;
+    background: var(--panel-2); border: 1px solid var(--border);
+    color: var(--muted); transition: .15s;
+}
+.foot-btn svg { width: 19px; height: 19px; fill: currentColor; }
+.foot-btn svg[stroke] { fill: none; }
+.foot-btn:hover { color: var(--text); border-color: rgba(255,255,255,.28); }
+/* La campana encendida cuando estás en notificaciones */
+.foot-btn.activo { color: var(--text); border-color: rgba(255,255,255,.34); background: var(--panel); }
+/* Punto naranja: hay algo sin leer */
+.foot-dot {
+    position: absolute; top: 7px; right: 8px;
+    width: 8px; height: 8px; border-radius: 999px;
+    background: var(--acento);
+    box-shadow: 0 0 0 2px var(--panel-2), 0 0 10px var(--acento);
+}
 
 /* ---------------------------- Botones ---------------------------------- */
 .btn {
@@ -490,6 +512,9 @@ body {
 
 /* ---------------------------- Modal plantillas ------------------------ */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); display: grid; place-items: center; z-index: 40; padding: 20px; }
+/* El editor está en la capa 50: este aviso va encima para no perder lo
+   que se esté editando. */
+#revisionModal { z-index: 60; background: rgba(0,0,0,.72); }
 .modal-box { background: var(--bg-2); border: 1px solid var(--border); border-radius: 18px; width: min(720px, 92vw); padding: 24px; box-shadow: var(--shadow); }
 .modal-box.small { width: min(440px, 92vw); display: flex; flex-direction: column; gap: 14px; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -846,11 +871,9 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.02); }
     .sidebar .brand { flex: 1; }
     .nav { flex-direction: row; flex-wrap: wrap; }
     .sidebar > #newSeq { width: auto; }
-    .sidebar-foot { margin-top: 0; flex-direction: row; align-items: center; gap: 10px; flex: 1; min-width: 0; flex-wrap: wrap; }
-    /* en horizontal los botones del pie no deben partirse en dos líneas */
-    .sidebar-foot .btn { white-space: nowrap; }
-    .sidebar-foot #restartTourBtn { width: auto; flex: 0 0 auto; }
-    .user-mini { border-top: none; flex: 1; min-width: 0; padding: 0; }
+    /* en móvil la barra deja de ser fija: se apila arriba */
+    .sidebar { position: static; height: auto; overflow: visible; }
+    .sidebar-foot { margin-top: 0; align-items: center; gap: 8px; flex: 0 0 auto; }
     .editor-body { grid-template-columns: 1fr; }
 }
 @media (max-width: 760px) {
