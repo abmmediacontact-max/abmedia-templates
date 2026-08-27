@@ -243,15 +243,19 @@ body {
     box-shadow: inset 0 1px 0 rgba(255,255,255,.18);
 }
 
+/* Cuadradas y con la explicación abajo: se entiende para qué es cada una
+   sin abrirla. */
 .cat-tiles {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 20px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 16px;
+    max-width: 1240px;
 }
 .cat-tile {
     position: relative; background: var(--panel); border: 1px solid var(--border);
-    border-radius: 18px; padding: 28px 24px;
-    cursor: pointer; transition: .2s; text-align: left; min-height: 200px;
-    display: flex; flex-direction: column; gap: 8px;
+    border-radius: 18px; padding: 22px;
+    cursor: pointer; transition: .2s; text-align: left;
+    aspect-ratio: 1 / 1;
+    display: flex; flex-direction: column; justify-content: flex-end; gap: 9px;
     overflow: hidden; color: var(--text);
 }
 /* Al pasar por encima la tarjeta se enciende con el aro metálico */
@@ -274,14 +278,19 @@ body {
     margin-bottom: 8px;
 }
 .cat-tile .icon svg { width: 38px; height: 38px; fill: var(--orange-2); color: var(--orange-2); }
-.cat-tile h3 { font-size: 21px; }
-.cat-tile p { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.cat-tile h3 { font-size: 20px; }
+.cat-tile p { color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+/* Sólo el número: la palabra "secuencias" sobraba en una tarjeta cuadrada */
 .cat-tile .count {
     position: absolute; top: 18px; right: 18px;
-    font-size: 11px; font-weight: 600; letter-spacing: .3px;
+    min-width: 26px; height: 24px; padding: 0 8px;
+    display: grid; place-items: center;
+    font-size: 11.5px; font-weight: 600;
     color: var(--muted); background: var(--orange-soft);
-    border: 1px solid var(--border);
-    padding: 5px 10px; border-radius: 999px;
+    border: 1px solid var(--border); border-radius: 999px;
+}
+@media (max-width: 760px) {
+    .cat-tile { aspect-ratio: auto; min-height: 175px; }
 }
 
 /* ---------------------------- Ideas (form + tabla) -------------------- */
@@ -1045,3 +1054,19 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.02); }
     border-left: 2px solid var(--acento);
     font-size: 13.5px; line-height: 1.6; color: var(--text);
 }
+
+/* ------------------- Estado de mis secuencias -------------------------- */
+/* Un punto pequeño y el texto en gris: se distingue de un vistazo sin
+   llenar la interfaz de colores. */
+.estado-linea {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--muted);
+    margin: 7px 0 14px;
+}
+.estado-punto {
+    width: 7px; height: 7px; border-radius: 999px; flex-shrink: 0;
+    background: var(--faint);
+}
+.estado-punto.st-draft     { background: #7C7873; }
+.estado-punto.st-scheduled { background: #7cb1ff; box-shadow: 0 0 8px rgba(124,177,255,.45); }
+.estado-punto.st-published { background: #6ee79a; box-shadow: 0 0 8px rgba(110,231,154,.45); }

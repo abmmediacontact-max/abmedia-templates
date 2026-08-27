@@ -13,31 +13,31 @@ const CATEGORIES = {
             personal: {
                               name: "Personal",
                               icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21 C4 16 7.5 14 12 14 S20 16 20 21 Z"/></svg>',
-                              desc: "Cercanía y lifestyle. Conectar contando tu día a día.",
+                              desc: "Tu día a día, tu rutina y lo que hay detrás del negocio. Úsala para que te conozcan y bajar la barrera antes de vender. Va bien a diario y entre secuencias de venta, para no cansar.",
                               color: "#ff6a1a"
             },
             venta: {
                               name: "Venta",
                               icon: '<svg viewBox="0 0 24 24"><path d="M3 13 L11 21 L21 11 V3 H13 Z"/><circle cx="16.5" cy="7.5" r="1.6" fill="#0c0a09"/></svg>',
-                              desc: "Vender, abrir cupos y empujar a la compra.",
+                              desc: "Abrir cupos, lanzar y empujar a la compra. Úsala en ventana de lanzamiento o cuando tengas plazas libres. Poca frecuencia: pierde fuerza si la repites sin motivo.",
                               color: "#ff6a1a"
             },
             puente: {
                               name: "Puente",
                               icon: '<svg viewBox="0 0 24 24"><path d="M2 17 H22 V19 H2 Z"/><path d="M4 17 V11 C4 8 7 6 12 6 S20 8 20 11 V17 H17 V12 H7 V17 Z"/><path d="M4 13 H20 V14 H4 Z"/></svg>',
-                              desc: "Lead magnets y stories que llevan a CTA.",
+                              desc: "El paso intermedio: lead magnets, encuestas y stories que acaban en un enlace o un DM. Úsala para calentar antes de vender y para recoger contactos sin pedir dinero.",
                               color: "#ff6a1a"
             },
             flex: {
                               name: "Flex",
                               icon: '<svg viewBox="0 0 24 24"><path d="M12 2 L14.5 8.5 L21 9.5 L16 14 L17.5 20.5 L12 17 L6.5 20.5 L8 14 L3 9.5 L9.5 8.5 Z"/></svg>',
-                              desc: "Mostrar resultados y logros sin vender directamente.",
+                              desc: "Resultados, casos y logros contados sin vender. Úsala para demostrar que lo que haces funciona, justo antes de una secuencia de venta.",
                               color: "#ff6a1a"
             },
             valor: {
                               name: "Valor",
                               icon: '<svg viewBox="0 0 24 24"><path d="M12 2 L20 9 L12 22 L4 9 Z"/><path d="M4 9 H20 M8 9 L12 2 L16 9 M8 9 L12 22 M16 9 L12 22"/></svg>',
-                              desc: "Aportar valor real con tips y reflexiones útiles.",
+                              desc: "Tips, errores comunes y reflexiones que se pueden aplicar hoy. Úsala como base de tu semana: es la que construye autoridad y la que más se guarda y comparte.",
                               color: "#ff6a1a"
             }
 };

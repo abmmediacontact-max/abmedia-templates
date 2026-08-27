@@ -28,11 +28,15 @@ let editorCanvas;
 const ctx = () => editorCanvas.getContext("2d");
 
 const STATUS = {
-  draft:     { label: "Borrador",    cls: "st-draft" },
-  progress:  { label: "En progreso", cls: "st-progress" },
-  scheduled: { label: "Programado",  cls: "st-scheduled" },
-  published: { label: "Publicado",   cls: "st-published" }
+  draft:     { label: "Borrador",   cls: "st-draft" },
+  scheduled: { label: "Programada", cls: "st-scheduled" },
+  published: { label: "Publicada",  cls: "st-published" }
 };
+// Compatibilidad: las que quedaran "en progreso" se leen como borrador
+function estadoDe(seq) {
+  const e = seq && seq.status === "progress" ? "draft" : (seq && seq.status) || "draft";
+  return STATUS[e] ? e : "draft";
+}
 
 // Lazy rendering de canvases en tarjetas (solo dibuja cuando entra al viewport)
 const _cardObserver = (typeof IntersectionObserver !== "undefined")
@@ -483,13 +487,15 @@ function setView(view) {
   state.view = view;
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === view));
   $("#avisosTab").classList.toggle("activo", view === "avisos");
-  ["library", "gallery", "desk", "calendar", "avisos", "admin"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
+  ["library", "mias", "gallery", "desk", "calendar", "avisos", "admin"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
   if (view === "avisos") renderAvisos();
+  if (view === "mias") renderMias();
   if (view === "library") { state.libraryStage = "categories"; state.libraryCat = null; }
   renderAll();
 }
 function renderAll() {
   if (state.view === "library") renderLibrary();
+  else if (state.view === "mias") renderMias();
   else if (state.view === "gallery") renderGallery();
   else if (state.view === "desk") renderIdeas();
   else if (state.view === "calendar") renderCalendar();
@@ -499,27 +505,20 @@ function renderAll() {
 /* ---------------------------------------------------------------------- *
  *  BIBLIOTECA
  * ---------------------------------------------------------------------- */
+/* La biblioteca son sólo las plantillas de ABMedia: las del catálogo y las
+   que se hayan publicado desde el panel. Lo del usuario vive en "Mis
+   secuencias", para no tener lo mismo en dos sitios. */
 function getCategoryItems(catKey) {
-  const fromCatalogList = CATALOG.map(c => ({ ...c, isUser: false }));
-  const fromUser = state.userTemplates.map(t => ({
-    id: t.id, cloudId: t.cloudId, title: t.title, category: t.category,
-    slides: t.slides, style: t.style, isUser: true
-  }));
-  const all = [...fromCatalogList, ...fromUser];
-  return all.filter(it => {
-    if (catKey && it.category !== catKey) return false;
-    if (state.libraryFilter === "mine" && !it.isUser) return false;
-    return true;
-  });
+  return CATALOG
+    .map(c => ({ ...c, isUser: false }))
+    .filter(it => !catKey || it.category === catKey);
 }
 
 function renderLibrary() {
   $("#libBack").classList.toggle("hidden", state.libraryStage === "categories");
   if (state.libraryStage === "categories") {
     $("#libTitle").textContent = "Biblioteca de secuencias";
-    $("#libSub").textContent = state.libraryFilter === "mine"
-      ? "Tus secuencias guardadas, organizadas por categoría."
-      : "Elige una categoría para ver sus secuencias.";
+    $("#libSub").textContent = "Plantillas de ABMedia. Elige una categoría y adapta la que quieras.";
   } else {
     const cat = CATEGORIES[state.libraryCat];
     $("#libTitle").textContent = cat.name;
@@ -543,9 +542,9 @@ function renderCatTiles() {
     const items = getCategoryItems(key);
     const tile = document.createElement("button");
     tile.className = "cat-tile";
+    // Sin icono: el nombre y la explicación mandan
     tile.innerHTML = `
-      <span class="count">${items.length} ${items.length === 1 ? "secuencia" : "secuencias"}</span>
-      <div class="icon">${cat.icon}</div>
+      <span class="count">${items.length}</span>
       <h3>${cat.name}</h3>
       <p>${cat.desc}</p>`;
     tile.addEventListener("click", () => {
@@ -565,6 +564,85 @@ function renderCatalogList() {
     return;
   }
   items.forEach(item => grid.appendChild(makeLibCard(item)));
+}
+
+/* ---------------------------------------------------------------------- *
+ *  MIS SECUENCIAS
+ *  Todo lo del usuario, venga de cero o adaptado de la biblioteca.
+ * ---------------------------------------------------------------------- */
+function renderMias() {
+  const grid = $("#miasGrid");
+  const filtro = state.miasFiltro || "todas";
+  $$("#miasFiltro .seg").forEach(b => b.classList.toggle("active", b.dataset.estado === filtro));
+
+  const todas = state.sequences || [];
+  const lista = filtro === "todas" ? todas : todas.filter(s => estadoDe(s) === filtro);
+  $("#miasCount").textContent = `${todas.length} ${todas.length === 1 ? "secuencia" : "secuencias"}`;
+
+  grid.innerHTML = "";
+  if (!lista.length) {
+    grid.innerHTML = `<p class="empty">${
+      filtro === "todas"
+        ? "Todavía no has guardado ninguna. Coge una de la biblioteca o crea una nueva y pulsa Guardar."
+        : "No tienes ninguna secuencia en este estado."}</p>`;
+    return;
+  }
+  lista.forEach(seq => grid.appendChild(tarjetaMia(seq)));
+}
+
+function tarjetaMia(seq) {
+  const cat = CATEGORIES[seq.category] || CATEGORIES.venta;
+  const est = estadoDe(seq);
+  const info = STATUS[est];
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.appendChild(makeCardCanvas(seq.slides[0], seq.style));
+
+  const badge = document.createElement("span");
+  badge.className = "frames-badge";
+  badge.textContent = `${seq.slides.length} frames`;
+  card.appendChild(badge);
+
+  const fecha = seq.scheduledDate
+    ? new Date(seq.scheduledDate + "T00:00:00").toLocaleDateString("es-ES", { day: "numeric", month: "short" })
+    : null;
+
+  const box = document.createElement("div");
+  box.className = "card-info";
+  box.innerHTML =
+    `<div class="card-row">
+       <h3>${escapeHtml(seq.title || "Secuencia")}</h3>
+       <span class="cat-tag">${cat.name}</span>
+     </div>
+     <p class="estado-linea">
+       <span class="estado-punto ${info.cls}"></span>
+       <span>${info.label}${fecha ? ` · ${fecha}` : ""}</span>
+     </p>
+     <div class="card-acciones">
+       <button class="btn btn-primary sm card-cta" data-act="abrir">Abrir</button>
+       <button class="card-borrar" data-act="del" title="Borrar" aria-label="Borrar">
+         <svg viewBox="0 0 24 24"><path d="M4 7 H20 M9 7 V5 a1 1 0 0 1 1 -1 h4 a1 1 0 0 1 1 1 v2 M6.5 7 L7.5 20 a1 1 0 0 0 1 1 h7 a1 1 0 0 0 1 -1 L18 7"/></svg>
+       </button>
+     </div>`;
+
+  box.querySelector('[data-act="abrir"]').addEventListener("click", e => {
+    e.stopPropagation(); openEditor(seq.id);
+  });
+  box.querySelector('[data-act="del"]').addEventListener("click", async e => {
+    e.stopPropagation();
+    if (!confirm(`¿Borrar "${seq.title || "esta secuencia"}"?`)) return;
+    if (state.user && seq.cloudId) await sbDB.sbDeleteSequence(seq.cloudId);
+    removeScheduleEntriesForSeq(seq.id);
+    storeSched.save(state.schedule);
+    state.sequences = state.sequences.filter(x => x.id !== seq.id);
+    store.save(state.sequences);
+    renderMias();
+  });
+
+  card.appendChild(box);
+  card.addEventListener("click", () => openEditor(seq.id));
+  return card;
 }
 
 function makeLibCard(item) {
@@ -1948,6 +2026,9 @@ function bind() {
   $("#tourSkip").addEventListener("click", endTour);
   $("#restartTourBtn").addEventListener("click", () => startTour(true));
   $("#avisosTab").addEventListener("click", () => setView("avisos"));
+  $$("#miasFiltro .seg").forEach(b => b.addEventListener("click", () => {
+    state.miasFiltro = b.dataset.estado; renderMias();
+  }));
 
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#overlay").classList.contains("hidden")) closeEditor(); });
   window.addEventListener("resize", () => { if (!$("#tour").classList.contains("hidden")) positionTourSpot(TOUR_STEPS[tourIdx]?.sel); });
