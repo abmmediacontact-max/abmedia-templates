@@ -49,9 +49,10 @@ function bindLogin() {
 function setView(v) {
   state.view = v;
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === v));
-  ["pending", "users", "review"].forEach(x => $("#view-" + x).classList.toggle("hidden", x !== v));
+  ["pending", "users", "biblio", "review"].forEach(x => $("#view-" + x).classList.toggle("hidden", x !== v));
   if (v === "pending") renderPending();
   else if (v === "users") renderUsers();
+  else if (v === "biblio") renderBiblioteca();
   else if (v === "review") renderReview();
 }
 
@@ -336,6 +337,103 @@ async function openPreview(seq, row) {
 }
 
 /* -------------------- Plantillas pendientes ------------------------ */
+/* --------------------------- Biblioteca -------------------------------- *
+ * Lo que está publicado para todos. Desde aquí se retoca o se retira: antes,
+ * una vez publicada una secuencia no había forma de tocarla.
+ * ----------------------------------------------------------------------- */
+async function renderBiblioteca() {
+  const grid = $("#biblioGrid");
+  grid.innerHTML = `<p class="empty">Cargando…</p>`;
+  const items = await sbDB.sbFetchTemplates("public");
+  $("#biblioCount").textContent = `${items.length} ${items.length === 1 ? "secuencia" : "secuencias"}`;
+  grid.innerHTML = "";
+  if (!items.length) {
+    grid.innerHTML = `<p class="empty">Todavía no has publicado ninguna secuencia en la biblioteca.</p>`;
+    return;
+  }
+  items.forEach(row => grid.appendChild(tarjetaBiblioteca(row)));
+}
+
+function tarjetaBiblioteca(row) {
+  const seq = {
+    title: row.title || "Secuencia",
+    category: row.category || "venta",
+    style: { ...DEFAULT_STYLE, ...(row.style || {}) },
+    slides: (row.slides || []).map(s => ({ ...s, bg: s.bg || { zoom: 1, ox: 0, oy: 0 }, bgIndex: -1, inset: null }))
+  };
+  const cat = CATEGORIES[seq.category] || CATEGORIES.venta;
+
+  const card = document.createElement("div");
+  card.className = "card admin-card";
+  const cv = document.createElement("canvas");
+  cv.width = 270; cv.height = 480; cv.className = "card-canvas";
+  if (seq.slides[0]) drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height, seq.style);
+  card.appendChild(cv);
+
+  const badge = document.createElement("span");
+  badge.className = "frames-badge";
+  badge.textContent = `${seq.slides.length} frames`;
+  card.appendChild(badge);
+
+  const info = document.createElement("div");
+  info.className = "card-info";
+  info.innerHTML =
+    `<div class="card-row"><h3>${escapeHtml(seq.title)}</h3><span class="cat-tag">${cat.name}</span></div>
+     <div class="biblio-edit hidden">
+       <label class="field"><span>Nombre</span><input type="text" class="be-titulo" value="${escapeAttr(seq.title)}" /></label>
+       <label class="field"><span>Categoría</span>
+         <select class="be-cat status-select">
+           ${Object.entries(CATEGORIES).map(([k, c]) =>
+             `<option value="${k}"${k === seq.category ? " selected" : ""}>${c.name}</option>`).join("")}
+         </select>
+       </label>
+       <div class="comentario-row">
+         <button class="btn btn-ghost" data-act="cancelar">Cancelar</button>
+         <button class="btn btn-ghost" data-act="guardar">Guardar</button>
+       </div>
+     </div>
+     <div class="biblio-tools">
+       <button class="btn btn-ghost xs" data-act="ver">Ver frames</button>
+       <button class="btn btn-ghost xs" data-act="editar">Editar</button>
+       <button class="btn btn-ghost xs danger" data-act="quitar">Quitar</button>
+     </div>`;
+
+  const zona = info.querySelector(".biblio-edit");
+  const tools = info.querySelector(".biblio-tools");
+
+  info.querySelector('[data-act="ver"]').addEventListener("click", e => {
+    e.stopPropagation(); openPreview(seq, row);
+  });
+  info.querySelector('[data-act="editar"]').addEventListener("click", e => {
+    e.stopPropagation();
+    zona.classList.remove("hidden"); tools.classList.add("hidden");
+  });
+  info.querySelector('[data-act="cancelar"]').addEventListener("click", e => {
+    e.stopPropagation();
+    zona.classList.add("hidden"); tools.classList.remove("hidden");
+  });
+  info.querySelector('[data-act="guardar"]').addEventListener("click", async e => {
+    e.stopPropagation();
+    const titulo = info.querySelector(".be-titulo").value.trim();
+    const categoria = info.querySelector(".be-cat").value;
+    if (!titulo) { alert("Ponle un nombre."); return; }
+    const { error } = await sb.from("templates")
+      .update({ title: titulo, category: categoria }).eq("id", row.id);
+    if (error) { console.error(error); alert("No se ha podido guardar."); return; }
+    renderBiblioteca();
+  });
+  info.querySelector('[data-act="quitar"]').addEventListener("click", async e => {
+    e.stopPropagation();
+    if (!confirm(`¿Quitar "${seq.title}" de la biblioteca?\n\nDejará de estar disponible para tus clientes.`)) return;
+    const { error } = await sb.from("templates").update({ is_public: false }).eq("id", row.id);
+    if (error) { console.error(error); alert("No se ha podido quitar."); return; }
+    renderBiblioteca();
+  });
+
+  card.appendChild(info);
+  return card;
+}
+
 async function renderReview() {
   const grid = $("#reviewGrid"); grid.innerHTML = `<p class="empty">Cargando…</p>`;
   const items = await sbDB.sbFetchTemplates("review");

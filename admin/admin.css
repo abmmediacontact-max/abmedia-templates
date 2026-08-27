@@ -207,3 +207,16 @@
     .fv-nav { width: 40px; height: 40px; }
     .fv-prev { left: 8px; } .fv-next { right: 8px; }
 }
+
+/* ------------------- Gestión de la biblioteca -------------------------- */
+.biblio-tools { margin-top: auto; display: flex; gap: 6px; padding-top: 12px; }
+.biblio-tools .btn { flex: 1; padding: 8px 6px; font-size: 12px; border-radius: 9px; }
+.biblio-edit { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.biblio-edit.hidden { display: none; }
+.biblio-edit .field span { font-size: 11.5px; }
+.biblio-edit input, .biblio-edit select {
+    font-family: inherit; font-size: 13px; color: var(--text);
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 9px; padding: 9px 11px; width: 100%;
+}
+.biblio-edit input:focus, .biblio-edit select:focus { outline: none; border-color: rgba(255,255,255,.28); }

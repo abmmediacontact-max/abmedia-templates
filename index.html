@@ -11,7 +11,7 @@
   <!-- Figtree = interfaz (misma que abmedia.es). El resto las usa el
        generador de stories en el canvas, no se pueden quitar. -->
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=26" />
+  <link rel="stylesheet" href="styles.css?v=27" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -112,7 +112,9 @@
             <h1 id="libTitle">Biblioteca de secuencias</h1>
             <p id="libSub">Plantillas de ABMedia. Elige una categoría y adapta la que quieras.</p>
           </div>
-          <button class="btn btn-ghost hidden" id="libBack">← Volver a categorías</button>
+          <button class="foot-btn hidden" id="libBack" title="Volver a categorías" aria-label="Volver a categorías">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 L8 12 L15 19"/></svg>
+          </button>
         </header>
 
         <div id="catTiles" class="cat-tiles"></div>
@@ -522,9 +524,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase.js?v=26"></script>
-  <script src="templates.js?v=26"></script>
-  <script src="catalog.js?v=26"></script>
-  <script src="app.js?v=26"></script>
+  <script src="supabase.js?v=27"></script>
+  <script src="templates.js?v=27"></script>
+  <script src="catalog.js?v=27"></script>
+  <script src="app.js?v=27"></script>
 </body>
 </html>
