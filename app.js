@@ -1354,6 +1354,48 @@ function openSaveTplModal() {
   $("#saveTplCat").value = s.category;
   $("#saveTplModal").classList.remove("hidden");
 }
+/* Enviar a revisión.
+ * Antes esto sólo marcaba la secuencia como "submitted", pero la cola del
+ * admin lee la tabla de plantillas: el envío no llegaba a ninguna parte.
+ * Ahora crea la plantilla candidata, que es lo que ABMedia revisa y publica. */
+async function enviarARevision() {
+  const s = state.active;
+  if (!s) return;
+  if (!state.user) {
+    alert("Necesitas haber iniciado sesión para enviar una secuencia a revisión.");
+    return;
+  }
+  const btn = $("#submitBtn");
+  const textoPrevio = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Enviando…";
+
+  const tpl = {
+    title: s.title || "Secuencia",
+    category: s.category,
+    style: JSON.parse(JSON.stringify(s.style)),
+    slides: s.slides.map(sl => ({ body: sl.body, pos: { ...sl.pos }, align: sl.align, overlay: sl.overlay })),
+    submitted: true,
+    is_public: false
+  };
+
+  try {
+    const row = await sbDB.sbUpsertTemplate(tpl);
+    if (!row) throw new Error("La base de datos no ha aceptado el envío.");
+    s.submitted = true;
+    persist();
+    btn.textContent = "✓ Enviada";
+    alert("¡Enviada a revisión! ABMedia la verá en su panel y decidirá si la publica para todos.");
+  } catch (e) {
+    console.error("enviarARevision", e);
+    alert("No se ha podido enviar: " + (e.message || e));
+    btn.textContent = textoPrevio;
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = textoPrevio; }, 2500);
+  }
+}
+
 async function confirmSaveTpl() {
   const s = state.active;
   const title = $("#saveTplName").value.trim() || "Plantilla";
@@ -1636,10 +1678,7 @@ function bind() {
     b.textContent = "✓ Guardada"; b.disabled = true;
     setTimeout(() => { b.textContent = prev; b.disabled = false; }, 1400);
   });
-  $("#submitBtn").addEventListener("click", () => {
-    state.active.submitted = true; persist();
-    alert("¡Enviada a revisión!");
-  });
+  $("#submitBtn").addEventListener("click", enviarARevision);
   $("#tplSaveBtn").addEventListener("click", openSaveTplModal);
   $("#saveTplClose").addEventListener("click", () => $("#saveTplModal").classList.add("hidden"));
   $("#saveTplCancel").addEventListener("click", () => $("#saveTplModal").classList.add("hidden"));
