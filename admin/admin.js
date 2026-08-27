@@ -21,7 +21,10 @@ async function bootSession(user) {
   $("#notAdmin").classList.add("hidden");
   $("#appRoot").classList.remove("hidden");
   $("#userEmail").textContent = user.email || "";
-  setView("review");
+  // Vuelve a la sección donde estabas al recargar
+  let guardada = "review";
+  try { guardada = localStorage.getItem("abmedia_admin_vista") || "review"; } catch {}
+  setView(["review", "pending", "biblio", "users"].includes(guardada) ? guardada : "review");
   // el contador del menú se actualiza aunque estés en otra sección
   fetchUsuariosRegistrados({ refrescar: true })
     .then(l => pintarContadorPendientes(l.filter(u => !u.aprobado).length));
@@ -48,6 +51,7 @@ function bindLogin() {
 /* ------------------------------ Vistas ----------------------------- */
 function setView(v) {
   state.view = v;
+  try { localStorage.setItem("abmedia_admin_vista", v); } catch {}
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === v));
   ["pending", "users", "biblio", "review"].forEach(x => $("#view-" + x).classList.toggle("hidden", x !== v));
   if (v === "pending") renderPending();

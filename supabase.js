@@ -71,6 +71,27 @@ async function sbDeleteSequence(cloudId) {
 
 /* ------------------------- Plantillas ---------------------------------- */
 
+/* El catálogo de la biblioteca. Vive en la base de datos para poder
+ * gestionarlo desde el panel; el fichero catalog.js queda como respaldo si
+ * la consulta falla. Se conserva catalog_id porque el calendario guarda las
+ * programaciones por ese identificador. */
+async function sbFetchCatalogo() {
+  const { data, error } = await sb.from("templates")
+    .select("id,catalog_id,title,category,objective,slides,style")
+    .eq("is_public", true)
+    .order("created_at", { ascending: true });
+  if (error) { console.warn("sbFetchCatalogo", error.message); return null; }
+  return (data || []).map(r => ({
+    id: r.catalog_id || ("pub-" + r.id),
+    cloudId: r.id,
+    category: r.category,
+    title: r.title,
+    objective: r.objective || "",
+    slides: r.slides || [],
+    style: r.style || {}
+  }));
+}
+
 async function sbFetchTemplates(scope = "mine") {
   // scope: "mine" => propias, "public" => aprobadas,
   //        "review" => admin: las que esperan veredicto
@@ -243,4 +264,4 @@ window.sbRevision = { sbSubirVistaPrevia, sbVistasPrevias };
 window.sbFotos = { sbSubirFoto, sbListarFotos, sbDescargarFoto, sbBorrarFoto, sbBorrarTodasLasFotos, rutaDeFoto };
 
 window.sbAuth = { sbGetSession, sbSignIn, sbSignUp, sbSignOut, isAdmin, sbIsAllowed };
-window.sbDB = { sbFetchSequences, sbUpsertSequence, sbDeleteSequence, sbFetchTemplates, sbUpsertTemplate, sbDeleteTemplate, sbRevisarTemplate, sbFetchAvisos, sbMarcarAvisoLeido };
+window.sbDB = { sbFetchCatalogo, sbFetchSequences, sbUpsertSequence, sbDeleteSequence, sbFetchTemplates, sbUpsertTemplate, sbDeleteTemplate, sbRevisarTemplate, sbFetchAvisos, sbMarcarAvisoLeido };

@@ -510,14 +510,8 @@ function renderAll() {
    que se hayan publicado desde el panel. Lo del usuario vive en "Mis
    secuencias", para no tener lo mismo en dos sitios. */
 function getCategoryItems(catKey) {
-  // El catálogo de siempre más lo que ABMedia haya publicado desde el panel
-  const publicadas = (state.publicTemplates || []).map(t => ({
-    id: t.id, cloudId: t.cloudId, title: t.title, category: t.category,
-    slides: t.slides, style: t.style, isUser: false, esPublicada: true
-  }));
   return CATALOG
     .map(c => ({ ...c, isUser: false }))
-    .concat(publicadas)
     .filter(it => !catKey || it.category === catKey);
 }
 
@@ -2191,11 +2185,9 @@ async function bootLoggedIn(user) {
   } else {
     state.sequences = [];
   }
-  const publicas = await sbDB.sbFetchTemplates("public");
-  state.publicTemplates = publicas.map(r => ({
-    id: "p" + r.id, cloudId: r.id, title: r.title, category: r.category,
-    style: r.style, slides: r.slides
-  }));
+  // El catálogo manda desde la base de datos; el fichero es el respaldo
+  const cat = await sbDB.sbFetchCatalogo();
+  if (cat && cat.length) { CATALOG.length = 0; CATALOG.push(...cat); }
 
   const cloudTpls = await sbDB.sbFetchTemplates("mine");
   state.userTemplates = cloudTpls.map(r => ({ id: "u" + r.id, cloudId: r.id, title: r.title, category: r.category, style: r.style, slides: r.slides, submitted: r.submitted, isUser: true }));
