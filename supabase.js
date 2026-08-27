@@ -207,6 +207,39 @@ async function sbBorrarTodasLasFotos() {
   await sb.storage.from(BUCKET).remove(fotos.map(f => `${uid}/${f.name}`));
 }
 
+/* ---- Vistas previas para revisión -------------------------------------
+ * Imágenes de cada frame tal y como las ve el cliente, para que ABMedia
+ * pueda juzgar la secuencia entera y no sólo el texto. */
+const BUCKET_REV = "revisiones";
+
+async function sbSubirVistaPrevia(idPlantilla, indice, blob) {
+  const uid = await sbUidActual();
+  if (!uid) return null;
+  const { error } = await sb.storage.from(BUCKET_REV)
+    .upload(`${uid}/${idPlantilla}/${indice}.jpg`, blob,
+            { upsert: true, contentType: "image/jpeg" });
+  if (error) { console.warn("sbSubirVistaPrevia", error.message); return null; }
+  return true;
+}
+
+/* Enlaces temporales para que el admin vea los frames de un envío. */
+async function sbVistasPrevias(ownerId, idPlantilla) {
+  const carpeta = `${ownerId}/${idPlantilla}`;
+  const { data, error } = await sb.storage.from(BUCKET_REV)
+    .list(carpeta, { limit: 50, sortBy: { column: "name", order: "asc" } });
+  if (error || !data || !data.length) return [];
+  const rutas = data
+    .filter(o => o.name.endsWith(".jpg"))
+    .sort((a, b) => parseInt(a.name) - parseInt(b.name))
+    .map(o => `${carpeta}/${o.name}`);
+  const { data: urls, error: e2 } = await sb.storage.from(BUCKET_REV)
+    .createSignedUrls(rutas, 3600);
+  if (e2) { console.warn("sbVistasPrevias", e2.message); return []; }
+  return (urls || []).map(u => u.signedUrl).filter(Boolean);
+}
+
+window.sbRevision = { sbSubirVistaPrevia, sbVistasPrevias };
+
 window.sbFotos = { sbSubirFoto, sbListarFotos, sbDescargarFoto, sbBorrarFoto, sbBorrarTodasLasFotos, rutaDeFoto };
 
 window.sbAuth = { sbGetSession, sbSignIn, sbSignUp, sbSignOut, isAdmin, sbIsAllowed };

@@ -242,7 +242,7 @@ function makeSeqCard(row, emailsPorId = {}) {
   return card;
 }
 
-function openPreview(seq) {
+async function openPreview(seq, row) {
   let m = $("#previewModal");
   if (!m) {
     m = document.createElement("div");
@@ -260,13 +260,37 @@ function openPreview(seq) {
   m.querySelector("#pmTitle").textContent = seq.title;
   const cat = CATEGORIES[seq.category] || CATEGORIES.venta;
   m.querySelector("#pmMeta").innerHTML = `<span class="pill">${cat.name}</span><span>${seq.slides.length} frames</span>`;
-  const fr = m.querySelector("#pmFrames"); fr.innerHTML = "";
-  seq.slides.forEach(sl => {
-    const cv = document.createElement("canvas"); cv.width = 270; cv.height = 480;
-    drawSlide(cv.getContext("2d"), sl, cv.width, cv.height, seq.style);
-    fr.appendChild(cv);
-  });
+  const fr = m.querySelector("#pmFrames");
+  fr.innerHTML = `<p class="empty">Cargando frames…</p>`;
   m.classList.remove("hidden");
+
+  // Las vistas previas llevan las fotos del cliente: es lo que hay que
+  // juzgar. Si el envío es anterior a esto, se dibuja sólo el texto.
+  let urls = [];
+  if (row && row.id && row.owner && window.sbRevision) {
+    try { urls = await sbRevision.sbVistasPrevias(row.owner, row.id); } catch {}
+  }
+
+  fr.innerHTML = "";
+  if (urls.length) {
+    urls.forEach(u => {
+      const im = document.createElement("img");
+      im.className = "frame-img";
+      im.src = u; im.alt = "";
+      im.loading = "lazy";
+      fr.appendChild(im);
+    });
+  } else {
+    const nota = document.createElement("p");
+    nota.className = "sin-fotos";
+    nota.textContent = "Este envío es anterior a las vistas previas: sólo se ve el texto.";
+    fr.appendChild(nota);
+    seq.slides.forEach(sl => {
+      const cv = document.createElement("canvas"); cv.width = 270; cv.height = 480;
+      drawSlide(cv.getContext("2d"), sl, cv.width, cv.height, seq.style);
+      fr.appendChild(cv);
+    });
+  }
 }
 
 /* -------------------- Plantillas pendientes ------------------------ */
@@ -335,8 +359,8 @@ function tarjetaRevision(row, emailsPorId) {
     <div class="comentario hidden">
       <textarea rows="4" placeholder="Qué cambiarías. Ej: en el frame 1 añadiría…, el 2 lo quitaría, el CTA del 3 lo haría más directo."></textarea>
       <div class="comentario-row">
-        <button class="btn btn-ghost xs" data-act="cancelar">Cancelar</button>
-        <button class="btn btn-primary xs" data-act="enviar-cambios">Enviar comentario</button>
+        <button class="btn btn-ghost" data-act="cancelar">Cancelar</button>
+        <button class="btn btn-ghost" data-act="enviar-cambios">Enviar comentario</button>
       </div>
     </div>`;
 
@@ -344,7 +368,7 @@ function tarjetaRevision(row, emailsPorId) {
   const area = zona.querySelector("textarea");
 
   tools.querySelector('[data-act="preview"]').addEventListener("click", e => {
-    e.stopPropagation(); openPreview(seq);
+    e.stopPropagation(); openPreview(seq, row);
   });
 
   async function veredicto(estado, nota) {

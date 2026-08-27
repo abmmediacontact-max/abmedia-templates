@@ -344,7 +344,7 @@ async function loadFiles(fileList) {
     });
   }
   if (fallidas.length) {
-    alert("No se han podido abrir estas imágenes:\n\n" + fallidas.join("\n"));
+    aviso("No se han podido abrir: " + fallidas.join(", "), "error");
   }
   // Dedup defensivo final
   const uniq = new Map(); state.images.forEach(im => uniq.set(im.key, im));
@@ -564,6 +564,22 @@ function renderCatalogList() {
     return;
   }
   items.forEach(item => grid.appendChild(makeLibCard(item)));
+}
+
+/* Aviso breve dentro de la propia web. Las ventanas del navegador cortan
+   el trabajo y se salen de la estética. */
+function aviso(texto, tipo = "ok") {
+  const caja = document.getElementById("toasts");
+  if (!caja) return;
+  const el = document.createElement("div");
+  el.className = "toast " + tipo;
+  el.textContent = texto;
+  caja.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("visible"));
+  setTimeout(() => {
+    el.classList.remove("visible");
+    setTimeout(() => el.remove(), 320);
+  }, tipo === "error" ? 5200 : 3600);
 }
 
 /* ---------------------------------------------------------------------- *
@@ -1603,7 +1619,7 @@ function moveFrame(dir) {
 function abrirRevisionModal() {
   if (!state.active) return;
   if (!state.user) {
-    alert("Necesitas haber iniciado sesión para enviar una secuencia a revisión.");
+    aviso("Necesitas haber iniciado sesión para enviar una secuencia a revisión.", "error");
     return;
   }
   $("#revisionShare").checked = false;
@@ -1634,13 +1650,19 @@ async function enviarARevision() {
   try {
     const row = await sbDB.sbUpsertTemplate(tpl);
     if (!row) throw new Error("La base de datos no ha aceptado el envío.");
+
+    // Además del texto se suben los frames tal y como se ven, para que
+    // ABMedia pueda juzgar también las fotos y su encuadre.
+    btn.textContent = "Subiendo frames…";
+    await subirVistasPrevias(row.id, s);
+
     s.submitted = true;
     persist();
     cerrarRevisionModal();
-    alert("¡Enviada! Cuando ABMedia la revise te avisaremos en el apartado Avisos.");
+    aviso("Enviada. Te avisaremos en notificaciones cuando la revisemos.");
   } catch (e) {
     console.error("enviarARevision", e);
-    alert("No se ha podido enviar: " + (e.message || e));
+    aviso("No se ha podido enviar: " + (e.message || e), "error");
   } finally {
     btn.disabled = false;
     btn.textContent = "Enviar";
@@ -1715,6 +1737,23 @@ function blobDownload(canvas, name) {
     setTimeout(() => { URL.revokeObjectURL(a.href); res(); }, 400);
   }, "image/jpeg", 0.92));
 }
+/* Sube una imagen de cada frame del envío, a menor tamaño para no ocupar. */
+async function subirVistasPrevias(idPlantilla, seq) {
+  if (!window.sbRevision) return;
+  const ANCHO = 540, ALTO = 960;
+  for (let i = 0; i < seq.slides.length; i++) {
+    try {
+      const off = document.createElement("canvas");
+      off.width = ANCHO; off.height = ALTO;
+      drawSlide(off.getContext("2d"), seq.slides[i], ANCHO, ALTO, seq.style);
+      const blob = await new Promise(r => off.toBlob(r, "image/jpeg", 0.82));
+      if (blob) await sbRevision.sbSubirVistaPrevia(idPlantilla, i, blob);
+    } catch (e) {
+      console.warn("vista previa frame " + i, e);
+    }
+  }
+}
+
 function renderToBlob(slide) {
   const off = document.createElement("canvas"); off.width = CANVAS_W; off.height = CANVAS_H;
   drawSlide(off.getContext("2d"), slide, CANVAS_W, CANVAS_H, state.active.style);

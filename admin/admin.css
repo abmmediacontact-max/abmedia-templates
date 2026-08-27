@@ -132,3 +132,22 @@
 .comentario textarea:focus { outline: none; border-color: rgba(255,255,255,.28); }
 .comentario-row { display: flex; gap: 8px; }
 .comentario-row .btn { flex: 1; }
+
+/* ------------------- Pie de la barra lateral --------------------------- */
+.sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 8px; }
+.sidebar-foot .btn { justify-content: center; padding: 12px 16px; border-radius: 12px; }
+.sidebar-foot .volver { text-decoration: none; }
+
+/* Los dos del comentario, del mismo tamaño y forma */
+.comentario-row .btn { flex: 1; border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+
+/* Frames reales del cliente al revisar */
+.frame-img {
+    width: 270px; height: 480px; object-fit: cover;
+    border-radius: 12px; border: 1px solid var(--border);
+    background: #101010; display: block; flex: 0 0 auto;
+}
+.sin-fotos {
+    width: 100%; font-size: 12.5px; color: var(--faint);
+    margin-bottom: 4px;
+}
