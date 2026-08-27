@@ -119,10 +119,17 @@ async function sbRevisarTemplate(cloudId, estado, nota) {
   return data;
 }
 
-/* Avisos del cliente: sus envíos ya revisados que todavía no ha leído. */
+/* Avisos del cliente: sus propios envíos ya revisados.
+ * El filtro por dueño es imprescindible: las plantillas publicadas en la
+ * biblioteca son visibles para todo el mundo, así que sin él cada cliente
+ * vería en sus avisos las secuencias publicadas de los demás. */
 async function sbFetchAvisos() {
+  const { data: sesion } = await sb.auth.getUser();
+  const uid = sesion && sesion.user ? sesion.user.id : null;
+  if (!uid) return [];
   const { data, error } = await sb.from("templates")
     .select("id,title,category,review_status,review_note,reviewed_at,seen_by_owner")
+    .eq("owner", uid)
     .neq("review_status", "pendiente")
     .order("reviewed_at", { ascending: false });
   if (error) { console.error("sbFetchAvisos", error); return []; }
