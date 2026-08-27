@@ -49,10 +49,9 @@ function bindLogin() {
 function setView(v) {
   state.view = v;
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === v));
-  ["pending", "users", "seqs", "review"].forEach(x => $("#view-" + x).classList.toggle("hidden", x !== v));
+  ["pending", "users", "review"].forEach(x => $("#view-" + x).classList.toggle("hidden", x !== v));
   if (v === "pending") renderPending();
   else if (v === "users") renderUsers();
-  else if (v === "seqs") renderAllSequences();
   else if (v === "review") renderReview();
 }
 
@@ -321,6 +320,18 @@ function tarjetaRevision(row, emailsPorId) {
   cv.width = 270; cv.height = 480; cv.className = "card-canvas";
   if (seq.slides[0]) drawSlide(cv.getContext("2d"), seq.slides[0], cv.width, cv.height, seq.style);
   card.appendChild(cv);
+
+  // Si el envío trae vistas previas, la miniatura es la foto real del
+  // primer frame en vez del texto sobre un degradado.
+  if (row.owner && row.id && window.sbRevision) {
+    sbRevision.sbVistasPrevias(row.owner, row.id).then(urls => {
+      if (!urls.length) return;
+      const im = document.createElement("img");
+      im.className = "card-canvas";
+      im.src = urls[0]; im.alt = "";
+      cv.replaceWith(im);
+    }).catch(() => {});
+  }
 
   const badge = document.createElement("span");
   badge.className = "frames-badge";

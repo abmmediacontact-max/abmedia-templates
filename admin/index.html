@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../styles.css?v=24" />
-  <link rel="stylesheet" href="admin.css?v=24" />
+  <link rel="stylesheet" href="../styles.css?v=25" />
+  <link rel="stylesheet" href="admin.css?v=25" />
 </head>
 <body>
   <!-- LOGIN -->
@@ -63,10 +63,6 @@
           <svg class="ni" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21 C2 16 5 14 9 14 S16 16 16 21 Z"/><circle cx="17" cy="7" r="3"/><path d="M14 16 C16 14 19 14 22 16 V21"/></svg>
           <span>Usuarios</span>
         </a>
-        <a class="nav-item" data-view="seqs">
-          <svg class="ni" viewBox="0 0 24 24"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="9" y="4" width="4" height="16" rx="1"/><rect x="15" y="6" width="6" height="14" rx="1"/></svg>
-          <span>Todas las secuencias</span>
-        </a>
         <a class="nav-item" data-view="review">
           <svg class="ni" viewBox="0 0 24 24"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z M9 12 L11 14 L15 10"/></svg>
           <span>Secuencias a revisar</span>
@@ -107,17 +103,6 @@
         <div id="usersList" class="ideas-list"></div>
       </section>
 
-      <!-- ALL SEQUENCES -->
-      <section id="view-seqs" class="hidden">
-        <header class="topbar">
-          <div>
-            <h1>Todas las secuencias</h1>
-            <p>Lo que están creando tus clientes. Promociona las buenas a plantilla pública.</p>
-          </div>
-          <span class="pill" id="seqsCount">0</span>
-        </header>
-        <div id="seqsGrid" class="grid"></div>
-      </section>
 
       <!-- REVIEW -->
       <section id="view-review" class="hidden">
@@ -133,9 +118,9 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../supabase.js?v=24"></script>
-  <script src="../templates.js?v=24"></script>
-  <script src="../catalog.js?v=24"></script>
-  <script src="admin.js?v=24"></script>
+  <script src="../supabase.js?v=25"></script>
+  <script src="../templates.js?v=25"></script>
+  <script src="../catalog.js?v=25"></script>
+  <script src="admin.js?v=25"></script>
 </body>
 </html>

@@ -485,6 +485,7 @@ async function deleteImage(index) {
  * ========================================================================= */
 function setView(view) {
   state.view = view;
+  try { localStorage.setItem("abmedia_vista", view); } catch {}
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === view));
   $("#avisosTab").classList.toggle("activo", view === "avisos");
   ["library", "mias", "gallery", "desk", "calendar", "avisos", "admin"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
@@ -859,11 +860,16 @@ function calSet(map, key, list) {
 }
 // Días en los que aparece una secuencia del usuario, por todo el calendario
 function diasDeSecuencia(seqId) {
-  const tag = "seq:" + seqId;
+  const seq = state.sequences.find(x => x.id === seqId);
+  if (!seq) return [];
+  const tags = ["seq:" + seq.id];
+  if (seq.cloudId) tags.push("seq:" + seq.cloudId);
   const dias = [];
   for (const ym in state.schedule) {
     const map = state.schedule[ym];
-    for (const d in map) if (calList(map, d).includes(tag)) dias.push(d);
+    for (const d in map) {
+      if (calList(map, d).some(e => tags.includes(e))) dias.push(d);
+    }
   }
   return dias.sort();
 }
@@ -877,7 +883,19 @@ function sincronizarFechaSecuencia(seqId) {
   const fecha = dias.length ? dias[0] : undefined;
   seq.scheduledDate = fecha;
   if (seq.style) seq.style.scheduledDate = fecha;
-  persist();
+  // Guarda ESTA secuencia. Antes guardaba la que estuviera abierta en el
+  // editor, así que al arrastrar en el calendario la fecha nueva no llegaba
+  // a la nube y al recargar reaparecía en el día viejo.
+  guardarSecuencia(seq);
+}
+
+/* Guarda una secuencia concreta, esté abierta o no. */
+function guardarSecuencia(seq) {
+  store.save(state.sequences);
+  if (!state.user || !seq) return;
+  sbDB.sbUpsertSequence(seq).then(row => {
+    if (row && !seq.cloudId) seq.cloudId = row.id;
+  }).catch(() => {});
 }
 
 function calPush(map, key, entry) {
@@ -886,13 +904,26 @@ function calPush(map, key, entry) {
   calSet(map, key, l);
 }
 
-// Devuelve { title, category, isUserSeq, ref }  donde ref es seq-id o catalog-id
+/* El calendario apunta a las secuencias por su identificador de la nube,
+ * que no cambia. El número local se reparte de nuevo en cada carga, así que
+ * usarlo hacía que las entradas guardadas dejaran de coincidir y la misma
+ * secuencia acabara duplicada en varios días. */
+function tagDeSecuencia(seq) {
+  return "seq:" + (seq.cloudId || seq.id);
+}
+function secuenciaDeTag(tag) {
+  if (typeof tag !== "string" || !tag.startsWith("seq:")) return null;
+  const ref = tag.slice(4);
+  return state.sequences.find(s =>
+    String(s.cloudId) === ref || String(s.id) === ref) || null;
+}
+
+// Devuelve { title, category, isUserSeq, ref } donde ref es la secuencia o el id de catálogo
 function resolveCalEntry(entry) {
   if (typeof entry === "string" && entry.startsWith("seq:")) {
-    const id = parseInt(entry.slice(4));
-    const seq = state.sequences.find(s => s.id === id);
+    const seq = secuenciaDeTag(entry);
     if (!seq) return null;
-    return { title: seq.title, category: seq.category, isUserSeq: true, ref: id };
+    return { title: seq.title, category: seq.category, isUserSeq: true, ref: seq.id };
   }
   const c = CATALOG.find(x => x.id === entry);
   if (!c) return null;
@@ -901,11 +932,13 @@ function resolveCalEntry(entry) {
 
 // Quita todas las referencias 'seq:<id>' del schedule
 function removeScheduleEntriesForSeq(seqId) {
-  const tag = "seq:" + seqId;
+  const seq = state.sequences.find(x => x.id === seqId);
+  const tags = ["seq:" + seqId];
+  if (seq && seq.cloudId) tags.push("seq:" + seq.cloudId);
   for (const ym in state.schedule) {
     const map = state.schedule[ym];
     for (const d in map) {
-      calSet(map, d, calList(map, d).filter(e => e !== tag));
+      calSet(map, d, calList(map, d).filter(e => !tags.includes(e)));
     }
   }
 }
@@ -916,7 +949,7 @@ function setScheduleForSequence(seq, date) {
   if (date) {
     const ym = date.slice(0, 7);
     state.schedule[ym] = state.schedule[ym] || {};
-    calPush(state.schedule[ym], date, "seq:" + seq.id);
+    calPush(state.schedule[ym], date, tagDeSecuencia(seq));
   }
   storeSched.save(state.schedule);
   if (state.view === "calendar") renderCalendar();
@@ -924,17 +957,29 @@ function setScheduleForSequence(seq, date) {
 
 // Reconstruye entradas del calendario para secuencias con scheduledDate al iniciar
 function rebuildScheduleFromSequences() {
-  state.sequences.forEach(s => {
-    if (s.scheduledDate) {
-      const ym = s.scheduledDate.slice(0,7);
-      state.schedule[ym] = state.schedule[ym] || {};
-      // Se añade a lo que ya hubiera ese día, sin pisarlo
-      const tag = "seq:" + s.id;
-      if (!calList(state.schedule[ym], s.scheduledDate).includes(tag)) {
-        calPush(state.schedule[ym], s.scheduledDate, tag);
-      }
+  // 1. Fuera las entradas que apuntan a secuencias que ya no existen: son
+  //    restos de los identificadores viejos y es lo que duplicaba días.
+  for (const ym in state.schedule) {
+    const map = state.schedule[ym];
+    for (const d in map) {
+      const limpio = calList(map, d).filter(e => {
+        if (typeof e === "string" && e.startsWith("seq:")) return !!secuenciaDeTag(e);
+        return CATALOG.some(c => c.id === e);
+      });
+      calSet(map, d, limpio);
     }
+  }
+
+  // 2. Cada secuencia con fecha aparece una sola vez, y con el tag estable
+  state.sequences.forEach(s => {
+    if (!s.scheduledDate) return;
+    const dias = diasDeSecuencia(s.id);
+    if (dias.length) return;              // ya está colocada
+    const ym = s.scheduledDate.slice(0, 7);
+    state.schedule[ym] = state.schedule[ym] || {};
+    calPush(state.schedule[ym], s.scheduledDate, tagDeSecuencia(s));
   });
+
   storeSched.save(state.schedule);
 }
 
@@ -998,7 +1043,7 @@ function renderCalendar() {
         cur.splice(idx, 1);
         calSet(map, key, cur);
         if (typeof entry === "string" && entry.startsWith("seq:")) {
-          sincronizarFechaSecuencia(parseInt(entry.slice(4)));
+          { const sq = secuenciaDeTag(entry); if (sq) sincronizarFechaSecuencia(sq.id); }
         }
         storeSched.save(state.schedule);
         renderCalendar();
@@ -1045,7 +1090,8 @@ function renderCalendar() {
       calPush(toMap, key, movida);
       // Si es una secuencia del usuario, se actualiza su fecha
       if (typeof movida === "string" && movida.startsWith("seq:")) {
-        sincronizarFechaSecuencia(parseInt(movida.slice(4)));
+        const sq = secuenciaDeTag(movida);
+        if (sq) sincronizarFechaSecuencia(sq.id);
       }
       storeSched.save(state.schedule);
       renderCalendar();
@@ -1115,7 +1161,7 @@ function peekOpenInEditor() {
   state.sequences.unshift(created);
   const map = state.schedule[key.slice(0, 7)] || (state.schedule[key.slice(0, 7)] = {});
   const cur = calList(map, key);
-  cur[idx] = "seq:" + created.id;
+  cur[idx] = tagDeSecuencia(created);
   calSet(map, key, cur);
   storeSched.save(state.schedule);
   persist();
@@ -1131,7 +1177,7 @@ function peekRemoveFromDay() {
     cur.splice(idx, 1);
     calSet(map, key, cur);
     if (typeof entry === "string" && entry.startsWith("seq:")) {
-      sincronizarFechaSecuencia(parseInt(entry.slice(4)));
+      { const sq = secuenciaDeTag(entry); if (sq) sincronizarFechaSecuencia(sq.id); }
     }
     storeSched.save(state.schedule);
   }
@@ -1163,7 +1209,7 @@ function renderCalPickList() {
   const q = ($("#calPickSearch").value || "").trim().toLowerCase();
   const cont = $("#calPickList");
   const mias = state.sequences.map(s => ({
-    entry: "seq:" + s.id, title: s.title, category: s.category, mine: true
+    entry: tagDeSecuencia(s), title: s.title, category: s.category, mine: true
   }));
   const cat = CATALOG.map(c => ({
     entry: c.id, title: c.title, category: c.category, mine: false
@@ -1187,7 +1233,7 @@ function renderCalPickList() {
       const ym = _calPickKey.slice(0, 7);
       state.schedule[ym] = state.schedule[ym] || {};
       calPush(state.schedule[ym], _calPickKey, x.entry);
-      if (x.mine) sincronizarFechaSecuencia(parseInt(x.entry.slice(4)));
+      if (x.mine) { const sq = secuenciaDeTag(x.entry); if (sq) sincronizarFechaSecuencia(sq.id); }
       storeSched.save(state.schedule);
       closeCalPicker();
       renderCalendar();
@@ -1719,10 +1765,29 @@ function filaAviso(f) {
          <span class="aviso-estado ${e.clase}">${e.texto}</span>
        </div>
        <span class="aviso-fecha">${cuando}</span>
+       <button class="aviso-x" title="Quitar" aria-label="Quitar">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6 L18 18 M18 6 L6 18"/></svg>
+       </button>
      </div>` +
     (f.review_note
       ? `<p class="aviso-nota">${escapeHtml(f.review_note).replace(/\n/g, "<br>")}</p>`
       : "");
+
+  // Quitar un aviso concreto: se borra su envío, que ya está revisado
+  el.querySelector(".aviso-x").addEventListener("click", async ev => {
+    ev.stopPropagation();
+    el.style.opacity = ".4";
+    try {
+      await sbDB.sbDeleteTemplate(f.id);
+      el.remove();
+      contarAvisos();
+      if (!document.querySelectorAll("#avisosList .aviso").length) renderAvisos();
+    } catch (e) {
+      console.error("borrar aviso", e);
+      el.style.opacity = "";
+      aviso("No se ha podido quitar el aviso.", "error");
+    }
+  });
   return el;
 }
 
@@ -2126,7 +2191,11 @@ async function bootLoggedIn(user) {
   state.calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   rebuildScheduleFromSequences();
 
-  setView("library");
+  // Vuelve a donde estabas antes de recargar, no siempre a la biblioteca
+  let vistaGuardada = "library";
+  try { vistaGuardada = localStorage.getItem("abmedia_vista") || "library"; } catch {}
+  const validas = ["library", "mias", "gallery", "desk", "calendar", "avisos"];
+  setView(validas.includes(vistaGuardada) ? vistaGuardada : "library");
   contarAvisos();
   setTimeout(() => startTour(false), 600);
 }
