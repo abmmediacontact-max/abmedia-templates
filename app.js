@@ -629,9 +629,9 @@ function tarjetaMia(seq) {
   box.querySelector('[data-act="abrir"]').addEventListener("click", e => {
     e.stopPropagation(); openEditor(seq.id);
   });
+  // Borra de un clic, sin preguntar
   box.querySelector('[data-act="del"]').addEventListener("click", async e => {
     e.stopPropagation();
-    if (!confirm(`¿Borrar "${seq.title || "esta secuencia"}"?`)) return;
     if (state.user && seq.cloudId) await sbDB.sbDeleteSequence(seq.cloudId);
     removeScheduleEntriesForSeq(seq.id);
     storeSched.save(state.schedule);
@@ -1596,12 +1596,6 @@ function moveFrame(dir) {
 }
 
 /* ---- Plantilla propia ---- */
-function openSaveTplModal() {
-  const s = state.active;
-  $("#saveTplName").value = s.title || "Plantilla";
-  $("#saveTplCat").value = s.category;
-  $("#saveTplModal").classList.remove("hidden");
-}
 /* Enviar a revisión.
  * Antes esto sólo marcaba la secuencia como "submitted", pero la cola del
  * admin lee la tabla de plantillas: el envío no llegaba a ninguna parte.
@@ -1710,25 +1704,6 @@ function filaAviso(f) {
   return el;
 }
 
-async function confirmSaveTpl() {
-  const s = state.active;
-  const title = $("#saveTplName").value.trim() || "Plantilla";
-  const category = $("#saveTplCat").value;
-  const tpl = {
-    id: "u" + Date.now(),
-    title, category, isUser: true,
-    style: JSON.parse(JSON.stringify(s.style)),
-    slides: s.slides.map(sl => ({ body: sl.body, pos: { ...sl.pos }, align: sl.align, overlay: sl.overlay }))
-  };
-  if (state.user) {
-    const row = await sbDB.sbUpsertTemplate({ ...tpl });
-    if (row) tpl.cloudId = row.id;
-  }
-  state.userTemplates.unshift(tpl);
-  storeT.save(state.userTemplates);
-  $("#saveTplModal").classList.add("hidden");
-  if (state.view === "library") renderLibrary();
-}
 
 /* =========================================================================
  *  Descargas
@@ -2009,10 +1984,6 @@ function bind() {
   $("#revisionModal").addEventListener("click", e => {
     if (e.target.id === "revisionModal") cerrarRevisionModal();
   });
-  $("#tplSaveBtn").addEventListener("click", openSaveTplModal);
-  $("#saveTplClose").addEventListener("click", () => $("#saveTplModal").classList.add("hidden"));
-  $("#saveTplCancel").addEventListener("click", () => $("#saveTplModal").classList.add("hidden"));
-  $("#saveTplOk").addEventListener("click", confirmSaveTpl);
   $("#dlOne").addEventListener("click", async () => {
     const blob = await renderToBlob(curSlide());
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
