@@ -2155,9 +2155,19 @@ async function bootLoggedIn(user) {
   } else {
     state.sequences = [];
   }
-  // El catálogo manda desde la base de datos; el fichero es el respaldo
+  // El catálogo manda desde la base de datos, pero SIN borrar lo que el
+  // fichero tenga y la base no. Cuando se pasó el catálogo a Supabase sólo
+  // subieron tres categorías de cinco: al sustituir la lista entera,
+  // Personal y Venta desaparecieron de la biblioteca de todo el mundo.
+  // Fusionar en vez de sustituir hace que eso no pueda repetirse: falte lo
+  // que falte en la base, el cliente sigue viendo el catálogo completo.
   const cat = await sbDB.sbFetchCatalogo();
-  if (cat && cat.length) { CATALOG.length = 0; CATALOG.push(...cat); }
+  if (cat && cat.length) {
+    const enLaBase = new Set(cat.map(c => c.id));
+    const soloEnFichero = CATALOG.filter(c => !enLaBase.has(c.id));
+    CATALOG.length = 0;
+    CATALOG.push(...cat, ...soloEnFichero);
+  }
 
   const cloudTpls = await sbDB.sbFetchTemplates("mine");
   state.userTemplates = cloudTpls.map(r => ({ id: "u" + r.id, cloudId: r.id, title: r.title, category: r.category, style: r.style, slides: r.slides, submitted: r.submitted, isUser: true }));
