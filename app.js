@@ -404,7 +404,47 @@ function instantiate(data) {
 }
 function fromCatalog(catId, extra = {}) {
   const c = CATALOG.find(x => x.id === catId);
-  return instantiate({ title: c.title, category: c.category, slides: c.slides, ...extra });
+  const seq = instantiate({ title: c.title, category: c.category, slides: c.slides, ...extra });
+  seq.style.plantilla = catId;   // de qué plantilla sale (para «otra de la misma categoría»)
+  return seq;
+}
+
+/*
+ * «Otra de la misma categoría»: cambia las stories de una secuencia del
+ * calendario por otra plantilla de su categoría, sin tocar el día, el estado
+ * ni el estilo. Evita la que ya era y, si puede, las que ya salen esa semana.
+ */
+function plantillaDe(seq) {
+  if (seq.style && seq.style.plantilla) return seq.style.plantilla;
+  const c = CATALOG.find(x => x.title === seq.title && normalizaCategoria(x.category) === seq.category);
+  return c ? c.id : null;
+}
+function cambiaPorOtra(seq) {
+  if (!seq) return null;
+  const actual = plantillaDe(seq);
+  let pool = CATALOG.filter(x => normalizaCategoria(x.category) === seq.category && x.id !== actual);
+  if (seq.scheduledDate) {
+    const d = new Date(seq.scheduledDate + "T12:00");
+    const lunes = new Date(d); lunes.setDate(d.getDate() - (d.getDay() + 6) % 7);
+    const fin = new Date(lunes); fin.setDate(lunes.getDate() + 7);
+    const usadas = new Set(state.sequences
+      .filter(x => x !== seq && x.scheduledDate && new Date(x.scheduledDate + "T12:00") >= lunes && new Date(x.scheduledDate + "T12:00") < fin)
+      .map(plantillaDe));
+    const libres = pool.filter(x => !usadas.has(x.id));
+    if (libres.length) pool = libres;
+  }
+  if (!pool.length) { aviso("No hay otra plantilla de esta categoría", "mal"); return null; }
+  const t = pool[Math.floor(Math.random() * pool.length)];
+  const nueva = fromCatalog(t.id, { id: -1 });
+  seq.title = t.title;
+  seq.slides = nueva.slides;
+  seq.style.plantilla = t.id;
+  guardarSecuencia(seq);
+  return seq;
+}
+function refrescaTrasCambio() {
+  renderCalendar();
+  if (state.view === "gestion" && typeof renderGestion === "function") renderGestion();
 }
 function fromStructure(frames, category) {
   const slides = Array.from({ length: frames }, (_, i) => ({ body: blankBody(i), overlay: "bottom" }));
@@ -1094,6 +1134,7 @@ function verPlantilla(id) {
   const n = item.slides.length;
   $("#seqPeekWhen").textContent = `${n} ${n === 1 ? "story" : "stories"}${item.objective ? " · " + item.objective : ""}`;
   $("#seqPeekRemove").classList.add("hidden");
+  $("#seqPeekOtra").classList.add("hidden");
   $("#seqPeekOpen").textContent = "Usar esta secuencia";
   _peekSeq = fromCatalog(id, { id: -1 });
   _peekFrame = 0;
@@ -2229,6 +2270,7 @@ function renderCalendar() {
         `<span class="ct cat-${escapeAttr(r.category || "venta")}">${cat.name}</span>` +
         `<span class="sq-t">${escapeHtml(r.title)}</span>` +
         `<div class="sq-minis"></div>` +
+        (r.isUserSeq ? `<button class="sq-otra" title="Otra de la misma categoría" aria-label="Otra de la misma categoría"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>` : "") +
         `<button class="sq-x" title="Eliminar secuencia">✕</button>`;
 
       /* Las stories de la secuencia, en pequeño.
@@ -2253,6 +2295,10 @@ function renderCalendar() {
         minis.appendChild(mas);
       }
 
+      seqEl.querySelector(".sq-otra")?.addEventListener("click", e => {
+        e.stopPropagation();
+        if (cambiaPorOtra(secuenciaDeTag(entry))) refrescaTrasCambio();
+      });
       seqEl.querySelector(".sq-x").addEventListener("click", e => {
         e.stopPropagation();
         const sq = secuenciaDeTag(entry);
@@ -2340,6 +2386,7 @@ function openSeqPeek(entry, key, idx) {
 
   _peekSeq = seq;
   _peekFrame = 0;
+  $("#seqPeekOtra").classList.toggle("hidden", !r.isUserSeq);
   pintaVisor();
   $("#seqPeekModal").classList.remove("hidden");
 }
@@ -3619,6 +3666,14 @@ function bind() {
     if (e.key === "ArrowRight") muevePeek(1);
   });
   $("#seqPeekRemove").addEventListener("click", peekRemoveFromDay);
+  $("#seqPeekOtra").addEventListener("click", () => {
+    if (!_peek || _peek.lib) return;
+    const sq = secuenciaDeTag(_peek.entry);
+    if (!cambiaPorOtra(sq)) return;
+    $("#seqPeekTitle").textContent = sq.title;
+    _peekSeq = sq; _peekFrame = 0; pintaVisor();
+    refrescaTrasCambio();
+  });
   $("#seqPeekModal").addEventListener("click", e => {
     if (e.target.id === "seqPeekModal") closeSeqPeek();
   });
