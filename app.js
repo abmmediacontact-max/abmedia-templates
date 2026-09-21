@@ -2591,30 +2591,48 @@ function pintaCamposSticker(slide) {
   pon("#stkEmoji", st.emoji || "");
   pon("#stkY", st.y == null ? 0.6 : st.y);
 }
+/*
+ * Elegir la foto del frame. Antes estaban todas en fila debajo de la vista
+ * previa y la lista no acababa nunca; ahora hay un botón por tipo (Owner y
+ * Background) y cada uno abre su ventana con las fotos de ese tipo.
+ * Esto se llama en cada repintado del editor, así que sólo toca los números.
+ */
 function renderBgPicker() {
   const box = $("#bgPicker"); if (!box) return;
-  box.innerHTML = "";
-  if (!state.images.length) { box.innerHTML = `<span class="bg-empty">Sube fotos en "Galería" para elegir el fondo.</span>`; return; }
-
-  /* Delante las que tocan en este frame: owner en el primero y en el del CTA,
-     background en el resto. No se esconde ninguna —puede que quieras romper
-     la regla a propósito—, sólo se ordenan. */
-  const quiere = state.active && pideOwner(state.active, state.current) ? "owner" : "fondo";
-  const orden = state.images
-    .map((im, i) => ({ im, i }))
-    .sort((a, b) => (b.im.tipo === quiere) - (a.im.tipo === quiere));
-
-  orden.forEach(({ im, i }) => {
-    const t = document.createElement("button");
-    t.className = "bg-thumb" + (i === curSlide().bgIndex ? " active" : "");
-    const cv = document.createElement("canvas"); cv.width = 54; cv.height = 96;
-    drawCover(cv.getContext("2d"), im.img, 54, 96, { zoom: 1, ox: 0, oy: 0 });
-    t.appendChild(cv);
-    if (im.tipo === quiere) t.classList.add("del-contexto");
-    t.title = TIPOS_FOTO[im.tipo] ? TIPOS_FOTO[im.tipo].nombre : "Sin marcar";
-    t.addEventListener("click", () => { ponFondo(curSlide(), i); curSlide().bg = { zoom: 1, ox: 0, oy: 0 }; drawEditor(); refreshActiveThumb(); persist(); });
-    box.appendChild(t);
-  });
+  const n = t => state.images.filter(im => im.tipo === t).length;
+  const cO = $("#cuentaOwner"), cF = $("#cuentaFondo");
+  if (cO) cO.textContent = n("owner");
+  if (cF) cF.textContent = n("fondo");
+  const vacio = !state.images.length;
+  box.innerHTML = vacio ? `<span class="bg-empty">Sube fotos en "Galería" para elegir el fondo.</span>` : "";
+  document.querySelector(".elige-foto")?.classList.toggle("hidden", vacio);
+}
+function abreFotosTipo(tipo) {
+  if (!state.active) return;
+  const lista = state.images.map((im, i) => ({ im, i })).filter(x => x.im.tipo === tipo);
+  const nombre = TIPOS_FOTO[tipo]?.nombre || tipo;
+  const actual = curSlide().bgIndex;
+  montaDialogo(`
+    <div class="modal-head"><h2>${nombre}</h2><button class="icon-btn" data-dlg="no">✕</button></div>
+    <p class="modal-sub">${lista.length ? `Elige la foto de fondo del frame ${state.current + 1}.` : `No tienes fotos marcadas como ${nombre}. Márcalas en Galería.`}</p>
+    <div class="fotos-pop-rejilla">${lista.map(({ i }) =>
+      `<button type="button" class="fotos-pop-foto${i === actual ? " activa" : ""}" data-foto="${i}"><img alt="" loading="lazy"></button>`).join("")}</div>`,
+    d => {
+      d.querySelector(".modal-box").classList.remove("small");
+      d.querySelector(".modal-box").classList.add("fotos-pop");
+      d.querySelector('[data-dlg="no"]').addEventListener("click", cierraDialogo);
+      d.querySelectorAll("[data-foto]").forEach(b => {
+        const im = state.images[+b.dataset.foto], img = b.querySelector("img");
+        const u = miniDe(im, url => { img.src = url; });
+        if (u) img.src = u;
+        b.addEventListener("click", () => {
+          ponFondo(curSlide(), +b.dataset.foto);
+          curSlide().bg = { zoom: 1, ox: 0, oy: 0 };
+          cierraDialogo();
+          drawEditor(); refreshActiveThumb(); persist();
+        });
+      });
+    });
 }
 // RAF debouncer: múltiples drawEditor() en el mismo frame → un único render
 let _drawScheduled = false;
@@ -2747,10 +2765,6 @@ function drawGuides(c, w, h) {
   c.setLineDash([w * 0.022, w * 0.022]);
   c.beginPath(); c.moveTo(0, ty); c.lineTo(w, ty); c.moveTo(0, by); c.lineTo(w, by); c.stroke();
   c.setLineDash([]);
-  c.fillStyle = "rgba(255,255,255,0.55)";
-  c.font = `600 ${w * 0.026}px -apple-system, system-ui, sans-serif`;
-  c.textAlign = "center"; c.textBaseline = "middle";
-  c.fillText("zona segura", w / 2, ty + w * 0.03);
   c.restore();
 }
 function drawCover(c, img, w, h, bg) {
@@ -3617,7 +3631,7 @@ function bind() {
   $("#textColor").addEventListener("input", e => { state.active.style.textColor = e.target.value; updateColorDots(); drawEditor(); renderThumbs(); persist(); });
   $("#sizeRange").addEventListener("input", e => { state.active.style.size = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
   $("#sizeRange").addEventListener("change", persist);
-  $("#shuffleAll").addEventListener("click", () => { assignRandomImages(state.active); drawEditor(); renderThumbs(); persist(); });
+  document.querySelectorAll("[data-elige-tipo]").forEach(b => b.addEventListener("click", () => abreFotosTipo(b.dataset.eligeTipo)));
   const campoSticker = (id, aplica) => $(id).addEventListener("input", e => {
     const st = curSlide().sticker; if (!st) return;
     aplica(st, e.target.value); drawEditor(); refreshActiveThumb(); persist();

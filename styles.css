@@ -1971,3 +1971,19 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .seg-alin button.on { background: var(--surface-3); color: var(--text); }
 /* Frame elegido: sólo un borde gris fino */
 .thumbs .thumb.active { background: none; background-image: none; border: 1px solid rgba(255,255,255,.22); }
+
+/* Elegir foto por tipo: dos botones y una ventana con las de ese tipo */
+.elige-foto { display: flex; gap: 8px; justify-content: center; }
+.elige-foto.hidden { display: none; }
+.elige-foto .btn { gap: 7px; }
+.elige-foto .dim { color: var(--text-3); font-weight: 500; }
+.ds-punto.tipo-owner { background: #f0819f; } .ds-punto.tipo-fondo { background: #56cbe6; }
+.modal-box.fotos-pop { width: min(760px, 94vw); max-height: 86vh; display: flex; flex-direction: column; gap: 12px; }
+.fotos-pop .modal-head { display: flex; align-items: center; justify-content: space-between; }
+.fotos-pop-rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; overflow-y: auto; padding: 2px; }
+.fotos-pop-foto { aspect-ratio: 9 / 16; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface-2); cursor: pointer; }
+.fotos-pop-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fotos-pop-foto:hover { border-color: rgba(255,255,255,.35); }
+.fotos-pop-foto.activa { border-color: rgba(255,255,255,.8); }
+.zoom-field { margin: 4px auto 0; }
+#dlgLote { z-index: 60; }
