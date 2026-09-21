@@ -2706,8 +2706,7 @@ function abreFotosTipo(tipo) {
   const nombre = TIPOS_FOTO[tipo]?.nombre || tipo;
   const actual = curSlide().bgIndex;
   montaDialogo(`
-    <div class="modal-head"><h2>${nombre}</h2><button class="icon-btn" data-dlg="no">✕</button></div>
-    <p class="modal-sub">${lista.length ? `Elige la foto de fondo del frame ${state.current + 1}.` : `No tienes fotos marcadas como ${nombre}. Márcalas en Galería.`}</p>
+    <div class="modal-head fotos-pop-head"><p class="fotos-pop-titulo">${lista.length ? `Elige la foto de fondo del frame ${state.current + 1}` : `No tienes fotos marcadas como ${nombre}. Márcalas en Galería.`}</p><button class="icon-btn" data-dlg="no" aria-label="Cerrar">✕</button></div>
     <div class="fotos-pop-rejilla">${lista.map(({ i }) =>
       `<button type="button" class="fotos-pop-foto${i === actual ? " activa" : ""}" data-foto="${i}"><img alt="" loading="lazy"></button>`).join("")}</div>`,
     d => {

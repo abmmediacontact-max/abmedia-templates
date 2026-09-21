@@ -2035,3 +2035,14 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 @media (hover: none) { .cal-cell .seq .sq-otra { opacity: .5; } }
 #seqPeekOtra { gap: 7px; }
 #seqPeekOtra.hidden { display: none; }
+
+/* Selector de fotos (Owner / Background): sin título, el texto arriba y la
+   rejilla con su propio scroll. Cada foto guarda su proporción 9:16 con el
+   truco del padding: con aspect-ratio en un <button> dentro de una rejilla
+   que encoge, las filas quedaban más bajas que las fotos y se montaban. */
+.modal-box.fotos-pop { padding: 18px 20px 20px; gap: 14px; overflow: hidden; }
+.fotos-pop .fotos-pop-head { margin: 0; gap: 12px; }
+.fotos-pop-titulo { margin: 0; font-size: 15px; font-weight: 600; color: var(--text); }
+.fotos-pop-rejilla { flex: 1 1 auto; min-height: 0; align-content: start; grid-auto-rows: max-content; }
+.fotos-pop-foto { position: relative; display: block; width: 100%; height: 0; padding: 0 0 177.78%; aspect-ratio: auto; align-self: start; }
+.fotos-pop-foto img { position: absolute; inset: 0; }
