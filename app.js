@@ -720,11 +720,8 @@ function renderGallery() {
   const ctx = state.galCtx || "all";
 
   // El filtro: sólo los contextos que existan, más «sin contexto» si los hay.
-  const cuenta = k => k === "all" ? todas.length
-    : k === "none" ? todas.filter(i => !i.contexto).length
-    : todas.filter(i => i.contexto === k).length;
+  const cuenta = k => k === "all" ? todas.length : todas.filter(i => i.contexto === k).length;
   const opciones = [["all", "Todas"], ...ORDEN_CATEGORIAS.map(k => [k, CATEGORIES[k].name])];
-  if (cuenta("none")) opciones.push(["none", "Sin contexto"]);
   $("#galCtx").innerHTML = opciones
     .filter(([k]) => k === "all" || cuenta(k))
     .map(([k, n]) => `<button class="${ctx === k ? "active" : ""}" data-galctx="${k}">${escapeHtml(n)} <span class="dim nums">${cuenta(k)}</span></button>`)
@@ -738,7 +735,7 @@ function renderGallery() {
 
   const visibles = todas
     .map((im, i) => ({ im, i }))
-    .filter(({ im }) => ctx === "all" || (ctx === "none" ? !im.contexto : im.contexto === ctx));
+    .filter(({ im }) => ctx === "all" || im.contexto === ctx);
 
   if (!visibles.length) {
     grid.innerHTML = `<p class="empty">Ninguna foto con ese contexto.</p>`;
@@ -785,7 +782,6 @@ function pintaBarraFotos() {
   document.body.classList.add("con-barra-sel");
   b.innerHTML = `<span class="bs-n"><b>${n}</b> ${n === 1 ? "foto" : "fotos"}</span>` +
     ORDEN_CATEGORIAS.map(k => `<button class="btn sm" data-galpon="${k}">${escapeHtml(CATEGORIES[k].name)}</button>`).join("") +
-    `<button class="btn sm ghost" data-galpon="">Sin contexto</button>` +
     `<button class="btn sm ghost" data-galpon="nada">Cancelar</button>`;
 }
 
@@ -1109,79 +1105,162 @@ function ymKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart
 // Orden en el que rotan las categorías en la base del calendario.
 const CAL_CAT_ORDER = ["personal", "venta", "puente", "flex", "valor"];
 
+/*
+ * Antes esto rellenaba cada mes con tres sugerencias por semana en cuanto lo
+ * abrías. El problema no era la sugerencia, era que no se distinguía de lo
+ * tuyo: abrías octubre y ya había doce cosas puestas que tú no habías
+ * decidido. Ahora sólo prepara el hueco del mes, vacío, y el contenido lo
+ * pides tú con «Generar propuesta».
+ */
 function ensureScheduleFor(monthDate) {
-  // Si ya hay schedule (aunque esté vacío tras un borrado manual), lo respeta.
-  // Si no, asigna 3 secuencias/semana (Mon/Wed/Fri) como base de ejemplo,
-  // rotando entre las 5 categorías del catálogo. Persistente por mes.
-  // Las entradas pueden ser:
-  //   "catalog-id"   → sugerencia desde catálogo
-  //   "seq:<id>"     → secuencia del usuario programada en ese día
   const key = ymKey(monthDate);
   if (state.schedule[key]) return;
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const first = new Date(year, month, 1);
-  const last = new Date(year, month + 1, 0);
-  const byCat = {};
-  CAL_CAT_ORDER.forEach(k => { byCat[k] = CATALOG.filter(t => t.category === k); });
-  // Cada mes empieza rotando por una categoría distinta, para que con el
-  // tiempo se vean ejemplos de las cinco.
-  let catIdx = (year * 12 + month) % CAL_CAT_ORDER.length;
-  const map = {};
-  for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
-    const dow = d.getDay();
-    if (dow === 1 || dow === 3 || dow === 5) {
-      const cat = CAL_CAT_ORDER[catIdx % CAL_CAT_ORDER.length];
-      const list = byCat[cat];
-      if (list && list.length) {
-        const dayOfYear = Math.floor((d - new Date(year, 0, 0)) / 86400000);
-        map[fmtDate(d)] = [list[dayOfYear % list.length].id];
-      }
-      catIdx++;
-    }
-  }
-  state.schedule[key] = map;
+  state.schedule[key] = {};
   storeSched.save(state.schedule);
+}
+
+/* ======================================================================= *
+ *  PROPUESTA DE CONTENIDO
+ *
+ *  El ritmo no es una rotación ciega por las cinco categorías: cada una
+ *  tiene su papel, y está escrito en su propia descripción del catálogo.
+ *
+ *    Valor    · «la base de tu semana», la que construye autoridad.
+ *    Personal · a diario y entre secuencias de venta, para no cansar.
+ *    Puente   · calienta y recoge contactos antes de pedir dinero.
+ *    Flex     · pruebas y resultados, justo ANTES de una de venta.
+ *    Venta    · poca frecuencia; pierde fuerza si se repite sin motivo.
+ *
+ *  De ahí salen dos ritmos. En una semana normal no hay venta: manda Valor,
+ *  Personal descansa el ojo y Puente recoge. En una semana de lanzamiento el
+ *  orden importa —Puente calienta, Flex demuestra y sólo entonces Venta
+ *  pide—, así que la venta va siempre al final de la semana, nunca al
+ *  principio.
+ * ======================================================================= */
+const RITMOS = {
+  normal: {
+    2: ["valor", "personal"],
+    3: ["valor", "personal", "puente"],
+    5: ["valor", "personal", "puente", "valor", "personal"],
+  },
+  lanzamiento: {
+    2: ["flex", "venta"],
+    3: ["puente", "flex", "venta"],
+    5: ["valor", "puente", "personal", "flex", "venta"],
+  },
+};
+/* Qué días de la semana se usan según cuántas publicaciones haya. */
+const DIAS_RITMO = { 2: [2, 4], 3: [1, 3, 5], 5: [1, 2, 3, 4, 5] };
+
+/** El lunes de la semana de una fecha. */
+function lunesDe(d) {
+  const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
+}
+
+function abrePropuesta() {
+  const hoy = new Date();
+  const mes = state.calMonth || new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  pideDato({
+    titulo: "Generar propuesta",
+    sub: "Se reparte una mezcla de contenido por los días. No toca lo que ya tengas puesto.",
+    campos: [
+      { id: "periodo", tipo: "select", etiqueta: "Para", valor: "mes", opciones: [
+        ["semana", "Esta semana"],
+        ["mes", `Todo ${MONTHS_ES[mes.getMonth()]}`],
+      ]},
+      { id: "porSemana", tipo: "select", etiqueta: "Publicaciones por semana", valor: "3",
+        opciones: [["2", "2 · suave"], ["3", "3 · el ritmo recomendado"], ["5", "5 · de lunes a viernes"]] },
+      { id: "tipo", tipo: "select", etiqueta: "Qué semana es", valor: "normal", opciones: [
+        ["normal", "Normal · sin venta"],
+        ["lanzamiento", "De lanzamiento · acaba en venta"],
+      ]},
+      { id: "vaciar", tipo: "select", etiqueta: "Lo que ya haya", valor: "no", opciones: [
+        ["no", "Dejarlo como está"],
+        ["si", "Vaciar el periodo primero"],
+      ]},
+    ],
+    ok: "Generar",
+    alAceptar: (v) => generaPropuesta({
+      periodo: v.periodo,
+      porSemana: Number(v.porSemana),
+      tipo: v.tipo,
+      vaciar: v.vaciar === "si",
+    }),
+  });
+}
+
+function generaPropuesta({ periodo, porSemana, tipo, vaciar }) {
+  const mes = state.calMonth || new Date();
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+
+  let desde, hasta;
+  if (periodo === "semana") {
+    // La semana que se esté mirando: la de hoy si el mes abierto es el de hoy.
+    const ref = (mes.getFullYear() === hoy.getFullYear() && mes.getMonth() === hoy.getMonth())
+      ? hoy : new Date(mes.getFullYear(), mes.getMonth(), 1);
+    desde = lunesDe(ref);
+    hasta = new Date(desde); hasta.setDate(hasta.getDate() + 6);
+  } else {
+    desde = new Date(mes.getFullYear(), mes.getMonth(), 1);
+    hasta = new Date(mes.getFullYear(), mes.getMonth() + 1, 0);
+  }
+
+  const ritmo = RITMOS[tipo][porSemana];
+  const dias = DIAS_RITMO[porSemana];
+
+  /* Las plantillas de cada categoría, barajadas una vez. Se van gastando en
+     orden para que no salga la misma dos veces hasta agotarlas. */
+  const bolsa = {};
+  ORDEN_CATEGORIAS.forEach(k => {
+    bolsa[k] = shuffle(CATALOG.filter(t => t.category === k).map(t => t.id));
+  });
+  const coge = (cat) => {
+    const b = bolsa[cat];
+    if (!b || !b.length) return null;
+    const id = b.shift();
+    b.push(id);            // vuelve al final: si hace falta más, se reutiliza
+    return id;
+  };
+
+  let puestas = 0, ocupados = 0;
+  for (let d = new Date(desde); d <= hasta; d.setDate(d.getDate() + 1)) {
+    const ym = ymKey(d);
+    if (!state.schedule[ym]) state.schedule[ym] = {};
+    const map = state.schedule[ym];
+    const key = fmtDate(d);
+
+    if (vaciar) {
+      // Sólo se quitan las sugerencias del catálogo: lo tuyo no se toca nunca.
+      const propias = calList(map, key).filter(e => typeof e === "string" && e.startsWith("seq:"));
+      calSet(map, key, propias);
+    }
+
+    const hueco = dias.indexOf(d.getDay());
+    if (hueco < 0) continue;
+    if (calList(map, key).length) { ocupados++; continue; }
+
+    const cat = ritmo[hueco % ritmo.length];
+    const id = coge(cat);
+    if (!id) continue;
+    calPush(map, key, id);
+    puestas++;
+  }
+
+  storeSched.save(state.schedule);
+  renderCalendar();
+  aviso(puestas
+    ? `${puestas} ${puestas === 1 ? "secuencia propuesta" : "secuencias propuestas"}${
+        ocupados ? ` · ${ocupados} ${ocupados === 1 ? "día" : "días"} ya tenían algo` : ""}`
+    : "No quedaba ningún día libre en ese periodo", puestas ? "ok" : "error");
 }
 
 /* ---------------------------------------------------------------------- *
- *  BORRADO MASIVO DE PROGRAMACIONES
+ *  EL CALENDARIO POR DENTRO
+ *  Cada día guarda una lista: "<id del catálogo>" si es una propuesta, o
+ *  "seq:<id>" si es una secuencia tuya.
  * ---------------------------------------------------------------------- */
-function clearAllSchedule() {
-  if (!confirm("¿Borrar TODAS las programaciones del calendario? Esta acción no se puede deshacer.")) return;
-  Object.keys(state.schedule).forEach(k => { state.schedule[k] = {}; });
-  storeSched.save(state.schedule);
-  renderCalendar();
-}
-
-function clearMonthSchedule() {
-  if (!state.calMonth) state.calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const label = `${MONTHS_ES[state.calMonth.getMonth()]} ${state.calMonth.getFullYear()}`;
-  if (!confirm(`¿Borrar todas las programaciones de ${label}?`)) return;
-  state.schedule[ymKey(state.calMonth)] = {};
-  storeSched.save(state.schedule);
-  renderCalendar();
-}
-
-function clearRangeSchedule() {
-  const fromInp = $("#calRangeFrom"), toInp = $("#calRangeTo");
-  let from = fromInp?.value, to = toInp?.value;
-  if (!from || !to) { alert("Elige una fecha de inicio y una de fin."); return; }
-  if (from > to) { const t = from; from = to; to = t; }
-  if (!confirm(`¿Borrar las programaciones entre ${from} y ${to}?`)) return;
-  Object.keys(state.schedule).forEach(ym => {
-    const map = state.schedule[ym];
-    Object.keys(map).forEach(day => {
-      if (day >= from && day <= to) delete map[day];
-    });
-  });
-  storeSched.save(state.schedule);
-  renderCalendar();
-}
-
-/* Un día puede tener varias secuencias. Históricamente guardábamos un solo
-   valor por día, así que al leer se normaliza a lista y al escribir siempre
-   se guarda lista: los calendarios antiguos siguen funcionando. */
 function calList(map, key) {
   const v = map ? map[key] : null;
   if (v == null) return [];
@@ -2363,9 +2442,7 @@ function bind() {
   // Calendar
   $("#calPrev").addEventListener("click", () => calMove(-1));
   $("#calNext").addEventListener("click", () => calMove(1));
-  $("#calClearAll").addEventListener("click", clearAllSchedule);
-  $("#calClearMonth").addEventListener("click", clearMonthSchedule);
-  $("#calClearRange").addEventListener("click", clearRangeSchedule);
+  $("#calPropuesta").addEventListener("click", abrePropuesta);
 
   // Elegir qué secuencia se añade a un día concreto
   $("#seqPeekClose").addEventListener("click", closeSeqPeek);

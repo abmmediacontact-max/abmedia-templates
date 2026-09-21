@@ -987,11 +987,7 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.02); }
 /* ---------------- Vista rápida de una secuencia del calendario --------- */
 .peek-head { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .peek-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.peek-cat {
-    font-size: 11px; font-weight: 600; color: var(--muted);
-    background: var(--orange-soft); border: 1px solid var(--border);
-    padding: 4px 10px; border-radius: 999px; white-space: nowrap;
-}
+.peek-cat { white-space: nowrap; }
 .peek-when { font-size: 12.5px; color: var(--faint); }
 /* Los frames en fila, como se verán en el móvil */
 .peek-frames {
@@ -1273,7 +1269,7 @@ body {
 .field label, .col-label { font-size: 12.5px; color: var(--text-2); }
 
 /* ------------------------------ Tarjetas ------------------------------- */
-.card, .tpl-card, .cat-tile, .modal-box, .login-box, .toast, .aviso, .peek-head {
+.card, .tpl-card, .cat-tile, .modal-box, .login-box, .toast, .aviso {
     border-radius: var(--r-lg);
     border: 1px solid var(--border);
     background: var(--surface);

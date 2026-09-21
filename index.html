@@ -11,7 +11,7 @@
   <!-- Estas cuatro las pinta el generador de stories en el canvas; la
      interfaz ya no pide ninguna: usa SF Pro del sistema. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=35" />
+  <link rel="stylesheet" href="styles.css?v=36" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -237,7 +237,7 @@
         <header class="topbar">
           <div>
             <h1>Calendario de stories</h1>
-            <p>Tres secuencias por semana, preprogramadas. Haz clic en un día para editarla.</p>
+            <p>Empieza vacío. Pide una propuesta o arrastra aquí tus secuencias.</p>
           </div>
           <div class="cal-nav">
             <button class="icon-btn" id="calPrev">←</button>
@@ -245,17 +245,19 @@
             <button class="icon-btn" id="calNext">→</button>
           </div>
         </header>
+        <!--
+          El calendario arranca vacío. Antes se rellenaba solo con tres
+          sugerencias por semana en cuanto abrías un mes, y eso mezclaba lo
+          que tú habías decidido con lo que se había inventado el programa:
+          no había forma de saber qué era tuyo. Ahora no aparece nada hasta
+          que pides una propuesta, y lo que salga es tuyo desde ese momento.
+        -->
         <div class="cal-toolbar">
-          <div class="cal-toolbar-group">
-            <button class="btn sm danger-text" id="calClearAll">🗑 Borrar todo</button>
-            <button class="btn sm danger-text" id="calClearMonth">🗑 Borrar este mes</button>
-          </div>
-          <div class="cal-toolbar-group">
-            <input type="date" id="calRangeFrom" class="status-select" title="Desde" />
-            <span class="cal-range-sep">→</span>
-            <input type="date" id="calRangeTo" class="status-select" title="Hasta" />
-            <button class="btn sm danger-text" id="calClearRange">Borrar rango</button>
-          </div>
+          <button class="btn primary sm" id="calPropuesta">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>
+            Generar propuesta
+          </button>
+          <span class="tiny dim">Te reparte una mezcla de contenido por la semana o el mes.</span>
         </div>
         <div class="cal-scroll">
           <div class="cal-grid" id="calGrid"></div>
@@ -559,9 +561,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase.js?v=30"></script>
-  <script src="templates.js?v=30"></script>
-  <script src="catalog.js?v=30"></script>
-  <script src="app.js?v=31"></script>
+  <script src="supabase.js?v=36"></script>
+  <script src="templates.js?v=36"></script>
+  <script src="catalog.js?v=36"></script>
+  <script src="app.js?v=36"></script>
 </body>
 </html>
