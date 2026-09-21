@@ -1030,7 +1030,32 @@ function tablaBiblioteca(lista, catSel) {
  * cuando se olvida. Ahora se pregunta aquí, con la plantilla delante y sus
  * datos a la vista, y el editor se abre ya con todo puesto.
  */
-function usarPlantilla(id) {
+/*
+ * «Usar» en la biblioteca abre primero la secuencia como se vería en
+ * Instagram: frame grande, barras de progreso arriba y toques a los lados
+ * para pasar. Así se lee y se decide antes de crear nada. Las fotos que salen
+ * en la vista previa son las que se quedan si se usa.
+ */
+function verPlantilla(id) {
+  const item = CATALOG.find(x => x.id === id);
+  if (!item) return;
+  const cat = CATEGORIES[item.category] || CATEGORIES.venta;
+  _peek = { lib: id };
+  $("#seqPeekTitle").textContent = item.title;
+  const etiqueta = $("#seqPeekCat");
+  etiqueta.textContent = cat.name;
+  etiqueta.className = "peek-cat pill cat-" + (item.category || "venta");
+  const n = item.slides.length;
+  $("#seqPeekWhen").textContent = `${n} ${n === 1 ? "story" : "stories"}${item.objective ? " · " + item.objective : ""}`;
+  $("#seqPeekRemove").classList.add("hidden");
+  $("#seqPeekOpen").textContent = "Usar esta secuencia";
+  _peekSeq = fromCatalog(id, { id: -1 });
+  _peekFrame = 0;
+  pintaVisor();
+  $("#seqPeekModal").classList.remove("hidden");
+}
+
+function usarPlantilla(id, vista) {
   const item = CATALOG.find(x => x.id === id);
   if (!item) return;
   const c = CATEGORIES[item.category] || CATEGORIES.venta;
@@ -1047,6 +1072,10 @@ function usarPlantilla(id) {
     alAceptar: (v) => {
       const seq = fromCatalog(item.id, { status: v.e || "draft" });
       if (v.t.trim()) seq.title = v.t.trim();
+      if (vista) seq.slides.forEach((sl, i) => {
+        const o = vista.slides[i];
+        if (o) { sl.bgIndex = o.bgIndex; sl.bgKey = o.bgKey; }
+      });
       state.sequences.unshift(seq);
       // La fecha se pone después de meterla en la lista: setScheduleForSequence
       // busca la secuencia por id y si no está todavía no encuentra nada.
@@ -1065,6 +1094,120 @@ function filaBiblioteca(item) {
     <div class="vt-right"><button class="btn sm" data-usar="${escapeAttr(item.id)}">Usar</button></div>
   </div>`;
 }
+
+/* ------------------ Desplegables y fechas propios ------------------------
+   Los mismos que Content OS: el desplegable del sistema se abre con otra
+   letra y otro aspecto, y el calendario nativo de fecha es de cada navegador.
+   El <select>/<input> original se queda oculto y sigue siendo la fuente del
+   valor, así que el resto del código no cambia. */
+const SVG_CHEV = '<svg class="ds-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+const SVG_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5L20 7"/></svg>';
+const SVG_CAL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M8 2v4M16 2v4M3 9h18"/></svg>';
+const dos2 = n => String(n).padStart(2, "0");
+const fmtFecha = v => v ? new Date(v + "T12:00").toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }) : "";
+
+function mejorarCampos(raiz = document) {
+  raiz.querySelectorAll("select").forEach(sel => {
+    if (sel._pinta) return;
+    const btn = document.createElement("button"); btn.type = "button"; btn.className = "ds-campo";
+    sel.after(btn); sel.hidden = true;
+    sel._pinta = () => {
+      const o = sel.selectedOptions[0];
+      const cat = sel.id === "catSelect" || sel.id === "newSeqCat" || sel.dataset.cat != null;
+      btn.innerHTML = (cat && o ? `<i class="ds-punto cat-${o.value}"></i>` : "") +
+        "<span>" + escapeHtml(o?.textContent || "Elegir…") + "</span>" + SVG_CHEV;
+    };
+    sel._pinta(); sel.addEventListener("change", sel._pinta);
+    btn.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); abreDesplegable(sel, btn); });
+  });
+  raiz.querySelectorAll('input[type="date"]').forEach(inp => {
+    if (inp._pinta) return;
+    const btn = document.createElement("button"); btn.type = "button"; btn.className = "fp-campo";
+    inp.after(btn); inp.style.display = "none";
+    inp._pinta = () => {
+      btn.innerHTML = SVG_CAL + "<span>" + (inp.value ? fmtFecha(inp.value) : "Elegir fecha") + "</span>";
+      btn.classList.toggle("vacio", !inp.value);
+      btn.classList.toggle("hidden", inp.classList.contains("hidden"));
+    };
+    inp._pinta(); inp.addEventListener("change", inp._pinta);
+    new MutationObserver(inp._pinta).observe(inp, { attributes: true, attributeFilter: ["class"] });
+    btn.addEventListener("click", e => { e.preventDefault(); e.stopPropagation(); abreSelectorFecha(inp, btn); });
+  });
+}
+// Tras poner un valor por código (sin evento change) hay que repintar el botón
+function refrescaCampos(raiz = document) {
+  raiz.querySelectorAll("select, input[type=date]").forEach(x => x._pinta && x._pinta());
+}
+function cierraDesplegable() {
+  document.querySelector(".ds-lista")?.remove();
+  document.querySelector(".ds-campo.abierto")?.classList.remove("abierto");
+}
+function colocaPop(pop, btn) {
+  const r = btn.getBoundingClientRect(), alto = pop.offsetHeight;
+  const arriba = r.bottom + alto + 8 > innerHeight && r.top - alto - 8 > 0;
+  pop.style.top = (arriba ? r.top - alto - 6 : r.bottom + 6) + "px";
+  pop.style.left = Math.max(8, Math.min(r.left, innerWidth - pop.offsetWidth - 8)) + "px";
+}
+function abreDesplegable(sel, btn) {
+  const abierto = btn.classList.contains("abierto");
+  cierraDesplegable(); cierraSelectorFecha();
+  if (abierto) return;
+  btn.classList.add("abierto");
+  const cat = sel.id === "catSelect" || sel.id === "newSeqCat";
+  const lista = document.createElement("div"); lista.className = "ds-lista";
+  lista.innerHTML = [...sel.options].map(o => `<button type="button" class="ds-op${o.selected ? " activo" : ""}" data-valor="${escapeAttr(o.value)}">
+    <span>${cat ? `<i class="ds-punto cat-${o.value}"></i>` : ""}${escapeHtml(o.textContent)}</span>${o.selected ? SVG_CHECK : ""}</button>`).join("");
+  document.body.appendChild(lista);
+  lista.style.minWidth = btn.getBoundingClientRect().width + "px";
+  colocaPop(lista, btn);
+  lista.querySelectorAll(".ds-op").forEach(op => op.addEventListener("click", () => {
+    sel.value = op.dataset.valor;
+    sel.dispatchEvent(new Event("change", { bubbles: true }));
+    cierraDesplegable();
+  }));
+}
+function cierraSelectorFecha() { document.querySelector(".fp")?.remove(); }
+function abreSelectorFecha(inp, btn) {
+  const yaAbierto = document.querySelector(".fp");
+  cierraSelectorFecha(); cierraDesplegable();
+  if (yaAbierto && yaAbierto._de === inp) return;
+  const hoy = new Date(), kHoy = `${hoy.getFullYear()}-${dos2(hoy.getMonth() + 1)}-${dos2(hoy.getDate())}`;
+  const sel = inp.value || null;
+  let mes = sel ? new Date(sel + "T12:00") : new Date(hoy);
+  mes = new Date(mes.getFullYear(), mes.getMonth(), 1);
+  const pop = document.createElement("div"); pop.className = "fp"; pop._de = inp;
+  document.body.appendChild(pop);
+  const aplica = v => { inp.value = v; inp.dispatchEvent(new Event("change", { bubbles: true })); inp._pinta(); };
+  const pinta = () => {
+    const y = mes.getFullYear(), m = mes.getMonth();
+    const hueco = (new Date(y, m, 1).getDay() + 6) % 7, dias = new Date(y, m + 1, 0).getDate();
+    let celdas = "<span></span>".repeat(hueco);
+    for (let d = 1; d <= dias; d++) {
+      const k = `${y}-${dos2(m + 1)}-${dos2(d)}`;
+      celdas += `<button type="button" data-dia="${k}" class="fp-dia${k === sel ? " activo" : ""}${k === kHoy ? " hoy" : ""}">${d}</button>`;
+    }
+    const nombreMes = MONTHS_ES[m].charAt(0).toUpperCase() + MONTHS_ES[m].slice(1);
+    pop.innerHTML = `<div class="fp-cab"><strong>${nombreMes} ${y}</strong><div><button type="button" class="fp-nav" data-mv="-1">‹</button><button type="button" class="fp-nav" data-mv="1">›</button></div></div>
+      <div class="fp-rejilla">${["L", "M", "X", "J", "V", "S", "D"].map(d => `<span class="fp-sem">${d}</span>`).join("")}${celdas}</div>
+      <div class="fp-pie"><button type="button" class="fp-link" data-accion="borrar">Borrar</button><button type="button" class="fp-link" data-accion="hoy">Hoy</button></div>`;
+    pop.querySelectorAll("[data-mv]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); mes = new Date(y, m + +b.dataset.mv, 1); pinta(); }));
+    pop.querySelectorAll("[data-dia]").forEach(b => b.addEventListener("click", () => { aplica(b.dataset.dia); cierraSelectorFecha(); }));
+    pop.querySelector('[data-accion="borrar"]').addEventListener("click", () => { aplica(""); cierraSelectorFecha(); });
+    pop.querySelector('[data-accion="hoy"]').addEventListener("click", () => { aplica(kHoy); cierraSelectorFecha(); });
+  };
+  pinta();
+  colocaPop(pop, btn);
+}
+document.addEventListener("mousedown", e => {
+  if (!e.target.closest(".fp, .fp-campo")) cierraSelectorFecha();
+  if (!e.target.closest(".ds-lista, .ds-campo")) cierraDesplegable();
+});
+// Escape cierra primero el desplegable abierto, no la ventana que hay debajo
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape" || !document.querySelector(".fp, .ds-lista")) return;
+  cierraSelectorFecha(); cierraDesplegable(); e.stopImmediatePropagation();
+});
+window.addEventListener("resize", () => { cierraSelectorFecha(); cierraDesplegable(); });
 
 /* Aviso breve dentro de la propia web. Las ventanas del navegador cortan
    el trabajo y se salen de la estética. */
@@ -1566,6 +1709,7 @@ function montaDialogo(html, alMontar) {
   document.addEventListener("keydown", function esc(e) {
     if (e.key === "Escape") { cierraDialogo(); document.removeEventListener("keydown", esc); }
   });
+  mejorarCampos(d);
   alMontar(d);
   return d;
 }
@@ -2180,7 +2324,11 @@ function pintaVisor() {
   cont.innerHTML = `
     <div class="peek-visor">
       <button class="peek-flecha" data-pk="-1" aria-label="Frame anterior" ${_peekFrame === 0 ? "disabled" : ""}>‹</button>
-      <div class="peek-grande" style="width:${ancho}px;height:${alto}px"></div>
+      <div class="peek-grande" style="width:${ancho}px;height:${alto}px">
+        <div class="peek-barras">${seq.slides.map((_, i) => `<i class="${i < _peekFrame ? "vista" : i === _peekFrame ? "actual" : ""}"></i>`).join("")}</div>
+        <button class="peek-toque izq" data-pk="-1" aria-label="Anterior"></button>
+        <button class="peek-toque der" data-pk="1" aria-label="Siguiente"></button>
+      </div>
       <button class="peek-flecha" data-pk="1" aria-label="Frame siguiente" ${_peekFrame === n - 1 ? "disabled" : ""}>›</button>
     </div>
     <div class="peek-pie"><span class="tiny dim">Frame ${_peekFrame + 1} de ${n}</span></div>
@@ -2190,7 +2338,7 @@ function pintaVisor() {
   cv.width = Math.round(ancho * dpr); cv.height = Math.round(alto * dpr);
   cv.style.width = ancho + "px"; cv.style.height = alto + "px";
   drawSlide(cv.getContext("2d"), seq.slides[_peekFrame], cv.width, cv.height, seq.style);
-  cont.querySelector(".peek-grande").appendChild(cv);
+  cont.querySelector(".peek-grande").prepend(cv);
 
   const tira = cont.querySelector(".peek-tira");
   seq.slides.forEach((sl, i) => {
@@ -2209,12 +2357,15 @@ function muevePeek(delta) { _peekFrame += delta; pintaVisor(); }
 
 function closeSeqPeek() {
   $("#seqPeekModal").classList.add("hidden");
+  $("#seqPeekRemove").classList.remove("hidden");
+  $("#seqPeekOpen").textContent = "Abrir en el editor";
   _peek = null;
 }
 
 // Abre de verdad: si es del catálogo, primero se hace tuya
 function peekOpenInEditor() {
   if (!_peek) return;
+  if (_peek.lib) { const id = _peek.lib, vista = _peekSeq; closeSeqPeek(); return usarPlantilla(id, vista); }
   const { entry, key, idx } = _peek;
   const r = resolveCalEntry(entry);
   closeSeqPeek();
@@ -2332,6 +2483,7 @@ function openEditor(id) {
   $("#catSelect").value = state.active.category;
   syncSchedDate();
   syncStyleControls();
+  refrescaCampos($("#overlay"));
   $("#overlay").classList.remove("hidden");
   document.body.style.overflow = "hidden";
   renderThumbs(); drawEditor();
@@ -2387,7 +2539,7 @@ function renderThumbs() {
     box.appendChild(t);
   });
   const add = document.createElement("button");
-  add.className = "thumb add"; add.innerHTML = "<span>＋</span>";
+  add.className = "thumb add"; add.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>Añadir frame</span>`;
   add.addEventListener("click", () => {
     state.active.slides.push(makeSlide({ body: blankBody(0), overlay: "bottom" }));
     assignRandomImages(state.active);
@@ -3132,7 +3284,7 @@ function bind() {
       return renderLibrary();
     }
     const usar = e.target.closest("[data-usar]");
-    if (usar) usarPlantilla(usar.dataset.usar);
+    if (usar) verPlantilla(usar.dataset.usar);
   });
 
   // Galería
@@ -3653,6 +3805,7 @@ function avisaVersionNueva() {
 async function init() {
   fillFontSelect();
   bind();
+  mejorarCampos();
   bindLogin();
   vigilaVersion();
 

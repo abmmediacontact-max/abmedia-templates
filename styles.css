@@ -1265,7 +1265,7 @@ body {
     font-size: 13px;
     padding: 8px 11px;
 }
-.field input:focus, .field textarea:focus { border-color: var(--accent); }
+.field input:focus, .field textarea:focus { border-color: rgba(255,255,255,.34); outline: none; box-shadow: none; }
 .field label, .col-label { font-size: 12.5px; color: var(--text-2); }
 
 /* ------------------------------ Tarjetas ------------------------------- */
@@ -1427,7 +1427,7 @@ body.lateral-plegada .side-row { flex-direction: column; }
     color: var(--text); font-family: inherit; font-size: 13.5px; outline: none;
     transition: border-color .12s, box-shadow .12s;
 }
-.input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.input:focus { border-color: rgba(255,255,255,.34); box-shadow: 0 0 0 3px rgba(255,255,255,.05); }
 .input.sm { padding: 4px 9px; font-size: 12.5px; border-radius: 7px; }
 .segmented { display: inline-flex; border-radius: 9px; padding: 2px; gap: 2px; flex-wrap: wrap; background: var(--surface-3); }
 .segmented button {
@@ -1521,7 +1521,7 @@ body.lateral-plegada .side-row { flex-direction: column; }
     content: ""; position: absolute; left: 4.5px; top: 1.5px; width: 4px; height: 8px;
     border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
 }
-.sel-marca:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sel-marca:focus-visible { outline: 2px solid rgba(255,255,255,.5); outline-offset: 2px; }
 
 /* ---- La barra de acciones, abajo del todo ---- */
 .barra-sel {
@@ -1862,5 +1862,94 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .cal-cell .seq .ct.cat-engagement { color: #e3b341; }
 
 /* ---- Campos del sticker en el editor ---- */
-.sticker-edit { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.sticker-edit.hidden { display: none; }
 .stk-opciones { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* Vista previa tipo Instagram (biblioteca y calendario) */
+.peek-grande { position: relative; }
+.peek-barras { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 3px; z-index: 2; pointer-events: none; }
+.peek-barras i { flex: 1; height: 2.5px; border-radius: 2px; background: rgba(255,255,255,.35); }
+.peek-barras i.vista, .peek-barras i.actual { background: #fff; }
+.peek-toque { position: absolute; top: 0; bottom: 0; width: 38%; background: transparent; border: 0; padding: 0; cursor: pointer; z-index: 1; }
+.peek-toque.izq { left: 0; } .peek-toque.der { right: 0; }
+.peek-toque:focus-visible { outline: none; }
+
+/* ---------- Desplegables y selector de fecha (los de Content OS) ---------- */
+.ds-campo, .fp-campo { display: inline-flex; align-items: center; justify-content: space-between; gap: 9px; width: 100%;
+  height: 36px; box-sizing: border-box; font: inherit; font-size: 13px; color: var(--text); text-align: left; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--r-sm, 10px); padding: 0 11px; transition: border-color .15s; }
+.fp-campo { justify-content: flex-start; }
+.ds-campo:hover, .ds-campo.abierto, .fp-campo:hover { border-color: rgba(255,255,255,.28); }
+.ds-campo span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.ds-chev { width: 15px; height: 15px; color: var(--text-3); flex-shrink: 0; transition: transform .15s; }
+.ds-campo.abierto .ds-chev { transform: rotate(180deg); }
+.fp-campo svg { width: 15px; height: 15px; color: var(--text-3); flex-shrink: 0; }
+.fp-campo.vacio span { color: var(--text-3); }
+.fp-campo.hidden { display: none; }
+.ds-lista { position: fixed; z-index: 400; max-height: 300px; overflow-y: auto; padding: 5px; border-radius: 13px;
+  background: #111; border: 1px solid rgba(255,255,255,.14); box-shadow: 0 18px 50px rgba(0,0,0,.6);
+  display: flex; flex-direction: column; gap: 2px; }
+.ds-op { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%;
+  font: inherit; font-size: 13px; color: var(--text-2); text-align: left; cursor: pointer;
+  background: none; border: 0; border-radius: 9px; padding: 8px 10px; transition: .12s; }
+.ds-op span { display: inline-flex; align-items: center; gap: 9px; }
+.ds-op:hover { background: rgba(255,255,255,.06); color: var(--text); }
+.ds-op.activo { color: var(--text); font-weight: 600; }
+.ds-op svg { width: 13px; height: 13px; color: var(--text); flex-shrink: 0; }
+.ds-punto { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--text-3); display: inline-block; }
+.ds-campo .ds-punto { margin-right: -2px; }
+.ds-punto.cat-personal { background: #a371f7; } .ds-punto.cat-venta { background: #f0883e; }
+.ds-punto.cat-puente { background: #58a6ff; } .ds-punto.cat-flex { background: #4fd1c5; }
+.ds-punto.cat-valor { background: #3fb950; } .ds-punto.cat-engagement { background: #e3b341; }
+.fp { position: fixed; z-index: 400; width: 280px; padding: 14px; border-radius: 16px; box-sizing: border-box;
+  background: #111; border: 1px solid rgba(255,255,255,.14); box-shadow: 0 18px 50px rgba(0,0,0,.6); }
+.fp-cab { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.fp-cab strong { font-size: 14px; color: var(--text); }
+.fp-nav { font: inherit; font-size: 17px; width: 30px; height: 30px; border-radius: 9px; cursor: pointer; color: var(--text-2); background: none; border: 0; }
+.fp-nav:hover { color: var(--text); background: rgba(255,255,255,.06); }
+.fp-rejilla { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.fp-sem { font-size: 11px; font-weight: 700; color: var(--text-3); text-align: center; padding: 4px 0; }
+.fp-dia { font: inherit; font-size: 13px; height: 33px; border-radius: 9px; cursor: pointer; color: var(--text); background: none; border: 1px solid transparent; }
+.fp-dia:hover { background: rgba(255,255,255,.07); }
+.fp-dia.hoy { color: var(--acento-lit); font-weight: 700; }
+.fp-dia.activo { font-weight: 700; background: rgba(255,255,255,.09); border-color: rgba(255,255,255,.3); }
+.fp-pie { display: flex; gap: 14px; margin-top: 12px; }
+.fp-link { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-2); background: none; border: 0; cursor: pointer; padding: 0; }
+.fp-link:hover { color: var(--text); }
+/* En la cabecera del editor van compactos, uno al lado del otro */
+.editor-titlewrap .ds-campo, .editor-titlewrap .fp-campo { width: auto; min-width: 140px; height: 34px; }
+
+/* ---------- Editor con tarjetas plegables (fichas de Content OS) ---------- */
+.edit-col { gap: 12px; }
+.edit-col .dropzone { flex-direction: row; justify-content: flex-start; gap: 12px; padding: 12px 14px; min-height: 0; text-align: left; }
+.edit-col .dropzone .ic { width: 20px; height: 20px; margin: 0; flex: none; }
+.edit-col .dropzone strong { font-size: 13px; font-weight: 600; }
+.edit-col .dropzone span { margin-left: auto; }
+.edit-col .dropzone:hover, .edit-col .dropzone.hover { background: rgba(255,255,255,.03); }
+.cp-editor { border: 1px solid var(--border-strong); border-radius: var(--r, 14px); background: var(--surface); display: flex; flex-direction: column; transition: border-color .12s; }
+.cp-editor:focus-within { border-color: var(--text-3); box-shadow: 0 0 0 3px rgba(255,255,255,.05); }
+.cp-editor textarea { min-height: 120px; resize: vertical; border: 0 !important; background: none !important; box-shadow: none !important; color: var(--text); font: inherit; font-size: 14px; line-height: 1.5; padding: 13px 15px 8px; outline: none; }
+.cp-barra { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-top: 1px solid var(--border); }
+.cp-barra .btn { border-color: transparent; background: none; color: var(--text-2); }
+.cp-barra .btn:hover { background: var(--surface-3); color: var(--text); }
+.cp-barra .mark-hint { margin-left: auto; font-size: 11.5px; color: var(--text-3); }
+.cp-sec { border: 1px solid var(--border); border-radius: var(--r, 14px); background: var(--surface); }
+.cp-sec > summary { list-style: none; }
+.cp-sec > summary::-webkit-details-marker { display: none; }
+.cp-sec-h { display: flex; align-items: center; gap: 10px; padding: 11px 14px; color: var(--text); font-size: 13.5px; font-weight: 600; cursor: pointer; user-select: none; }
+.cp-sec-h .grow { flex: 1; }
+.cp-ico { width: 16px; height: 16px; color: var(--text-2); flex: none; }
+.cp-chev { width: 15px; height: 15px; color: var(--text-3); transition: transform .13s ease; flex: none; }
+.cp-sec[open] .cp-chev { transform: rotate(180deg); }
+.cp-sec-b { display: flex; flex-direction: column; gap: 10px; padding: 2px 14px 14px; }
+.cp-sub { font-size: 12px; color: var(--text-2); font-weight: 500; margin-top: 2px; }
+.cp-sub:first-child { margin-top: 0; }
+.cp-sec .chip-vis { background: var(--surface-2); }
+.cp-sec .swatch { flex: 1; background: var(--surface-2); }
+.cp-sec .inset-block { margin: 0; padding: 0; border: 0; }
+.cp-sec input[type=range], .field input[type=range], .zoom-field input[type=range] { border: 0 !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; }
+.thumbs .thumb.add { aspect-ratio: auto; height: 64px; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border: 1px dashed var(--border-strong); background: none; color: var(--text-3); font-size: 11.5px; font-weight: 500; }
+.thumbs .thumb.add svg { width: 16px; height: 16px; }
+.thumbs .thumb.add:hover { color: var(--text); border-color: rgba(255,255,255,.3); }
+.zoom-field span { white-space: nowrap; font-size: 12px; color: var(--text-2); }
