@@ -1953,3 +1953,21 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .thumbs .thumb.add svg { width: 16px; height: 16px; }
 .thumbs .thumb.add:hover { color: var(--text); border-color: rgba(255,255,255,.3); }
 .zoom-field span { white-space: nowrap; font-size: 12px; color: var(--text-2); }
+
+/* Texto de la story con el formato a la vista */
+.texto-rico { position: relative; min-height: 120px; max-height: 320px; overflow-y: auto; padding: 13px 15px 10px; color: var(--text); font-size: 14px; line-height: 1.6;
+  white-space: pre-wrap; word-break: break-word; outline: none; cursor: text; }
+.texto-rico.vacio::before { content: attr(data-vacio); color: var(--text-3); pointer-events: none; position: absolute; }
+.texto-rico .m-hl { background: var(--m-hl, #ff6a1a); color: var(--m-hlt, #fff); border-radius: 4px; padding: 1px 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.texto-rico .m-ul { text-decoration: underline; text-decoration-color: var(--m-hl, #ff6a1a); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.texto-rico .m-ac { color: var(--m-hl, #ff6a1a); font-weight: 600; }
+.texto-rico .m-hl.m-ac { color: var(--m-hlt, #fff); }
+.cp-barra .btn.on { background: var(--surface-3); color: var(--text); }
+/* Alineación del texto */
+.seg-alin { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); align-self: flex-start; }
+.seg-alin button { width: 36px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 7px; background: none; color: var(--text-3); cursor: pointer; }
+.seg-alin button svg { width: 16px; height: 16px; }
+.seg-alin button:hover { color: var(--text); }
+.seg-alin button.on { background: var(--surface-3); color: var(--text); }
+/* Frame elegido: sólo un borde gris fino */
+.thumbs .thumb.active { background: none; background-image: none; border: 1px solid rgba(255,255,255,.22); }

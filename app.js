@@ -2514,6 +2514,7 @@ function updateColorDots() {
   const st = state.active?.style; if (!st) return;
   const t = $("#textColorDot"); if (t) t.style.background = st.textColor;
   const h = $("#highlightColorDot"); if (h) h.style.background = st.highlightColor;
+  $("#bodyRico")?.style.setProperty("--m-hl", st.highlightColor);
 }
 function syncFontChips() {
   const box = $("#fontChips"); if (!box) return;
@@ -2556,6 +2557,16 @@ function renderEditPanel() {
   const slide = curSlide();
   $("#slideName").textContent = "Frame " + (state.current + 1) + " / " + state.active.slides.length;
   $("#bodyInput").value = slide.body;
+  // drawEditor pasa por aquí en cada cambio: sólo se repinta el texto si es
+  // otro (otro frame, deshacer…), o el cursor saltaría mientras escribes.
+  const rico = $("#bodyRico");
+  if (rico._slide !== slide || charsAMarcas(leeRico(rico)) !== (slide.body || "")) {
+    if (rico._slide !== slide) _ultimaSel = null;
+    rico._slide = slide;
+    pintaRico(rico, marcasAChars(slide.body));
+    pintaBotonesMarca();
+  }
+  $("#alignChips")?.querySelectorAll("[data-align]").forEach(b => b.classList.toggle("on", b.dataset.align === (slide.align || "left")));
   syncOverlayChips();
   $("#bgZoom").value = slide.bg.zoom;
   $("#insetControls").classList.toggle("hidden", !slide.inset);
@@ -2850,7 +2861,24 @@ function layoutBody(c, slide, style, scale, w, h) {
       } else { t.x = lineW + gap; line.push(t); lineW += gap + t.w; }
     });
     if (line.length) lines.push({ words: line, width: lineW });
+    // Alineación: a la izquierda, centrado, a la derecha o justificado
+    // (la última línea de cada párrafo se queda a la izquierda, como en
+    // cualquier texto justificado).
+    const al = slide.align || "left";
+    lines.forEach((l, k) => {
+      if (al === "justify") {
+        if (k < lines.length - 1 && l.words.length > 1) {
+          const extra = (maxW - l.width) / (l.words.length - 1);
+          l.words.forEach((t, n) => { t.x += extra * n; });
+          l.width = maxW;
+        }
+      } else if (al === "center" || al === "right") {
+        const ox = al === "center" ? (maxW - l.width) / 2 : maxW - l.width;
+        l.words.forEach(t => { t.x += ox; });
+      }
+    });
     lines.forEach(l => { blockW = Math.max(blockW, l.width); });
+    if (al !== "left") blockW = maxW;
     layout.push({ lines });
   });
   let total = 0;
@@ -3188,15 +3216,191 @@ function openTemplateModal() {
 /* =========================================================================
  *  Marcas inline
  * ========================================================================= */
-function wrapSelection(marker) {
-  const ta = $("#bodyInput");
-  const s = ta.selectionStart, e = ta.selectionEnd;
-  if (s === e) return;
-  const val = ta.value;
-  ta.value = val.slice(0, s) + marker + val.slice(s, e) + marker + val.slice(e);
-  curSlide().body = ta.value;
+/*
+ * El texto de la story se edita con el formato a la vista.
+ *
+ * Antes era un cuadro de texto plano con las marcas escritas (==así==), y
+ * Álvaro veía los iguales pegados a cada palabra. Ahora se ve el resaltado,
+ * el subrayado y el acento tal cual, y las marcas sólo existen por dentro:
+ * `slide.body` sigue guardando el mismo formato de siempre, así que el
+ * dibujo, el guardado y las plantillas no cambian.
+ *
+ * Se trabaja con una lista de caracteres (unidades UTF-16, como cuenta el
+ * navegador las posiciones del cursor; si no, un emoji lo descuadra), cada uno con sus tres marcas. Se
+ * lee del editor, se cambia y se vuelve a pintar, y el cursor se recoloca
+ * por su posición en el texto.
+ */
+const MARCAS = { hl: "==", ul: "__", ac: "**" };
+function marcasAChars(body) {
+  const chars = [];
+  (body || "").split("\n").forEach((linea, i) => {
+    if (i) chars.push({ ch: "\n" });
+    tokenizeLine(linea).forEach(sg => { for (const ch of sg.text.split("")) chars.push({ ch, hl: sg.hl, ul: sg.ul, ac: sg.ac }); });
+  });
+  return chars;
+}
+function charsAMarcas(chars) {
+  let out = "", ab = { hl: false, ul: false, ac: false };
+  const cierra = () => { for (const k of ["ac", "ul", "hl"]) if (ab[k]) { out += MARCAS[k]; ab[k] = false; } };
+  for (const c of chars) {
+    if (c.ch === "\n") { cierra(); out += "\n"; continue; }
+    for (const k of ["hl", "ul", "ac"]) if (!!c[k] !== ab[k]) { out += MARCAS[k]; ab[k] = !!c[k]; }
+    out += c.ch;
+  }
+  cierra();
+  return out;
+}
+function leeRico(root) {
+  const chars = [];
+  const rec = (el, f) => {
+    el.childNodes.forEach(n => {
+      if (n.nodeType === 3) { for (const ch of n.data.split("")) chars.push(ch === "\n" ? { ch } : { ch, ...f }); return; }
+      if (n.nodeName === "BR") { if (!n.dataset.fin) chars.push({ ch: "\n" }); return; }
+      const bloque = n.nodeName === "DIV" || n.nodeName === "P";
+      if (bloque && chars.length && chars[chars.length - 1].ch !== "\n") chars.push({ ch: "\n" });
+      const cl = n.classList || { contains: () => false };
+      rec(n, { hl: f.hl || cl.contains("m-hl"), ul: f.ul || cl.contains("m-ul"), ac: f.ac || cl.contains("m-ac") });
+    });
+  };
+  rec(root, { hl: false, ul: false, ac: false });
+  return chars;
+}
+function pintaRico(root, chars) {
+  let html = "", i = 0;
+  while (i < chars.length) {
+    const c = chars[i];
+    if (c.ch === "\n") { html += "\n"; i++; continue; }
+    let j = i, txt = "";
+    while (j < chars.length && chars[j].ch !== "\n" && !!chars[j].hl === !!c.hl && !!chars[j].ul === !!c.ul && !!chars[j].ac === !!c.ac) txt += chars[j++].ch;
+    const cls = ["hl", "ul", "ac"].filter(k => c[k]).map(k => "m-" + k).join(" ");
+    html += cls ? `<span class="${cls}">${escapeHtml(txt)}</span>` : escapeHtml(txt);
+    i = j;
+  }
+  // Un salto al final no se ve sin algo detrás
+  if (!chars.length || chars[chars.length - 1].ch === "\n") html += '<br data-fin="1">';
+  root.innerHTML = html;
+  root.classList.toggle("vacio", !chars.length);
+  const st = state.active?.style;
+  if (st) {
+    root.style.setProperty("--m-hl", st.highlightColor);
+    root.style.setProperty("--m-hlt", st.highlightText || "#fff");
+  }
+}
+const largoNodo = n => n.nodeType === 3 ? n.data.length : n.nodeName === "BR" ? (n.dataset.fin ? 0 : 1) : [...n.childNodes].reduce((a, x) => a + largoNodo(x), 0);
+function posicionRico(root, nodo, off) {
+  let n = 0, hecho = false;
+  const rec = el => {
+    for (let k = 0; k < el.childNodes.length && !hecho; k++) {
+      const ch = el.childNodes[k];
+      if (el === nodo && k === off) { hecho = true; return; }
+      if (ch === nodo && ch.nodeType === 3) { n += off; hecho = true; return; }
+      if (ch.contains(nodo) && ch !== nodo) { rec(ch); continue; }
+      if (ch === nodo) { for (let q = 0; q < off; q++) n += largoNodo(ch.childNodes[q]); hecho = true; return; }
+      n += largoNodo(ch);
+    }
+  };
+  rec(root);
+  return n;
+}
+function puntoRico(root, pos) {
+  let quedan = pos;
+  const rec = el => {
+    for (const ch of el.childNodes) {
+      if (ch.nodeType === 3) { if (quedan <= ch.data.length) return [ch, quedan]; quedan -= ch.data.length; continue; }
+      if (ch.nodeName === "BR") { if (ch.dataset.fin) continue; if (quedan === 0) return [el, [...el.childNodes].indexOf(ch)]; quedan -= 1; continue; }
+      const r = rec(ch); if (r) return r;
+    }
+    return null;
+  };
+  return rec(root) || [root, root.childNodes.length];
+}
+function seleccionRico(root) {
+  const sel = getSelection();
+  if (!sel.rangeCount || !root.contains(sel.anchorNode)) return null;
+  const r = sel.getRangeAt(0);
+  return [posicionRico(root, r.startContainer, r.startOffset), posicionRico(root, r.endContainer, r.endOffset)];
+}
+function colocaSeleccion(root, a, b = a) {
+  const r = document.createRange();
+  const [n1, o1] = puntoRico(root, a), [n2, o2] = puntoRico(root, b);
+  r.setStart(n1, o1); r.setEnd(n2, o2);
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+}
+function guardaRico(chars) {
+  const body = charsAMarcas(chars);
+  curSlide().body = body;
+  $("#bodyInput").value = body;
   drawEditor(); refreshActiveThumb();
-  ta.focus(); ta.setSelectionRange(s, e + marker.length * 2);
+}
+function cambiaRico(root, chars, a, b) { pintaRico(root, chars); colocaSeleccion(root, a, b); guardaRico(chars); pintaBotonesMarca(); }
+
+// Resaltar / subrayar / acento. Sin selección, se aplica a la palabra donde
+// está el cursor; si todo lo elegido ya lo tiene, se quita.
+function wrapSelection(marker) {
+  const k = Object.keys(MARCAS).find(x => MARCAS[x] === marker);
+  const root = $("#bodyRico");
+  const chars = leeRico(root);
+  let sel = seleccionRico(root) || _ultimaSel;
+  if (!sel) return;
+  let [a, b] = sel;
+  if (a === b) {
+    const esPal = i => chars[i] && !/\s/.test(chars[i].ch);
+    while (a > 0 && esPal(a - 1)) a--;
+    while (esPal(b)) b++;
+  }
+  while (a < b && /\s/.test(chars[a].ch)) a++;
+  while (b > a && /\s/.test(chars[b - 1].ch)) b--;
+  if (a === b) return;
+  const tramo = chars.slice(a, b).filter(c => c.ch !== "\n");
+  const poner = !tramo.every(c => c[k]);
+  for (let i = a; i < b; i++) if (chars[i].ch !== "\n") chars[i][k] = poner;
+  root.focus();
+  cambiaRico(root, chars, sel[0] === sel[1] ? sel[0] : a, sel[0] === sel[1] ? sel[0] : b);
+}
+let _ultimaSel = null;
+function pintaBotonesMarca() {
+  const root = $("#bodyRico"); if (!root) return;
+  const sel = seleccionRico(root);
+  if (sel) _ultimaSel = sel;
+  const chars = leeRico(root);
+  const [a, b] = sel || [-1, -1];
+  const trozo = sel ? (a === b ? [chars[a - 1] || chars[a]].filter(Boolean) : chars.slice(a, b).filter(c => c.ch.trim())) : [];
+  [["hl", "#mkHighlight"], ["ul", "#mkUnderline"], ["ac", "#mkAccent"]].forEach(([k, id]) => {
+    $(id)?.classList.toggle("on", trozo.length > 0 && trozo.every(c => c[k]));
+  });
+}
+function montaRico() {
+  const root = $("#bodyRico");
+  if (!root) return;
+  const inserta = texto => {
+    const chars = leeRico(root);
+    const [a, b] = seleccionRico(root) || [chars.length, chars.length];
+    const plantilla = chars[a - 1] && chars[a - 1].ch !== "\n" ? chars[a - 1] : {};
+    const nuevos = texto.replace(/\r/g, "").split("").map(ch => ch === "\n" ? { ch } : { ch, hl: plantilla.hl, ul: plantilla.ul, ac: plantilla.ac });
+    chars.splice(a, b - a, ...nuevos);
+    cambiaRico(root, chars, a + nuevos.length);
+  };
+  root.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); inserta("\n"); return; }
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key.toLowerCase() === "u") { e.preventDefault(); wrapSelection("__"); }
+    if (mod && e.key.toLowerCase() === "b") { e.preventDefault(); wrapSelection("=="); }
+    if (mod && e.key.toLowerCase() === "i") { e.preventDefault(); wrapSelection("**"); }
+  });
+  root.addEventListener("paste", e => { e.preventDefault(); inserta(e.clipboardData.getData("text/plain")); });
+  root.addEventListener("drop", e => e.preventDefault());
+  root.addEventListener("input", e => {
+    if (e.isComposing) return;
+    const sel = seleccionRico(root);
+    const chars = leeRico(root);
+    pintaRico(root, chars);
+    if (sel) colocaSeleccion(root, sel[0], sel[1]);
+    guardaRico(chars);
+  });
+  root.addEventListener("compositionend", () => root.dispatchEvent(new Event("input")));
+  document.addEventListener("selectionchange", () => { if (document.activeElement === root) pintaBotonesMarca(); });
+  // Que los botones no le quiten la selección al texto
+  ["#mkHighlight", "#mkUnderline", "#mkAccent"].forEach(id => $(id)?.addEventListener("mousedown", e => e.preventDefault()));
 }
 
 /* =========================================================================
@@ -3388,7 +3592,17 @@ function bind() {
   $("#moveFrameNext").addEventListener("click", () => moveFrame(1));
   $("#bgZoom").addEventListener("input", e => { curSlide().bg.zoom = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
   $("#bgZoom").addEventListener("change", persist);
-  $("#bodyInput").addEventListener("input", e => { curSlide().body = e.target.value; drawEditor(); refreshActiveThumb(); });
+  montaRico();
+  $("#alignChips").addEventListener("click", e => {
+    const b = e.target.closest("[data-align]"); if (!b) return;
+    const sl = curSlide();
+    sl.align = b.dataset.align;
+    // Centrado, derecha y justificado ocupan todo el ancho seguro; si el
+    // texto estaba movido a un lado, el centro no quedaría en el centro.
+    if (sl.align !== "left") sl.pos.x = TXT.left;
+    $("#alignChips").querySelectorAll("[data-align]").forEach(x => x.classList.toggle("on", x === b));
+    drawEditor(); refreshActiveThumb(); persist();
+  });
   // Overlay chips
   $$(".chip-vis").forEach(c => c.addEventListener("click", () => {
     curSlide().overlay = c.dataset.overlay;
