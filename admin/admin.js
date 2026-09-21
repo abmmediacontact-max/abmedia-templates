@@ -574,6 +574,8 @@ function tokenizeLine(line) {
   const segs = []; let hl=false, ul=false, ac=false, buf="";
   const flush = () => { if (buf) { segs.push({text:buf, hl, ul, ac}); buf=""; } };
   for (let i=0; i<line.length;) {
+    // Las marcas de tamaño ({s:1.4}…{/s}) no se pintan en esta vista previa
+    if (line[i]==="{") { const m=line.slice(i).match(/^\{s:\d+(?:\.\d+)?\}|^\{\/s\}/); if (m) { flush(); i+=m[0].length; continue; } }
     const two = line.substr(i,2);
     if (two==="==") { flush(); hl=!hl; i+=2; continue; }
     if (two==="__") { flush(); ul=!ul; i+=2; continue; }
