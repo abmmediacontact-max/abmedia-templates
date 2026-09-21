@@ -263,7 +263,7 @@ const store = {
     const data = seqs.map(s => ({
       id: s.id, title: s.title, category: s.category, status: s.status,
       submitted: !!s.submitted, style: s.style,
-      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay, bg: sl.bg }))
+      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null }))
     }));
     try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch {}
   }
@@ -304,7 +304,9 @@ function makeSlide(s) {
     pos: s.pos || { x: 0.05, y: 0.085 },
     align: s.align || "left",
     bg: s.bg ? { ...s.bg } : { zoom: 1, ox: 0, oy: 0 },
-    bgIndex: -1, inset: null, _textBox: null
+    bgKey: s.bgKey || null,   // qué foto lleva: la clave, que no cambia
+    bgIndex: -1,              // dónde está ahora en la galería, para pintar
+    inset: null, _textBox: null
   };
 }
 function instantiate(data) {
@@ -320,7 +322,8 @@ function instantiate(data) {
   // scheduledDate vive en style (para persistir en DB via JSONB)
   if (seq.style.scheduledDate) seq.scheduledDate = seq.style.scheduledDate;
   if (data.id && data.id >= state.seq) state.seq = data.id + 1;
-  assignRandomImages(seq);
+  // Lo que ya tenga foto elegida la conserva; sólo se rellenan los huecos.
+  assignRandomImages(seq, { soloVacios: true });
   return seq;
 }
 function fromCatalog(catId, extra = {}) {
@@ -359,27 +362,73 @@ function pideOwner(seq, i) { return i === 0 || i === frameCta(seq); }
  * sin foto; y las fotos sin clasificar entran como último recurso.
  * Dentro de cada montón se barajan y se gastan en orden, para no repetir.
  */
-function assignRandomImages(seq) {
+/*
+ * QUÉ FOTO LLEVA CADA FRAME
+ *
+ * Se recuerda por la clave de la foto (nombre|tamaño), no por su posición en
+ * la galería. La posición cambia al borrar una foto, al recargar y de un
+ * ordenador a otro; la clave no. Y la clave se guarda con la secuencia, en
+ * la nube: antes no se guardaba nada, así que en cada recarga se volvían a
+ * repartir fotos al azar y se perdía lo que hubieras elegido a mano.
+ */
+function ponFondo(slide, i) {
+  slide.bgIndex = i;
+  slide.bgKey = i >= 0 && state.images[i] ? state.images[i].key : null;
+}
+
+/* Vuelve a situar cada frame en la galería a partir de su clave. Se llama
+   cada vez que la galería cambia (carga, subida, borrado, sincronización). */
+function resuelveFondos() {
+  const pos = new Map(state.images.map((im, i) => [im.key, i]));
+  const seqs = new Set(state.sequences || []);
+  if (state.active) seqs.add(state.active);
+  seqs.forEach(seq => seq.slides.forEach(sl => {
+    sl.bgIndex = sl.bgKey && pos.has(sl.bgKey) ? pos.get(sl.bgKey) : -1;
+  }));
+}
+
+/*
+ * Reparte fotos respetando la regla: owner en el primero y en el del CTA,
+ * background en el resto.
+ *   soloVacios → no toca los frames que ya tienen foto elegida.
+ *   huerfanos  → cuenta como vacío el frame cuya foto ya no existe.
+ * Un frame con clave cuya foto todavía no ha llegado de la nube NO es un
+ * hueco: se espera a que llegue en vez de ponerle otra encima.
+ */
+function assignRandomImages(seq, { soloVacios = false, huerfanos = false } = {}) {
   const n = state.images.length;
-  if (!n) { seq.slides.forEach(s => s.bgIndex = -1); return; }
+  const pos = new Map(state.images.map((im, i) => [im.key, i]));
+  const vacio = sl => !sl.bgKey || (huerfanos && !pos.has(sl.bgKey));
+  // Primero se sitúa lo que se conserva.
+  seq.slides.forEach(sl => { sl.bgIndex = sl.bgKey && pos.has(sl.bgKey) ? pos.get(sl.bgKey) : -1; });
+  if (!n) { if (!soloVacios) seq.slides.forEach(sl => ponFondo(sl, -1)); return; }
+  if (soloVacios && !seq.slides.some(vacio)) return;
+  // Las fotos que ya usa esta secuencia van al final de cada montón, para
+  // no repetir una foto que ya sale dos frames más allá.
+  const usadas = new Set(soloVacios ? seq.slides.filter(sl => !vacio(sl)).map(sl => sl.bgIndex) : []);
   const idx = [...Array(n).keys()];
-  const montones = {
-    owner: shuffle(idx.filter(i => state.images[i].tipo === "owner")),
-    fondo: shuffle(idx.filter(i => state.images[i].tipo === "fondo")),
-    resto: shuffle(idx.filter(i => !state.images[i].tipo)),
+  const monton = (f) => {
+    const l = shuffle(idx.filter(f));
+    return [...l.filter(i => !usadas.has(i)), ...l.filter(i => usadas.has(i))];
   };
-  const usadas = { owner: 0, fondo: 0, resto: 0 };
+  const montones = {
+    owner: monton(i => state.images[i].tipo === "owner"),
+    fondo: monton(i => state.images[i].tipo === "fondo"),
+    resto: monton(i => !state.images[i].tipo),
+  };
+  const gastadas = { owner: 0, fondo: 0, resto: 0 };
   const saca = (orden) => {
     for (const m of orden) {
       const l = montones[m];
-      if (l.length) return l[usadas[m]++ % l.length];
+      if (l.length) return l[gastadas[m]++ % l.length];
     }
     return -1;
   };
-  seq.slides.forEach((s, i) => {
-    s.bgIndex = pideOwner(seq, i)
+  seq.slides.forEach((sl, i) => {
+    if (soloVacios && !vacio(sl)) return;
+    ponFondo(sl, pideOwner(seq, i)
       ? saca(["owner", "resto", "fondo"])
-      : saca(["fondo", "resto", "owner"]);
+      : saca(["fondo", "resto", "owner"]));
   });
 }
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
@@ -467,9 +516,14 @@ async function loadFiles(fileList) {
   state.images = [...uniq.values()];
   updateImgCount();
   if (added > 0) {
-    state.sequences.forEach(s => { if (s.slides.some(sl => sl.bgIndex < 0)) assignRandomImages(s); });
+    // Las fotos nuevas sólo van a los frames que no tenían ninguna. Antes, si
+    // a una secuencia le faltaba una sola, se le repartían todas de nuevo.
+    resuelveFondos();
+    state.sequences.forEach(s => {
+      if (s.slides.some(sl => !sl.bgKey)) { assignRandomImages(s, { soloVacios: true }); guardarSecuencia(s); }
+    });
     renderAll();
-    if (state.active) { assignRandomImages(state.active); drawEditor(); renderThumbs(); }
+    if (state.active) { assignRandomImages(state.active, { soloVacios: true }); drawEditor(); renderThumbs(); }
   }
 }
 function updateImgCount() {
@@ -520,11 +574,15 @@ async function sincronizarFotos() {
   if (!state.user || !window.sbFotos) return;
   try {
     const remotas = await sbFotos.sbListarFotos();
-    if (!remotas.length) { await subirPendientes(); return; }
+    if (remotas === null) return 0;   // no se ha podido mirar: no se toca nada
+    // Sin fotos en la nube también se sigue: puede que se borraran todas desde
+    // otro equipo y haya frames apuntando a fotos que ya no existen.
 
     const locales = new Set(state.images.map(i => i.key));
     const uid = state.user.id;
     let traidas = 0;
+    const claveDe = (obj) => decodeURIComponent(obj.name.replace(/\.jpg$/, "").replace(/_/g, "%"));
+    const enLaNube = new Set(remotas.map(claveDe));
     await enParalelo(remotas, 4, async (obj) => {
       // el nombre del objeto contiene la clave original
       const key = decodeURIComponent(obj.name.replace(/\.jpg$/, "").replace(/_/g, "%"));
@@ -539,6 +597,21 @@ async function sincronizarFotos() {
     });
     if (traidas) { updateImgCount(); if (state.view === "gallery") renderAll(); }
     await subirPendientes();
+    // Ya están todas las fotos que hay: cada frame vuelve a la suya.
+    resuelveFondos();
+    // Una foto que no está ni aquí ni en la nube se borró desde otro equipo:
+    // sólo esos frames reciben otra. Uno cuya foto no ha podido bajar ahora
+    // (sin conexión, por ejemplo) se deja esperando: la foto sigue existiendo.
+    const aqui = new Set(state.images.map(i => i.key));
+    state.sequences.forEach(seq => {
+      if (seq.slides.some(sl => sl.bgKey && !aqui.has(sl.bgKey) && !enLaNube.has(sl.bgKey))) {
+        seq.slides.forEach(sl => { if (sl.bgKey && !aqui.has(sl.bgKey) && !enLaNube.has(sl.bgKey)) sl.bgKey = null; });
+        assignRandomImages(seq, { soloVacios: true });
+        guardarSecuencia(seq);
+      }
+    });
+    if (state.active) { drawEditor(); renderThumbs(); }
+    if (state.view === "calendar") renderCalendar();
     return traidas;
   } catch (e) {
     console.warn("sincronizarFotos", e);
@@ -549,6 +622,8 @@ async function sincronizarFotos() {
 async function subirPendientes() {
   try {
     const remotas = await sbFotos.sbListarFotos();
+    // Si no se ha podido mirar qué hay, no se sube nada: se volvería a subir todo.
+    if (!remotas) return;
     const yaSubidas = new Set(remotas.map(o =>
       decodeURIComponent(o.name.replace(/\.jpg$/, "").replace(/_/g, "%"))));
     const filas = await imgDB.getAll();
@@ -662,7 +737,7 @@ async function vaciaGaleria() {
   }
   FOTOS_SEL.clear();
   state.images = [];
-  state.sequences.forEach(s => assignRandomImages(s));
+  state.sequences.forEach(s => { s.slides.forEach(sl => ponFondo(sl, -1)); guardarSecuencia(s); });
   updateImgCount();
   renderAll();
 }
@@ -675,7 +750,17 @@ async function deleteImage(index) {
   }
   if (im?.key) FOTOS_SEL.delete(im.key);
   state.images.splice(index, 1);
-  state.sequences.forEach(s => assignRandomImages(s));
+  /* Sólo cambia la foto en los frames que usaban la que se ha borrado. Antes
+     se volvían a repartir las fotos de todas las secuencias y se perdían los
+     fondos elegidos a mano. */
+  resuelveFondos();
+  state.sequences.forEach(s => {
+    if (im?.key && s.slides.some(sl => sl.bgKey === im.key)) {
+      assignRandomImages(s, { soloVacios: true, huerfanos: true });
+      guardarSecuencia(s);
+    }
+  });
+  if (state.active) { drawEditor(); renderThumbs(); }
   updateImgCount();
   renderAll();
 }
@@ -2017,7 +2102,7 @@ function renderBgPicker() {
     t.appendChild(cv);
     if (im.tipo === quiere) t.classList.add("del-contexto");
     t.title = TIPOS_FOTO[im.tipo] ? TIPOS_FOTO[im.tipo].nombre : "Sin marcar";
-    t.addEventListener("click", () => { curSlide().bgIndex = i; curSlide().bg = { zoom: 1, ox: 0, oy: 0 }; drawEditor(); refreshActiveThumb(); persist(); });
+    t.addEventListener("click", () => { ponFondo(curSlide(), i); curSlide().bg = { zoom: 1, ox: 0, oy: 0 }; drawEditor(); refreshActiveThumb(); persist(); });
     box.appendChild(t);
   });
 }
@@ -2281,7 +2366,7 @@ function setupDrag() {
 function duplicateFrame() {
   const s = curSlide();
   const copy = makeSlide({ body: s.body, pos: { ...s.pos }, align: s.align, overlay: s.overlay, bg: { ...s.bg } });
-  copy.bgIndex = s.bgIndex; copy.inset = s.inset ? { ...s.inset } : null;
+  copy.bgIndex = s.bgIndex; copy.bgKey = s.bgKey; copy.inset = s.inset ? { ...s.inset } : null;
   state.active.slides.splice(state.current + 1, 0, copy);
   state.current++; persist(); renderThumbs(); drawEditor();
 }
@@ -2716,11 +2801,11 @@ function bind() {
   $("#textColor").addEventListener("input", e => { state.active.style.textColor = e.target.value; updateColorDots(); drawEditor(); renderThumbs(); persist(); });
   $("#sizeRange").addEventListener("input", e => { state.active.style.size = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
   $("#sizeRange").addEventListener("change", persist);
-  $("#shuffleAll").addEventListener("click", () => { assignRandomImages(state.active); drawEditor(); renderThumbs(); });
+  $("#shuffleAll").addEventListener("click", () => { assignRandomImages(state.active); drawEditor(); renderThumbs(); persist(); });
   $("#newImg").addEventListener("click", () => {
     const n = state.images.length; if (n <= 1) return;
     const slide = curSlide(); let next; do { next = Math.floor(Math.random() * n); } while (next === slide.bgIndex);
-    slide.bgIndex = next; drawEditor(); refreshActiveThumb();
+    ponFondo(slide, next); drawEditor(); refreshActiveThumb(); persist();
   });
   $("#insetBtn").addEventListener("click", () => $("#insetInput").click());
   $("#insetInput").addEventListener("change", e => {
@@ -2923,11 +3008,16 @@ async function bootLoggedIn(user) {
 
   const cloudSeqs = await sbDB.sbFetchSequences();
   if (cloudSeqs.length) {
+    const sinFotoGuardada = [];
     state.sequences = cloudSeqs.map(r => {
       const seq = instantiate({ title: r.title, category: r.category, status: r.status, submitted: r.submitted, style: r.style, slides: r.slides });
       seq.cloudId = r.id;
+      if ((r.slides || []).some(sl => !sl.bgKey) && state.images.length) sinFotoGuardada.push(seq);
       return seq;
     });
+    // Las de antes de guardar la foto de cada frame: el reparto que acaban de
+    // recibir se guarda ya, y desde ahora no cambia al recargar.
+    sinFotoGuardada.forEach(guardarSecuencia);
   } else {
     state.sequences = [];
   }

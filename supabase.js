@@ -56,7 +56,9 @@ async function sbUpsertSequence(seq) {
     title: seq.title, category: seq.category, status: seq.status,
     submitted: !!seq.submitted,
     style: seq.style,
-    slides: seq.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay, bg: sl.bg }))
+    // bgKey: qué foto lleva cada frame. Sin ella, en cada recarga se volvían
+    // a repartir las fotos al azar y se perdía lo elegido.
+    slides: seq.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null }))
   };
   if (!row.id) delete row.id;
   const { data, error } = await sb.from("sequences").upsert(row).select().single();
@@ -202,7 +204,9 @@ async function sbListarFotos() {
   if (!uid) return [];
   const { data, error } = await sb.storage.from(BUCKET)
     .list(uid, { limit: 1000, sortBy: { column: "created_at", order: "asc" } });
-  if (error) { console.warn("sbListarFotos", error.message); return []; }
+  // null si falla, [] si de verdad no hay ninguna: no es lo mismo, y
+  // confundirlos haría creer que se han borrado todas las fotos.
+  if (error) { console.warn("sbListarFotos", error.message); return null; }
   return (data || []).filter(o => o.name && !o.name.startsWith("."));
 }
 
@@ -224,7 +228,7 @@ async function sbBorrarTodasLasFotos() {
   const uid = await sbUidActual();
   if (!uid) return;
   const fotos = await sbListarFotos();
-  if (!fotos.length) return;
+  if (!fotos || !fotos.length) return;
   await sb.storage.from(BUCKET).remove(fotos.map(f => `${uid}/${f.name}`));
 }
 
