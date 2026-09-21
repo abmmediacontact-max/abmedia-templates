@@ -261,7 +261,38 @@ async function sbVistasPrevias(ownerId, idPlantilla) {
 
 window.sbRevision = { sbSubirVistaPrevia, sbVistasPrevias };
 
-window.sbFotos = { sbSubirFoto, sbListarFotos, sbDescargarFoto, sbBorrarFoto, sbBorrarTodasLasFotos, rutaDeFoto };
+/* ---- Owner / Background de cada foto ----------------------------------
+ * El bucket sólo admite imágenes, así que la marca va en su propia tabla
+ * (galeria_tipos, con RLS por dueño). Sin esto se quedaba en el navegador y
+ * en otro ordenador las fotos llegaban todas sin marcar. */
+async function sbLeerTipos() {
+  const { data, error } = await sb.from("galeria_tipos").select("clave,tipo");
+  if (error) { console.warn("sbLeerTipos", error.message); return {}; }
+  const m = {};
+  (data || []).forEach(r => { m[r.clave] = r.tipo; });
+  return m;
+}
+/* Guarda varias de una vez: una sola petición aunque se marquen cien. */
+async function sbGuardarTipos(pares) {
+  const uid = await sbUidActual();
+  if (!uid) return;
+  const conTipo = pares.filter(p => p.tipo);
+  const sinTipo = pares.filter(p => !p.tipo).map(p => p.clave);
+  if (conTipo.length) {
+    const { error } = await sb.from("galeria_tipos")
+      .upsert(conTipo.map(p => ({ owner: uid, clave: p.clave, tipo: p.tipo, actualizado: new Date().toISOString() })),
+              { onConflict: "owner,clave" });
+    if (error) console.warn("sbGuardarTipos", error.message);
+  }
+  if (sinTipo.length) await sb.from("galeria_tipos").delete().in("clave", sinTipo);
+}
+async function sbBorrarTipos(claves) {
+  if (!claves || !claves.length) return;
+  await sb.from("galeria_tipos").delete().in("clave", claves);
+}
+
+window.sbFotos = { sbSubirFoto, sbListarFotos, sbDescargarFoto, sbBorrarFoto, sbBorrarTodasLasFotos, rutaDeFoto,
+                   sbLeerTipos, sbGuardarTipos, sbBorrarTipos };
 
 window.sbAuth = { sbGetSession, sbSignIn, sbSignUp, sbSignOut, isAdmin, sbIsAllowed };
 window.sbDB = { sbFetchCatalogo, sbFetchSequences, sbUpsertSequence, sbDeleteSequence, sbFetchTemplates, sbUpsertTemplate, sbDeleteTemplate, sbRevisarTemplate, sbFetchAvisos, sbMarcarAvisoLeido };

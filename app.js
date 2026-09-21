@@ -133,6 +133,17 @@ const imgDB = {
   }
 };
 
+/*
+ * Recorre `items` haciendo hasta `n` a la vez. Una detrás de otra desaprovecha
+ * la máquina y la conexión; todas de golpe con 200 fotos satura la memoria
+ * del móvil. Un puñado a la vez es lo que más rinde.
+ */
+async function enParalelo(items, n, fn) {
+  let i = 0;
+  const trabajador = async () => { while (i < items.length) { const k = i++; await fn(items[k], k); } };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, trabajador));
+}
+
 function blobToImage(blob, name) {
   return new Promise(res => {
     const img = new Image();
@@ -194,7 +205,19 @@ function sePuedeDibujar(blob) {
   });
 }
 
-async function resizeImageBlob(file, maxDim = 1920, quality = 0.85) {
+/*
+ * Deja cada foto en JPEG de 1920 px de lado mayor como mucho, que es lo que
+ * mide una story (1080×1920).
+ *
+ * Antes, si la foto ya medía menos de 1920 px se guardaba el archivo tal
+ * cual. Parece razonable, pero una captura en PNG de 1600 px pesa diez veces
+ * más que la misma en JPEG: medido con doce fotos, las dos PNG ocupaban el
+ * 62 % del total. Y encima se subían a la nube etiquetadas como JPEG sin
+ * serlo. Ahora sólo se deja intacto lo que ya es un JPEG pequeño; todo lo
+ * demás se recomprime.
+ */
+const LADO_MAX = 1920, CALIDAD = 0.82, JPEG_LIGERO = 450 * 1024;
+async function resizeImageBlob(file, maxDim = LADO_MAX, quality = CALIDAD) {
   return new Promise((res, rej) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -203,11 +226,16 @@ async function resizeImageBlob(file, maxDim = 1920, quality = 0.85) {
       const ratio = Math.min(1, maxDim / Math.max(w0, h0));
       const tw = Math.max(1, Math.round(w0 * ratio));
       const th = Math.max(1, Math.round(h0 * ratio));
-      // si ya es pequeña, evita recodificar
-      if (ratio >= 1) { URL.revokeObjectURL(url); res(file); return; }
+      if (ratio >= 1 && file.type === "image/jpeg" && file.size <= JPEG_LIGERO) {
+        URL.revokeObjectURL(url); res(file); return;
+      }
       const c = document.createElement("canvas");
       c.width = tw; c.height = th;
-      c.getContext("2d", { alpha: false }).drawImage(img, 0, 0, tw, th);
+      const x = c.getContext("2d", { alpha: false });
+      x.imageSmoothingQuality = "high";
+      // Fondo blanco: un PNG con transparencia saldría con el hueco en negro.
+      x.fillStyle = "#fff"; x.fillRect(0, 0, tw, th);
+      x.drawImage(img, 0, 0, tw, th);
       c.toBlob(b => {
         URL.revokeObjectURL(url);
         res(b || file);
@@ -220,9 +248,16 @@ async function resizeImageBlob(file, maxDim = 1920, quality = 0.85) {
 
 /* =========================================================================
  *  Persistencia local
+ *
+ *  Cada clave lleva el id de la cuenta. Antes eran las mismas para todo el
+ *  navegador: si dos clientes usaban el mismo ordenador, el segundo veía el
+ *  calendario del primero. Las fotos ya iban separadas (una base de
+ *  IndexedDB por cuenta); esto no.
  * ========================================================================= */
+// Sin sesión no se escribe en ninguna clave que luego lea una cuenta.
+const claveCuenta = (base) => state.user ? `${base}_${state.user.id}` : `${base}_sin_cuenta`;
 const store = {
-  KEY: "abmedia_sequences_v3",
+  get KEY() { return claveCuenta("abmedia_sequences_v3"); },
   load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || null; } catch { return null; } },
   save(seqs) {
     const data = seqs.map(s => ({
@@ -234,12 +269,12 @@ const store = {
   }
 };
 const storeSched = {
-  KEY: "abmedia_schedule_v1",
+  get KEY() { return claveCuenta("abmedia_schedule_v1"); },
   load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || null; } catch { return null; } },
   save(s) { try { localStorage.setItem(this.KEY, JSON.stringify(s)); } catch {} }
 };
 const storeT = {
-  KEY: "abmedia_user_templates_v2",
+  get KEY() { return claveCuenta("abmedia_user_templates_v2"); },
   load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch { return []; } },
   save(t) { try { localStorage.setItem(this.KEY, JSON.stringify(t)); } catch {} }
 };
@@ -352,34 +387,80 @@ function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.fl
 /* =========================================================================
  *  Imágenes (subida + persistencia)
  * ========================================================================= */
+/*
+ * Antes de guardar nada, qué son: Owner o Background.
+ *
+ * Se pregunta aquí, con las fotos recién elegidas, porque es cuando se sabe
+ * —tienes la carpeta delante— y porque si no se hace ahora no se hace. Si en
+ * la tanda hay de los dos tipos, se elige «Mezcladas» y se marcan luego en la
+ * galería. Cerrar sin elegir cancela la subida: no se sube nada a medias.
+ */
+function preguntaTipoSubida(n) {
+  return new Promise(resolve => {
+    montaDialogo(`
+      <div class="modal-head"><h2>¿Qué son ${n === 1 ? "esta foto" : "estas " + n + " fotos"}?</h2></div>
+      <p class="modal-sub">Owner si sales tú; Background si es un paisaje, el portátil, la mesa… Cada secuencia abre con una tuya, y el frame que pide algo también.</p>
+      <div class="tipo-subida">
+        <button class="tipo-op tipo-owner" data-tsub="owner"><strong>Owner</strong><span>Salgo yo</span></button>
+        <button class="tipo-op tipo-fondo" data-tsub="fondo"><strong>Background</strong><span>Paisaje, objetos, fondo</span></button>
+      </div>
+      <div class="save-row">
+        <button class="btn" data-tsub="cancelar">Cancelar</button>
+        <button class="btn ghost" data-tsub="mezcla">Mezcladas, las marco después</button>
+      </div>`,
+      (d) => {
+        let hecho = false;
+        const fin = (v) => { if (hecho) return; hecho = true; cierraDialogo(); resolve(v); };
+        d.addEventListener("click", e => {
+          const b = e.target.closest("[data-tsub]");
+          if (b) return fin(b.dataset.tsub);
+          if (e.target === d) fin("cancelar");
+        });
+        // Si se cierra por Escape o por fuera, montaDialogo lo quita: se da por cancelado.
+        new MutationObserver((_, obs) => {
+          if (!document.body.contains(d)) { obs.disconnect(); fin("cancelar"); }
+        }).observe(document.body, { childList: true });
+      });
+  });
+}
+
 async function loadFiles(fileList) {
   const files = Array.from(fileList)
     .filter(f => f.type.startsWith("image/") || esHeic(f));
   if (!files.length) return;
+  const eleccion = await preguntaTipoSubida(files.length);
+  if (eleccion === "cancelar") return;
+  const tipo = TIPOS_FOTO[eleccion] ? eleccion : null;
+  const nuevas = [];
   let added = 0;
   const fallidas = [];
-  for (const file of files) {
+  const yaEstan = new Set(state.images.map(i => i.key));
+  await enParalelo(files, 3, async (file) => {
     // Key con el tamaño ORIGINAL — re-subir el mismo archivo siempre dedup
     const key = imgDB.keyOf(file.name, file.size);
-    if (state.images.some(i => i.key === key)) continue;
+    if (yaEstan.has(key)) return;
+    yaEstan.add(key);
 
     const original = await normalizarImagen(file);
-    if (!original) { fallidas.push(file.name); continue; }
+    if (!original) { fallidas.push(file.name); return; }
 
     // Resize a 1920px para no cargar JPEGs de 5MB en memoria
     let blob = original;
     try { blob = await resizeImageBlob(original, 1920); } catch {}
-    try { await imgDB.put(file.name, blob, key); } catch (e) { console.warn("DB put", e); }
+    try { await imgDB.put(file.name, blob, key, tipo); } catch (e) { console.warn("DB put", e); }
     try { subirFotoANube(key, file.name, blob); } catch {}
     await new Promise(res => {
       const img = new Image();
-      img.onload = () => { state.images.push({ key, name: file.name, img }); added++; res(); };
+      img.onload = () => { const o = { key, name: file.name, img, tipo }; state.images.push(o); nuevas.push(o); added++; res(); };
       img.onerror = () => { fallidas.push(file.name); res(); };
       img.src = URL.createObjectURL(blob);
     });
-  }
+  });
   if (fallidas.length) {
     aviso("No se han podido abrir: " + fallidas.join(", "), "error");
+  }
+  if (tipo && nuevas.length && state.user && window.sbFotos) {
+    sbFotos.sbGuardarTipos(nuevas.map(o => ({ clave: o.key, tipo }))).catch(() => {});
   }
   // Dedup defensivo final
   const uniq = new Map(); state.images.forEach(im => uniq.set(im.key, im));
@@ -444,19 +525,21 @@ async function sincronizarFotos() {
     const locales = new Set(state.images.map(i => i.key));
     const uid = state.user.id;
     let traidas = 0;
-    for (const obj of remotas) {
+    await enParalelo(remotas, 4, async (obj) => {
       // el nombre del objeto contiene la clave original
       const key = decodeURIComponent(obj.name.replace(/\.jpg$/, "").replace(/_/g, "%"));
-      if (locales.has(key)) continue;
+      if (locales.has(key)) return;
+      locales.add(key);
       const blob = await sbFotos.sbDescargarFoto(obj.name);
-      if (!blob) continue;
+      if (!blob) return;
       const nombre = key.split("|")[0] || obj.name;
       try { await imgDB.put(nombre, blob, key); } catch {}
       const o = await blobToImage(blob, nombre);
       if (o) { o.key = key; state.images.push(o); traidas++; }
-    }
+    });
     if (traidas) { updateImgCount(); if (state.view === "gallery") renderAll(); }
     await subirPendientes();
+    return traidas;
   } catch (e) {
     console.warn("sincronizarFotos", e);
   }
@@ -493,6 +576,35 @@ const TIPOS_FOTO = {
 const pillTipo = (t) => TIPOS_FOTO[t]
   ? `<span class="pill tipo-${t}">${TIPOS_FOTO[t].nombre}</span>` : "";
 
+/* Marca varias fotos del mismo tipo: cada una en este navegador y todas
+   juntas en la nube, en una sola petición. */
+async function ponTipos(fotos, tipo) {
+  for (const im of fotos) await ponTipoFoto(im, tipo);
+  if (state.user && window.sbFotos && fotos.length) {
+    try { await sbFotos.sbGuardarTipos(fotos.map(im => ({ clave: im.key, tipo }))); } catch (e) { console.warn("tipos nube", e); }
+  }
+}
+
+/*
+ * Al arrancar: la marca de la nube manda, porque es la que ve cualquier
+ * ordenador. Y lo que esté marcado sólo aquí —lo de antes de que existiera
+ * la tabla— se sube, para no perderlo.
+ */
+async function sincronizarTipos() {
+  if (!state.user || !window.sbFotos) return;
+  try {
+    const nube = await sbFotos.sbLeerTipos();
+    const subir = [];
+    for (const im of state.images) {
+      const t = nube[im.key];
+      if (t && t !== im.tipo) await ponTipoFoto(im, t);
+      else if (!t && im.tipo) subir.push({ clave: im.key, tipo: im.tipo });
+    }
+    if (subir.length) await sbFotos.sbGuardarTipos(subir);
+    if (state.view === "gallery") renderGallery();
+  } catch (e) { console.warn("sincronizarTipos", e); }
+}
+
 /* Cambia el tipo de una foto guardada. Se relee el registro para no perder
    el blob: `put` reemplaza la fila entera. */
 async function ponTipoFoto(im, tipo) {
@@ -515,22 +627,40 @@ async function loadImagesFromDB() {
   try {
     const rows = await imgDB.getAll();
     const seen = new Set();
-    for (const r of rows) {
+    const unicas = rows.filter(r => {
       const key = r.key || imgDB.keyOf(r.name, r.size || 0);
-      if (seen.has(key)) continue;
-      seen.add(key);
+      if (seen.has(key)) return false;
+      seen.add(key); r._key = key; return true;
+    });
+    // Se decodifican varias a la vez pero se guardan en su orden, para que
+    // la galería no salga barajada en cada arranque.
+    const hechas = new Array(unicas.length);
+    await enParalelo(unicas, 6, async (r, k) => {
       const o = await blobToImage(r.blob, r.name);
-      if (o) { o.key = key; o.tipo = TIPOS_FOTO[r.tipo] ? r.tipo : null; state.images.push(o); }
-    }
+      if (o) { o.key = r._key; o.tipo = TIPOS_FOTO[r.tipo] ? r.tipo : null; hechas[k] = o; }
+    });
+    state.images.push(...hechas.filter(Boolean));
   } catch (e) { console.warn("loadImagesFromDB", e); }
   updateImgCount();
 }
-async function clearGallery() {
-  if (!confirm("¿Vaciar toda la galería de imágenes?\n\nSe borrarán también de la nube, así que desaparecerán de todos tus dispositivos.")) return;
+/* Con la pregunta dentro de la web: el confirm() del navegador sale fuera,
+   con otra letra y en inglés. */
+function clearGallery() {
+  pregunta({
+    titulo: "Vaciar la galería",
+    sub: "Se borran también de la nube, así que desaparecen de todos tus dispositivos. No se puede deshacer.",
+    ok: "Vaciar", peligro: true,
+    alAceptar: vaciaGaleria,
+  });
+}
+async function vaciaGaleria() {
+  const claves = state.images.map(i => i.key);
   await imgDB.clear();
   if (state.user && window.sbFotos) {
     try { await sbFotos.sbBorrarTodasLasFotos(); } catch (e) { console.warn("borrar nube", e); }
+    try { await sbFotos.sbBorrarTipos(claves); } catch {}
   }
+  FOTOS_SEL.clear();
   state.images = [];
   state.sequences.forEach(s => assignRandomImages(s));
   updateImgCount();
@@ -541,7 +671,9 @@ async function deleteImage(index) {
   if (im?.key) await imgDB.deleteByKey(im.key);
   if (im?.key && state.user && window.sbFotos) {
     try { await sbFotos.sbBorrarFoto(im.key); } catch (e) { console.warn("borrar foto nube", e); }
+    try { await sbFotos.sbBorrarTipos([im.key]); } catch {}
   }
+  if (im?.key) FOTOS_SEL.delete(im.key);
   state.images.splice(index, 1);
   state.sequences.forEach(s => assignRandomImages(s));
   updateImgCount();
@@ -801,7 +933,7 @@ function renderGallery() {
 
   visibles.forEach(({ im, i }) => {
     const cell = document.createElement("div");
-    cell.className = "gallery-cell" + (FOTOS_SEL.has(im.key) ? " sel" : "");
+    cell.className = "gallery-cell" + (FOTOS_SEL.has(im.key) ? " sel" : "") + (FOTOS_SEL.size ? " eligiendo" : "");
     const img = document.createElement("img"); img.src = im.img.src;
     img.title = im.name;   // el nombre sólo al pasar por encima: en la foto no aporta nada
     const x = document.createElement("button"); x.className = "x"; x.textContent = "✕"; x.title = "Eliminar";
@@ -817,6 +949,14 @@ function renderGallery() {
     });
 
     cell.appendChild(img); cell.appendChild(x); cell.appendChild(marca);
+    /* La primera se marca con la casilla. En cuanto hay alguna marcada, un
+       toque en cualquier punto de la foto marca o desmarca: ir apuntando a
+       una casilla de 16 px foto por foto es lo que hacía pesado clasificar. */
+    cell.addEventListener("click", () => {
+      if (!FOTOS_SEL.size) return;
+      FOTOS_SEL.has(im.key) ? FOTOS_SEL.delete(im.key) : FOTOS_SEL.add(im.key);
+      renderGallery();
+    });
     if (TIPOS_FOTO[im.tipo]) {
       const et = document.createElement("span");
       et.className = "gal-ctx pill tipo-" + im.tipo;
@@ -830,6 +970,10 @@ function renderGallery() {
 
 /* Las fotos marcadas, para marcarlas como owner o background de una vez. */
 const FOTOS_SEL = new Set();
+const fotosVisibles = () => {
+  const ctx = state.galCtx || "all";
+  return (state.images || []).filter(im => ctx === "all" || im.tipo === ctx);
+};
 
 function pintaBarraFotos() {
   const n = FOTOS_SEL.size;
@@ -837,7 +981,10 @@ function pintaBarraFotos() {
   if (!n) { if (b) b.remove(); document.body.classList.remove("con-barra-sel"); return; }
   if (!b) { b = document.createElement("div"); b.id = "barraFotos"; b.className = "barra-sel"; document.body.appendChild(b); }
   document.body.classList.add("con-barra-sel");
+  const visibles = fotosVisibles();
+  const todas = visibles.length && visibles.every(im => FOTOS_SEL.has(im.key));
   b.innerHTML = `<span class="bs-n"><b>${n}</b> ${n === 1 ? "foto" : "fotos"}</span>` +
+    `<button class="btn sm ghost" data-galpon="${todas ? "ninguna" : "todas"}">${todas ? "Quitar todas" : "Seleccionar todas"}</button>` +
     Object.entries(TIPOS_FOTO).map(([k, t]) =>
       `<button class="btn sm tipo-${k}" data-galpon="${k}">${t.nombre}</button>`).join("") +
     `<button class="btn sm ghost" data-galpon="nada">Cancelar</button>`;
@@ -2475,9 +2622,10 @@ function bind() {
     const b = e.target.closest("[data-galpon]"); if (!b) return;
     e.preventDefault();
     const que = b.dataset.galpon;
-    if (que === "nada") { FOTOS_SEL.clear(); return renderGallery(); }
+    if (que === "nada" || que === "ninguna") { FOTOS_SEL.clear(); return renderGallery(); }
+    if (que === "todas") { fotosVisibles().forEach(im => FOTOS_SEL.add(im.key)); return renderGallery(); }
     const fotos = state.images.filter(im => FOTOS_SEL.has(im.key));
-    for (const im of fotos) await ponTipoFoto(im, que || null);
+    await ponTipos(fotos, que || null);
     FOTOS_SEL.clear();
     renderGallery();
     aviso(`${fotos.length} ${fotos.length === 1 ? "foto marcada" : "fotos marcadas"} como ${TIPOS_FOTO[que] ? TIPOS_FOTO[que].nombre : "sin tipo"}`);
@@ -2754,6 +2902,14 @@ async function bootLoggedIn(user) {
 
   // Cada cuenta tiene su propia galería en este navegador
   imgDB.usarCuenta(user.id);
+  /* Las claves de antes eran de todo el navegador y no se sabe de qué cuenta
+     eran, así que no se le dan a nadie: se borran. Lo de cada uno vuelve de
+     la nube —secuencias, plantillas y las fechas de sus secuencias—; sólo se
+     pierden las propuestas del catálogo que hubiera en el calendario. */
+  try {
+    ["abmedia_sequences_v3", "abmedia_schedule_v1", "abmedia_user_templates_v2"]
+      .forEach(k => localStorage.removeItem(k));
+  } catch {}
   // Pide al navegador que no borre las fotos si va justo de espacio
   try {
     if (navigator.storage && navigator.storage.persist) await navigator.storage.persist();
@@ -2762,8 +2918,8 @@ async function bootLoggedIn(user) {
 
   // Primero lo que ya está en este equipo, para pintar cuanto antes
   await loadImagesFromDB();
-  // y después se completa con lo que haya en la nube
-  sincronizarFotos();
+  // y después se completa con lo que haya en la nube, marcas incluidas
+  sincronizarFotos().then(sincronizarTipos);
 
   const cloudSeqs = await sbDB.sbFetchSequences();
   if (cloudSeqs.length) {
@@ -2847,6 +3003,17 @@ function bindLogin() {
     // el mismo navegador no ve ni por un momento las fotos de la anterior.
     state.images = [];
     state.avisos = [];
+    state.sequences = [];
+    state.userTemplates = [];
+    state.schedule = {};
+    FOTOS_SEL.clear();
+    SELECCION.clear();
+    document.getElementById("barraFotos")?.remove();
+    document.getElementById("barraSel")?.remove();
+    // Las vistas pintadas siguen en la página, escondidas: se vacían para
+    // que no quede ni una miniatura de esta cuenta en el HTML.
+    ["#galleryGrid", "#miasGrid", "#gestionCuerpo", "#calGrid", "#bgPicker"]
+      .forEach(sel => { const el = document.querySelector(sel); if (el) el.innerHTML = ""; });
     imgDB.usarCuenta(null);
     await sbAuth.sbSignOut();
   });

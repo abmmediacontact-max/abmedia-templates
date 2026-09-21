@@ -1675,3 +1675,33 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .nav-foot { gap: 8px; padding-top: 12px; }
 /* Con etiqueta, el nombre del archivo se corta antes de llegar a ella. */
 
+
+/* ---- Al subir: ¿Owner o Background? ---- */
+.tipo-subida { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 6px; }
+.tipo-op {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+    padding: 14px 14px 13px; border-radius: var(--r);
+    border: 1px solid var(--border-strong); background: var(--surface-2);
+    font-family: inherit; text-align: left; cursor: pointer;
+    transition: border-color .12s, background .12s;
+}
+.tipo-op strong { font-size: 14px; font-weight: 620; }
+.tipo-op span { font-size: 12px; color: var(--text-2); }
+.tipo-op.tipo-owner strong { color: #f0819f; }
+.tipo-op.tipo-fondo strong { color: #56cbe6; }
+.tipo-op.tipo-owner:hover { border-color: #f0819f; background: rgba(240,129,159,.08); }
+.tipo-op.tipo-fondo:hover { border-color: #56cbe6; background: rgba(86,203,230,.08); }
+
+/* Con alguna marcada, toda la foto es clicable: que se note. */
+.gallery-cell.eligiendo { cursor: pointer; }
+.gallery-cell.eligiendo .sel-marca { opacity: 1; }
+
+/* La barra de las fotos, un punto más abajo que la de las secuencias. */
+#barraFotos { bottom: 10px; }
+/* El filo de la foto marcada, por encima de la imagen: como sombra interior
+   la tapaba la propia foto y no se veía. */
+.gallery-cell.sel { box-shadow: none; }
+.gallery-cell.sel::after {
+    content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    border: 2px solid var(--accent); border-radius: inherit;
+}
