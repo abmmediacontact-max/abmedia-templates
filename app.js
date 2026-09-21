@@ -855,9 +855,10 @@ function renderGestion() {
   const vista = state.gestionVista || "list";
   $$("#gestionVista button").forEach(b => b.classList.toggle("active", b.dataset.vista === vista));
 
-  cuerpo.innerHTML = todas.length
-    ? (vista === "board" ? tableroGestion(lista) : tablaGestion(lista))
-    : `<p class="empty">Coge una de la biblioteca o crea una nueva y aparecerá aquí.</p>`;
+  /* Los tres estados salen siempre, aunque estén vacíos: así se ve el
+     recorrido entero —borrador, programada, publicada— desde el primer día,
+     y queda claro dónde va a ir cayendo cada cosa. */
+  cuerpo.innerHTML = vista === "board" ? tableroGestion(lista) : tablaGestion(lista);
 
   pintaBarraSeleccion();
 }
