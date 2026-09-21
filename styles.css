@@ -1959,7 +1959,7 @@ body.con-barra-sel .content { padding-bottom: 88px; }
   white-space: pre-wrap; word-break: break-word; outline: none; cursor: text; }
 .texto-rico.vacio::before { content: attr(data-vacio); color: var(--text-3); pointer-events: none; position: absolute; }
 .texto-rico .m-hl { background: var(--m-hl, #ff6a1a); color: var(--m-hlt, #fff); border-radius: 4px; padding: 1px 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
-.texto-rico .m-ul { text-decoration: underline; text-decoration-color: var(--m-hl, #ff6a1a); text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.texto-rico .m-ul { text-decoration: underline; text-decoration-color: var(--m-hl, #ff6a1a); text-decoration-thickness: 3px; text-underline-offset: 4px; text-decoration-skip-ink: none; }
 .texto-rico .m-ac { color: var(--m-hl, #ff6a1a); font-weight: 600; }
 .texto-rico .m-hl.m-ac { color: var(--m-hlt, #fff); }
 .cp-barra .btn.on { background: var(--surface-3); color: var(--text); }
@@ -1987,3 +1987,8 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .fotos-pop-foto.activa { border-color: rgba(255,255,255,.8); }
 .zoom-field { margin: 4px auto 0; }
 #dlgLote { z-index: 60; }
+/* Lista de tipografías: agrupada y con scroll, cada una en su letra */
+.font-lista { display: flex; flex-wrap: wrap; gap: 6px; max-height: 230px; overflow-y: auto; padding-right: 4px; }
+.font-grupo { flex-basis: 100%; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin: 6px 0 0; }
+.font-grupo:first-child { margin-top: 0; }
+.font-lista .font-chip { font-size: 14px; padding: 7px 11px; }

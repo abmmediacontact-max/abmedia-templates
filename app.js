@@ -2653,6 +2653,7 @@ function drawEditor() {
 const SAFE = { top: 0.075, bottom: 0.82, left: 0.05, right: 0.95 };
 function clampSafe(v, min, max) { return min > max ? (min + max) / 2 : Math.max(min, Math.min(max, v)); }
 function drawSlide(c, slide, w, h, style, guides) {
+  aseguraFuente(style);
   const scale = w / CANVAS_W;
   c.clearRect(0, 0, w, h);
   const imgObj = slide.bgIndex >= 0 ? state.images[slide.bgIndex] : null;
@@ -2907,6 +2908,7 @@ function drawBody(c, slide, style, scale, w, h) {
   const pad = size * 0.3;
   slide._textBox = { x: (left - pad) / scale, y: (topY - pad) / scale, w: (blockW + pad * 2) / scale, h: (total + pad * 2) / scale };
   let y = topY + size;
+  const mt = c.measureText("H"), mg = c.measureText("g");
   layout.forEach(block => {
     if (block.gap) { y += parGap; return; }
     block.lines.forEach(ln => {
@@ -2914,9 +2916,12 @@ function drawBody(c, slide, style, scale, w, h) {
         if (ln.words[i].hl) {
           let j = i, sX = ln.words[i].x, eX = ln.words[i].x + ln.words[i].w;
           while (j < ln.words.length && ln.words[j].hl) { eX = ln.words[j].x + ln.words[j].w; j++; }
-          const padX = size * 0.16, padY = size * 0.13;
+          // La caja va centrada sobre las letras, no sobre la línea entera:
+          // antes sobraba por arriba y quedaba descolgada.
+          const padX = size * 0.16, padY = size * 0.15;
+          const alto = mt.actualBoundingBoxAscent || size * 0.72, bajo = (mg.actualBoundingBoxDescent || size * 0.2) * 0.6;
           c.fillStyle = style.highlightColor;
-          roundRect(c, left + sX - padX, y - size + size * 0.06 - padY, (eX - sX) + padX * 2, size + padY * 1.4, size * 0.18);
+          roundRect(c, left + sX - padX, y - alto - padY, (eX - sX) + padX * 2, alto + bajo + padY * 2, size * 0.18);
           c.fill();
           i = j;
         } else i++;
@@ -2931,8 +2936,8 @@ function drawBody(c, slide, style, scale, w, h) {
         if (ln.words[k].ul) {
           let j = k, sX = ln.words[k].x, eX = ln.words[k].x + ln.words[k].w;
           while (j < ln.words.length && ln.words[j].ul) { eX = ln.words[j].x + ln.words[j].w; j++; }
-          c.strokeStyle = style.highlightColor; c.lineWidth = size * 0.07; c.lineCap = "round";
-          const uy = y + size * 0.17;
+          c.strokeStyle = style.highlightColor; c.lineWidth = size * 0.1; c.lineCap = "round";
+          const uy = y + size * 0.19;
           c.beginPath(); c.moveTo(left + sX, uy); c.lineTo(left + eX, uy); c.stroke();
           k = j;
         } else k++;
@@ -3818,19 +3823,80 @@ function bind() {
 /* =========================================================================
  *  Fuentes (chips visuales)
  * ========================================================================= */
+/*
+ * Las tipografías de Google no se cargan todas al abrir la web: sería
+ * pesado. La lista se enseña con una muestra mínima de cada una (sólo las
+ * letras de su nombre, un pedido pequeñito) y la fuente entera se pide al
+ * elegirla o al pintar una secuencia que la usa. El lienzo no espera a las
+ * fuentes, así que cuando llega una se repinta lo que haya a la vista.
+ */
+const familiaDe = f => f.fam || (f.value.match(/^\s*"([^"]+)"/) || [])[1] || "";
+const fuenteDe = value => FONTS.find(f => f.value === value);
+const _fuentePedida = new Set(), _fuenteLista = new Set();
+function cargaFuente(value) {
+  const f = fuenteDe(value);
+  if (!f || !f.google || _fuenteLista.has(value)) return Promise.resolve(false);
+  const fam = familiaDe(f);
+  if (!_fuentePedida.has(fam)) {
+    _fuentePedida.add(fam);
+    const l = document.createElement("link");
+    l.rel = "stylesheet";
+    l.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fam).replace(/%20/g, "+")}:wght@${f.w}&display=swap`;
+    document.head.appendChild(l);
+  }
+  return new Promise(res => {
+    let intentos = 0;
+    const mira = () => document.fonts.load(`${f.w} 40px "${fam}"`).then(r => {
+      if (r.length) { _fuenteLista.add(value); res(true); }
+      else if (++intentos < 20) setTimeout(mira, 250); else res(false);
+    }).catch(() => res(false));
+    mira();
+  });
+}
+let _repintarFuentes = null;
+function aseguraFuente(style) {
+  const f = style && fuenteDe(style.font);
+  if (!f || !f.google || _fuenteLista.has(f.value)) return;
+  cargaFuente(f.value).then(ok => {
+    if (!ok) return;
+    clearTimeout(_repintarFuentes);
+    _repintarFuentes = setTimeout(() => {
+      if (state.active) { drawEditor(); renderThumbs(); }
+      if (_peekSeq && !$("#seqPeekModal").classList.contains("hidden")) pintaVisor();
+      if (state.view === "calendar" && typeof renderCalendar === "function") renderCalendar();
+    }, 60);
+  });
+}
 function buildFontChips() {
   const box = $("#fontChips"); if (!box) return;
   box.innerHTML = "";
+  box.classList.add("font-lista");
+  // Muestra de cada fuente de Google, sólo con las letras de su nombre
+  const google = FONTS.filter(f => f.google);
+  const letras = [...new Set(google.map(f => f.name).join(""))].join("");
+  const l = document.createElement("link");
+  l.rel = "stylesheet";
+  l.href = "https://fonts.googleapis.com/css2?" + google.map(f => "family=" + encodeURIComponent(familiaDe(f)).replace(/%20/g, "+") + ":wght@" + f.w).join("&") + "&text=" + encodeURIComponent(letras) + "&display=swap";
+  document.head.appendChild(l);
+  let grupo = "";
   FONTS.forEach(f => {
+    if (f.grupo !== grupo) {
+      grupo = f.grupo;
+      const t = document.createElement("span"); t.className = "font-grupo"; t.textContent = grupo;
+      box.appendChild(t);
+    }
     const b = document.createElement("button");
     b.className = "font-chip";
     b.dataset.fontval = f.value;
     b.style.fontFamily = f.value;
+    b.style.fontWeight = f.w;
     b.textContent = f.name;
     b.addEventListener("click", () => {
       state.active.style.font = f.value;
+      state.active.style.weight = f.w;
       syncFontChips();
       drawEditor(); renderThumbs(); persist();
+      aseguraFuente(state.active.style);
     });
     box.appendChild(b);
   });
