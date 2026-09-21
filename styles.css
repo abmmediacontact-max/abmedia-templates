@@ -1768,3 +1768,22 @@ body.con-barra-sel .content { padding-bottom: 88px; }
    para todas, como las etiquetas del calendario de Content OS. */
 .cal-cell .seq.mine { background: var(--surface-3); color: var(--text-2); }
 .cal-cell .seq.mine:hover { color: var(--text); border-color: var(--border-strong); }
+
+/* =========================================================================
+ *  Sin filos naranjas al arrastrar ni al marcar
+ *
+ *  Álvaro lo ha pedido más de una vez: el contorno naranja grita. El naranja
+ *  queda para lo mismo que en Content OS —el botón principal, la casilla
+ *  marcada, el día de hoy y el foco de un campo—. Al soltar y al marcar, el
+ *  mismo gesto que el calendario de Content OS: un aclarado leve con un
+ *  filo blanco fino.
+ * ========================================================================= */
+.vt-group.soltar-aqui, .board-col.soltar-aqui {
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.28);
+    background: rgba(255,255,255,.035);
+}
+.board-col.soltar-aqui .board-cards, .board-col.soltar-aqui .board-empty { background: transparent; }
+.gallery-cell.sel::after, .cs-foto.sel::after { border: 1.5px solid rgba(255,255,255,.75); }
+.bg-thumb.del-contexto { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
+.peek-mini.activo { border-color: rgba(255,255,255,.7); }
+.cal-cell .seq.mine:hover { border-color: var(--border-strong); }

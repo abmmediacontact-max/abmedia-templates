@@ -309,11 +309,16 @@ function makeSlide(s) {
     inset: null, _textBox: null
   };
 }
+/* Categorías de antes del catálogo actual. Quedaron en secuencias viejas; sin
+   traducirlas salían como «Venta» en gris y no aparecían en ningún filtro. */
+const CATEGORIAS_ANTIGUAS = { ventas: "venta", autoridad: "flex" };
+const normalizaCategoria = (c) => CATEGORIES[c] ? c : (CATEGORIAS_ANTIGUAS[c] || "venta");
+
 function instantiate(data) {
   const seq = {
     id: data.id || state.seq++,
     title: data.title || "Secuencia",
-    category: data.category || "venta",
+    category: normalizaCategoria(data.category),
     status: data.status || "draft",
     submitted: !!data.submitted,
     style: data.style ? { ...newStyle(), ...data.style } : newStyle(),
