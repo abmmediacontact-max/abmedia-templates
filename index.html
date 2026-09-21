@@ -11,7 +11,7 @@
   <!-- Estas cuatro las pinta el generador de stories en el canvas; la
      interfaz ya no pide ninguna: usa SF Pro del sistema. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=55" />
+  <link rel="stylesheet" href="styles.css?v=56" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -453,6 +453,21 @@
             <span class="mark-hint">Selecciona texto y pulsa</span>
           </div>
 
+          <!-- El sticker del frame, si lo tiene (caja de preguntas, encuesta, slider). -->
+          <div class="sticker-edit hidden" id="stickerEdit">
+            <div class="sect-label">Sticker de Instagram</div>
+            <label class="field"><span id="stkEtiqueta">Pregunta</span>
+              <input type="text" id="stkTexto" maxlength="80" /></label>
+            <div class="stk-opciones" id="stkOpciones">
+              <label class="field"><span>Opción 1</span><input type="text" id="stkOp1" maxlength="40" /></label>
+              <label class="field"><span>Opción 2</span><input type="text" id="stkOp2" maxlength="40" /></label>
+            </div>
+            <label class="field" id="stkEmojiCampo"><span>Emoji</span>
+              <input type="text" id="stkEmoji" maxlength="4" /></label>
+            <label class="field"><span>Altura</span>
+              <input type="range" id="stkY" min="0.3" max="0.85" step="0.01" /></label>
+          </div>
+
           <div class="section">
             <span class="sect-label">Fondo de la foto</span>
             <div class="chip-row" id="overlayChips">
@@ -555,9 +570,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase.js?v=55"></script>
-  <script src="templates.js?v=55"></script>
-  <script src="catalog.js?v=55"></script>
-  <script src="app.js?v=55"></script>
+  <script src="supabase.js?v=56"></script>
+  <script src="templates.js?v=56"></script>
+  <script src="catalog.js?v=56"></script>
+  <script src="app.js?v=56"></script>
 </body>
 </html>

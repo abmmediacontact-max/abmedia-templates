@@ -287,7 +287,7 @@ const store = {
     const data = seqs.map(s => ({
       id: s.id, title: s.title, category: s.category, status: s.status,
       submitted: !!s.submitted, style: s.style,
-      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null }))
+      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null, sticker: sl.sticker || null }))
     }));
     try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch {}
   }
@@ -329,6 +329,7 @@ function makeSlide(s) {
     align: s.align || "left",
     bg: s.bg ? { ...s.bg } : { zoom: 1, ox: 0, oy: 0 },
     bgKey: s.bgKey || null,   // qué foto lleva: la clave, que no cambia
+    sticker: s.sticker ? JSON.parse(JSON.stringify(s.sticker)) : null,
     bgIndex: -1,              // dónde está ahora en la galería, para pintar
     inset: null, _textBox: null
   };
@@ -1622,7 +1623,6 @@ function fmtDate(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padSta
 function ymKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`; }
 
 // Orden en el que rotan las categorías en la base del calendario.
-const CAL_CAT_ORDER = ["personal", "venta", "puente", "flex", "valor"];
 
 /*
  * Antes esto rellenaba cada mes con tres sugerencias por semana en cuanto lo
@@ -1650,27 +1650,27 @@ function ensureScheduleFor(monthDate) {
  *    Flex     · pruebas y resultados, justo ANTES de una de venta.
  *    Venta    · poca frecuencia; pierde fuerza si se repite sin motivo.
  *
- *  Cada día elige la categoría que más le falta según su peso —Valor la que
- *  más, porque es la base—, sin repetir la del día anterior. Una primera
- *  versión giraba un patrón fijo por semanas y salía un mes con más Puente
- *  que Valor: las semanas a medias se comían siempre el mismo hueco. Con
- *  cuotas eso no pasa, empiece el mes el día que empiece.
- *
- *  Venta no entra en el reparto normal. En un mes entero una sola semana
- *  hace de cierre: Puente calienta, Flex demuestra y sólo entonces Venta
- *  pide. Va en la penúltima semana, para que después quede una normal y el
- *  mes no acabe vendiendo. En una sola semana no se vende.
+ *  (Reglas de Álvaro, 21/09/2026.) Cada semana lleva UNA de venta. El día de
+ *  antes va una de Engagement o de Puente, alternándose por semanas: las dos
+ *  hacen que la gente toque la story —votar, responder, pedir el recurso— y
+ *  cuanta más interacción, a más gente enseña Instagram la siguiente, que es
+ *  la de venta. El resto de días se reparte por cuotas entre Valor, Personal
+ *  y Flex, sin repetir categoría dos días seguidos.
  * ======================================================================= */
-const PESOS_RITMO = { valor: 0.4, personal: 0.3, puente: 0.2, flex: 0.1 };
-const RITMO_CIERRE = {
-  2: ["flex", "venta"],
-  3: ["puente", "flex", "venta"],
-  5: ["valor", "puente", "personal", "flex", "venta"],
+const ROLES_SEMANA = {
+  2: ["previa", "venta"],
+  3: ["libre", "previa", "venta"],
+  5: ["libre", "libre", "previa", "venta", "libre"],
 };
-/* Qué días se publica, contando el fin de semana (0 = domingo). Repartidos
-   para que no queden tres seguidas y luego cuatro días sin nada. */
+const PESOS_LIBRES = { valor: 0.45, personal: 0.35, flex: 0.2 };
+/* Qué días se publica (0 = domingo), en el orden de los papeles de arriba.
+   Con 5, la venta cae en viernes y el domingo queda para algo ligero. */
 const DIAS_RITMO = { 2: [3, 6], 3: [1, 3, 6], 5: [1, 2, 4, 5, 0] };
-const NOMBRE_DIAS = { 2: "miércoles y sábado", 3: "lunes, miércoles y sábado", 5: "lunes, martes, jueves, viernes y domingo" };
+const NOMBRE_DIAS = {
+  2: "miércoles (engagement o puente) y sábado (venta)",
+  3: "lunes, miércoles (engagement o puente) y sábado (venta)",
+  5: "lunes, martes, jueves (engagement o puente), viernes (venta) y domingo",
+};
 
 /** El lunes de la semana de una fecha. */
 function lunesDe(d) {
@@ -1711,7 +1711,7 @@ function abrePropuesta() {
   };
   montaDialogo(`
     <div class="modal-head"><h2>Generar propuesta</h2></div>
-    <p class="modal-sub">Mezcla valor, personal, puente, flex y venta según lo que pide cada una. Los días que ya tengan algo no se tocan.</p>
+    <p class="modal-sub">Cada semana lleva una de venta, con una de engagement o puente el día antes para que llegue a más gente. El resto, valor, personal y flex. Los días que ya tengan algo no se tocan.</p>
     <div class="campo-seg"><span>Para</span>
       <div class="segmented"><button data-per="semana">Esta semana</button><button data-per="mes">Todo el mes</button></div>
     </div>
@@ -1748,17 +1748,16 @@ function generaPropuesta({ periodo, porSemana }) {
   // Nada en el pasado: una story programada para ayer no sirve de nada.
   if (desde < hoy) desde = new Date(hoy);
 
-  // Las semanas del periodo, por su lunes, para saber cuál hace de cierre.
+  // Las semanas del periodo, por su lunes: la previa se alterna por semana.
   const semanas = [];
   for (let l = lunesDe(desde); l <= hasta; l.setDate(l.getDate() + 7)) semanas.push(fmtDate(l));
-  const cierre = periodo === "mes" && semanas.length >= 3 ? semanas[semanas.length - 2] : null;
-  const dias = DIAS_RITMO[porSemana];
+  const roles = ROLES_SEMANA[porSemana], dias = DIAS_RITMO[porSemana];
   const cuenta = {};
   let total = 0;
-  // La categoría que más se ha quedado por debajo de su peso, sin repetir.
-  const eligeCategoria = (anterior) => {
+  // La libre que más se ha quedado por debajo de su peso, sin repetir la anterior.
+  const eligeLibre = (anterior) => {
     let mejor = null, falta = -Infinity;
-    for (const [c, peso] of Object.entries(PESOS_RITMO)) {
+    for (const [c, peso] of Object.entries(PESOS_LIBRES)) {
       if (c === anterior) continue;
       const f = peso * (total + 1) - (cuenta[c] || 0);
       if (f > falta + 1e-9) { mejor = c; falta = f; }
@@ -1772,27 +1771,47 @@ function generaPropuesta({ periodo, porSemana }) {
   ORDEN_CATEGORIAS.forEach(k => { bolsa[k] = shuffle(CATALOG.filter(t => t.category === k).map(t => t.id)); });
   const coge = (cat) => { const b = bolsa[cat]; if (!b || !b.length) return null; const id = b.shift(); b.push(id); return id; };
 
-  const nuevas = [];
-  let ocupados = 0, anterior = null;
-  for (let d = new Date(desde); d <= hasta; d.setDate(d.getDate() + 1)) {
-    const hueco = dias.indexOf(d.getDay());
-    if (hueco < 0) continue;
-    const key = fmtDate(d);
-    const ym = key.slice(0, 7);
-    if (calList(state.schedule[ym] || {}, key).length) { ocupados++; continue; }
-    let cat;
-    if (fmtDate(lunesDe(d)) === cierre) {
-      cat = RITMO_CIERRE[porSemana][hueco];
-      // Si el cierre empezaría con lo mismo que el día anterior, abre con Valor.
-      if (cat === anterior && hueco === 0) cat = "valor";
-    } else {
-      cat = eligeCategoria(anterior);
+  /* Primero se decide qué va en cada día, semana a semana; después se
+     rellena en orden de fecha. Así se puede arreglar la semana que empieza
+     antes del periodo: si su día de previa queda fuera (o ya ha pasado),
+     la previa se pone el día justo antes de la venta, para que la venta no
+     salga nunca sin su engagement o su puente delante. */
+  const libre = d => d >= desde && d <= hasta;
+  const ocupado = d => calList(state.schedule[fmtDate(d).slice(0, 7)] || {}, fmtDate(d)).length > 0;
+  const huecos = [];
+  let ocupados = 0;
+  semanas.forEach((lunes, semana) => {
+    const l = new Date(lunes + "T00:00:00");
+    const deLaSemana = roles.map((papel, k) => {
+      const d = new Date(l); d.setDate(l.getDate() + (dias[k] + 6) % 7);
+      return { d, papel, semana };
+    });
+    const venta = deLaSemana.find(x => x.papel === "venta");
+    const previa = deLaSemana.find(x => x.papel === "previa");
+    if (venta && libre(venta.d) && previa && !libre(previa.d)) {
+      const antes = new Date(venta.d); antes.setDate(antes.getDate() - 1);
+      if (libre(antes)) previa.d = antes;
     }
+    deLaSemana.forEach(x => {
+      if (!libre(x.d)) return;
+      if (ocupado(x.d)) { ocupados++; return; }
+      huecos.push(x);
+    });
+  });
+  huecos.sort((a, b) => a.d - b.d);
+
+  const nuevas = [];
+  let anterior = null;
+  for (const { d, papel, semana } of huecos) {
+    let cat;
+    if (papel === "venta") cat = "venta";
+    else if (papel === "previa") cat = semana % 2 === 0 ? "engagement" : "puente";
+    else cat = eligeLibre(anterior);
     const id = coge(cat);
     if (!id) continue;
-    nuevas.push(programaPlantilla(id, key));
+    nuevas.push(programaPlantilla(id, fmtDate(d)));
     anterior = cat;
-    if (cat !== "venta") { cuenta[cat] = (cuenta[cat] || 0) + 1; total++; }
+    if (papel === "libre") { cuenta[cat] = (cuenta[cat] || 0) + 1; total++; }
   }
 
   storeSched.save(state.schedule);
@@ -2388,7 +2407,26 @@ function renderEditPanel() {
   syncOverlayChips();
   $("#bgZoom").value = slide.bg.zoom;
   $("#insetControls").classList.toggle("hidden", !slide.inset);
+  pintaCamposSticker(slide);
   renderBgPicker();
+}
+
+/* Los campos del sticker: sólo los que tocan según el tipo. No se reescriben
+   mientras se está escribiendo en ellos, o el cursor saltaría al final. */
+function pintaCamposSticker(slide) {
+  const st = slide.sticker, caja = $("#stickerEdit");
+  if (!caja) return;
+  caja.classList.toggle("hidden", !st);
+  if (!st) return;
+  $("#stkEtiqueta").textContent = st.tipo === "preguntas" ? "Texto de la caja" : "Pregunta";
+  $("#stkOpciones").classList.toggle("hidden", st.tipo !== "encuesta");
+  $("#stkEmojiCampo").classList.toggle("hidden", st.tipo !== "slider");
+  const pon = (id, v) => { const el = $(id); if (document.activeElement !== el) el.value = v; };
+  pon("#stkTexto", st.texto || "");
+  pon("#stkOp1", (st.opciones || [])[0] || "");
+  pon("#stkOp2", (st.opciones || [])[1] || "");
+  pon("#stkEmoji", st.emoji || "");
+  pon("#stkY", st.y == null ? 0.6 : st.y);
 }
 function renderBgPicker() {
   const box = $("#bgPicker"); if (!box) return;
@@ -2441,7 +2479,100 @@ function drawSlide(c, slide, w, h, style, guides) {
   drawOverlay(c, slide.overlay, w, h);
   if (slide.inset && slide.inset.img) drawInset(c, slide.inset, w, h);
   drawBody(c, slide, style, scale, w, h);
+  if (slide.sticker) drawSticker(c, slide.sticker, w, h);
   if (guides) drawGuides(c, w, h);
+}
+
+/* =========================================================================
+ *  STICKERS DE INSTAGRAM, SIMULADOS
+ *
+ *  Caja de preguntas, encuesta y slider de emoji, con el aspecto de los
+ *  nativos: tarjeta blanca de esquinas redondeadas y la letra del sistema.
+ *  No son interactivos —esto es un boceto de la story—: sirven para que se
+ *  entienda de un vistazo qué pide ese frame, y al publicar se pone encima
+ *  el sticker de verdad. Todo se mide en proporción al ancho, así sale igual
+ *  en la miniatura del calendario que en el editor.
+ * ========================================================================= */
+const FUENTE_STICKER = '-apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
+const limpiaMarcas = t => String(t || "").replace(/==|__|\*\*/g, "");
+
+function lineasQueCaben(c, texto, maxW) {
+  const palabras = limpiaMarcas(texto).split(/\s+/).filter(Boolean);
+  const lineas = []; let l = "";
+  palabras.forEach(p => {
+    const prueba = l ? l + " " + p : p;
+    if (c.measureText(prueba).width > maxW && l) { lineas.push(l); l = p; } else l = prueba;
+  });
+  if (l) lineas.push(l);
+  return lineas;
+}
+
+function drawSticker(c, st, w, h) {
+  const u = w / 1080;                               // 1 = un píxel de una story real
+  const cx = w / 2, cy = (st.y == null ? 0.6 : st.y) * h;
+  const W = (st.tipo === "encuesta" ? 700 : 660) * u, pad = 34 * u;
+  c.save();
+  c.textAlign = "center"; c.textBaseline = "middle";
+
+  // Lo que ocupa cada parte, para saber el alto de la tarjeta antes de pintar.
+  const tamT = 40 * u, lhT = tamT * 1.22;
+  c.font = `700 ${tamT}px ${FUENTE_STICKER}`;
+  const lineas = lineasQueCaben(c, st.texto || "", W - pad * 2);
+  const altoTexto = lineas.length * lhT;
+  let altoCuerpo = 0;
+  const opciones = (st.opciones && st.opciones.length ? st.opciones : ["Sí", "No"]).slice(0, 4);
+  if (st.tipo === "preguntas") altoCuerpo = 84 * u;
+  else if (st.tipo === "encuesta") altoCuerpo = opciones.length * 86 * u + (opciones.length - 1) * 14 * u;
+  else altoCuerpo = 96 * u;                          // slider
+  const arriba = st.tipo === "preguntas" ? 62 * u : pad;
+  const H = arriba + altoTexto + 26 * u + altoCuerpo + pad;
+  const x = cx - W / 2, y = cy - H / 2;
+
+  // La tarjeta, con una sombra suave como la de Instagram.
+  c.shadowColor = "rgba(0,0,0,.28)"; c.shadowBlur = 30 * u; c.shadowOffsetY = 8 * u;
+  c.fillStyle = "#fff"; roundRect(c, x, y, W, H, 30 * u); c.fill();
+  c.shadowColor = "transparent";
+
+  // La caja de preguntas lleva la foto de perfil asomando por arriba.
+  if (st.tipo === "preguntas") {
+    const r = 46 * u;
+    const g = c.createLinearGradient(cx - r, y - r, cx + r, y + r);
+    g.addColorStop(0, "#feda75"); g.addColorStop(.5, "#d62976"); g.addColorStop(1, "#4f5bd5");
+    c.fillStyle = g; c.beginPath(); c.arc(cx, y, r, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#fff"; c.beginPath(); c.arc(cx, y, r - 6 * u, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "#c7c7cc"; c.beginPath(); c.arc(cx, y, r - 12 * u, 0, Math.PI * 2); c.fill();
+  }
+
+  c.fillStyle = "#111";
+  c.font = `700 ${tamT}px ${FUENTE_STICKER}`;
+  lineas.forEach((l, i) => c.fillText(l, cx, y + arriba + lhT * (i + .5)));
+  const y0 = y + arriba + altoTexto + 26 * u;
+
+  if (st.tipo === "preguntas") {
+    c.fillStyle = "#efeff4"; roundRect(c, x + pad, y0, W - pad * 2, 84 * u, 20 * u); c.fill();
+    c.fillStyle = "#8e8e93"; c.font = `500 ${32 * u}px ${FUENTE_STICKER}`;
+    c.fillText("Escribe algo…", cx, y0 + 42 * u);
+  } else if (st.tipo === "encuesta") {
+    c.font = `600 ${34 * u}px ${FUENTE_STICKER}`;
+    opciones.forEach((o, i) => {
+      const oy = y0 + i * (86 + 14) * u;
+      c.fillStyle = "#efeff4"; roundRect(c, x + pad, oy, W - pad * 2, 86 * u, 22 * u); c.fill();
+      c.fillStyle = "#111";
+      const t = lineasQueCaben(c, o, W - pad * 4)[0] || "";
+      c.fillText(t, cx, oy + 43 * u);
+    });
+  } else {
+    // Slider: la barra con el degradado de Instagram y el emoji encima.
+    const bx = x + pad + 10 * u, bw = W - pad * 2 - 20 * u, by = y0 + 58 * u;
+    c.fillStyle = "#e5e5ea"; roundRect(c, bx, by - 7 * u, bw, 14 * u, 7 * u); c.fill();
+    const g = c.createLinearGradient(bx, 0, bx + bw, 0);
+    g.addColorStop(0, "#feda75"); g.addColorStop(.5, "#fa7e1e"); g.addColorStop(1, "#d62976");
+    const hasta = bw * 0.68;
+    c.fillStyle = g; roundRect(c, bx, by - 7 * u, hasta, 14 * u, 7 * u); c.fill();
+    c.font = `${78 * u}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+    c.fillText(st.emoji || "😍", bx + hasta, by - 4 * u);
+  }
+  c.restore();
 }
 function drawGuides(c, w, h) {
   const ty = SAFE.top * h, by = SAFE.bottom * h;
@@ -2676,6 +2807,7 @@ function duplicateFrame() {
   const s = curSlide();
   const copy = makeSlide({ body: s.body, pos: { ...s.pos }, align: s.align, overlay: s.overlay, bg: { ...s.bg } });
   copy.bgIndex = s.bgIndex; copy.bgKey = s.bgKey; copy.inset = s.inset ? { ...s.inset } : null;
+  copy.sticker = s.sticker ? JSON.parse(JSON.stringify(s.sticker)) : null;
   state.active.slides.splice(state.current + 1, 0, copy);
   state.current++; persist(); renderThumbs(); drawEditor();
 }
@@ -2722,7 +2854,7 @@ async function enviarARevision() {
     title: s.title || "Secuencia",
     category: s.category,
     style: JSON.parse(JSON.stringify(s.style)),
-    slides: s.slides.map(sl => ({ body: sl.body, pos: { ...sl.pos }, align: sl.align, overlay: sl.overlay })),
+    slides: s.slides.map(sl => ({ body: sl.body, pos: { ...sl.pos }, align: sl.align, overlay: sl.overlay, sticker: sl.sticker || null })),
     submitted: true,
     is_public: false,
     share_ok: compartir,
@@ -3120,6 +3252,15 @@ function bind() {
   $("#sizeRange").addEventListener("input", e => { state.active.style.size = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
   $("#sizeRange").addEventListener("change", persist);
   $("#shuffleAll").addEventListener("click", () => { assignRandomImages(state.active); drawEditor(); renderThumbs(); persist(); });
+  const campoSticker = (id, aplica) => $(id).addEventListener("input", e => {
+    const st = curSlide().sticker; if (!st) return;
+    aplica(st, e.target.value); drawEditor(); refreshActiveThumb(); persist();
+  });
+  campoSticker("#stkTexto", (st, v) => { st.texto = v; });
+  campoSticker("#stkOp1", (st, v) => { st.opciones = [v, (st.opciones || [])[1] || ""]; });
+  campoSticker("#stkOp2", (st, v) => { st.opciones = [(st.opciones || [])[0] || "", v]; });
+  campoSticker("#stkEmoji", (st, v) => { st.emoji = v; });
+  campoSticker("#stkY", (st, v) => { st.y = Number(v); });
   $("#newImg").addEventListener("click", () => {
     const n = state.images.length; if (n <= 1) return;
     const slide = curSlide(); let next; do { next = Math.floor(Math.random() * n); } while (next === slide.bgIndex);

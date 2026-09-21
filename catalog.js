@@ -3,10 +3,13 @@
  * Cada slide usa el modelo de párrafos con marcas inline editables:
  *   ==resaltado==   __subrayado__   **acento**
  *
- * Las secuencias están organizadas en 3 categorías de uso:
- *   personal — Cercanía / lifestyle
- *   venta    — Vender / oferta / lanzamiento
- *   puente   — Lead magnets / piezas que llevan a CTA
+ * Las secuencias están organizadas en categorías de uso:
+ *   personal   — Cercanía / lifestyle
+ *   venta      — Vender / oferta / lanzamiento
+ *   puente     — Lead magnets / piezas que llevan a CTA
+ *   engagement — Preguntas, encuestas, sliders: que la gente toque la story
+ *   flex       — Resultados y casos contados sin vender
+ *   valor      — Tips y reflexiones aplicables
  */
 
 const CATEGORIES = {
@@ -27,6 +30,12 @@ const CATEGORIES = {
                               icon: '<svg viewBox="0 0 24 24"><path d="M2 17 H22 V19 H2 Z"/><path d="M4 17 V11 C4 8 7 6 12 6 S20 8 20 11 V17 H17 V12 H7 V17 Z"/><path d="M4 13 H20 V14 H4 Z"/></svg>',
                               desc: "El paso intermedio: lead magnets, encuestas y stories que acaban en un enlace o un DM. Úsala para calentar antes de vender y para recoger contactos sin pedir dinero.",
                               color: "#ff6a1a"
+            },
+            engagement: {
+                              name: "Engagement",
+                              icon: '<svg viewBox="0 0 24 24"><path d="M4 5 H20 V15 H9 L5 19 V15 H4 Z"/></svg>',
+                              desc: "Cajas de preguntas, encuestas, sliders: lo que invita a tocar la story. Úsala el día antes de vender: cuanta más gente interactúa, a más gente enseña Instagram la siguiente, y la de venta llega más lejos.",
+                              color: "#e3b341"
             },
             flex: {
                               name: "Flex",
@@ -688,6 +697,78 @@ const CATALOG = [
                         slides: [
                                 { overlay: "bottom", body: "Hay ==un rasgo== que comparten los que nunca consiguen (*resultado deseado*)" },
                                 { overlay: "bottom", body: "__(*El rasgo negativo concreto*)__\n\nEvítalo y ya vas por delante del resto" }
+                                              ]
+        },
+
+            /* ========================= ENGAGEMENT ========================= *
+             * Stories hechas para que la gente toque: responder, votar,
+             * deslizar. Cada interacción le dice a Instagram que esa cuenta
+             * interesa, y la story siguiente —la de venta— sale a más gente.
+             * El sticker se dibuja con el aspecto del nativo de Instagram
+             * para que la plantilla se entienda de un vistazo; al publicar se
+             * pone el sticker de verdad encima. */
+        {
+                        id: "e-preguntame", category: "engagement", title: "Pregúntame lo que quieras",
+                        objective: "Abrir la caja de preguntas y recoger dudas reales para contestarlas en stories.",
+                        slides: [
+                                { overlay: "full", body: "Hoy respondo ==todo== lo que me preguntéis sobre (*tu tema*) 👇", sticker: { tipo: "preguntas", texto: "Pregúntame lo que quieras", y: 0.58 } },
+                                { overlay: "full", body: "Las que más se repitan las contesto mañana en stories.\n\n__Sin filtro.__" }
+                                              ]
+        },
+        {
+                        id: "e-estooaquello", category: "engagement", title: "Esto o aquello",
+                        objective: "Una encuesta rápida de dos opciones para que voten sin pensar.",
+                        slides: [
+                                { overlay: "full", body: "Tienes que elegir ==solo una== 👇", sticker: { tipo: "encuesta", texto: "¿Con cuál te quedas?", opciones: ["(*Opción A*)", "(*Opción B*)"], y: 0.58 } },
+                                { overlay: "full", body: "Yo lo tengo clarísimo: **(*tu elección*)**\n\nMañana te cuento por qué." }
+                                              ]
+        },
+        {
+                        id: "e-tepasa", category: "engagement", title: "¿Te ha pasado?",
+                        objective: "Que se identifiquen con un problema y lo digan votando.",
+                        slides: [
+                                { overlay: "full", body: "Levanta la mano si alguna vez te ha pasado esto con (*tu tema*):\n\n__(*el problema concreto*)__", sticker: { tipo: "encuesta", texto: "¿Te ha pasado?", opciones: ["Sí, a mí también", "Nunca"], y: 0.64 } },
+                                { overlay: "full", body: "El ==(*X*)%== me habéis dicho que sí.\n\nNo es casualidad: pasa por **(*la causa*)**." }
+                                              ]
+        },
+        {
+                        id: "e-termometro", category: "engagement", title: "Termómetro",
+                        objective: "Un slider de emoji para medir cuánto les pasa algo, sin tener que escribir.",
+                        slides: [
+                                { overlay: "full", body: "Sé sincero 👀", sticker: { tipo: "slider", texto: "¿Cuánto te cuesta (*el problema*)?", emoji: "😅", y: 0.55 } },
+                                { overlay: "full", body: "La media ha salido ==altísima==.\n\nY tiene solución: te lo cuento en la siguiente story." }
+                                              ]
+        },
+        {
+                        id: "e-mitoorealidad", category: "engagement", title: "¿Mito o realidad?",
+                        objective: "Poner a prueba una creencia del sector y revelar la respuesta.",
+                        slides: [
+                                { overlay: "full", body: "\"(*La creencia típica de tu sector*)\"", sticker: { tipo: "encuesta", texto: "¿Mito o realidad?", opciones: ["Mito", "Realidad"], y: 0.6 } },
+                                { overlay: "full", body: "Es ==(*mito / realidad*)==.\n\n**(*La explicación en una frase*)**" }
+                                              ]
+        },
+        {
+                        id: "e-quetefrena", category: "engagement", title: "¿Qué te frena?",
+                        objective: "Descubrir las objeciones antes de vender, preguntando directamente.",
+                        slides: [
+                                { overlay: "full", body: "Quiero ayudarte con esto, pero necesito saber una cosa 👇", sticker: { tipo: "preguntas", texto: "¿Qué te frena con (*tu tema*)?", y: 0.58 } },
+                                { overlay: "full", body: "Voy a leer todas las respuestas.\n\nY puede que prepare ==algo== con lo que más se repita." }
+                                              ]
+        },
+        {
+                        id: "e-adivina", category: "engagement", title: "Adivina el resultado",
+                        objective: "Una encuesta sobre un resultado real: juegan, y de paso ven la prueba.",
+                        slides: [
+                                { overlay: "full", body: "Un cliente vino con (*la situación de partida*).\n\n¿Cuánto crees que consiguió en (*tiempo*)?", sticker: { tipo: "encuesta", texto: "Adivina", opciones: ["(*Cifra baja*)", "(*Cifra alta*)"], y: 0.66 } },
+                                { overlay: "full", body: "Fueron ==(*la cifra real*)==.\n\n**Y no es el único.**" }
+                                              ]
+        },
+        {
+                        id: "e-delunoalfuego", category: "engagement", title: "Del 1 al 🔥",
+                        objective: "Medir las ganas antes de un lanzamiento: calienta la venta del día siguiente.",
+                        slides: [
+                                { overlay: "full", body: "Estoy preparando algo para ayudarte con ==(*el problema*)== 👀", sticker: { tipo: "slider", texto: "¿Te interesaría?", emoji: "🔥", y: 0.58 } },
+                                { overlay: "full", body: "Vale, lo habéis dejado claro.\n\n**Mañana os cuento más.**" }
                                               ]
         },
           ];
