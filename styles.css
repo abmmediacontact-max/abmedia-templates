@@ -1693,8 +1693,8 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .tipo-op.tipo-fondo:hover { border-color: #56cbe6; background: rgba(86,203,230,.08); }
 
 /* Con alguna marcada, toda la foto es clicable: que se note. */
-.gallery-cell.eligiendo { cursor: pointer; }
-.gallery-cell.eligiendo .sel-marca { opacity: 1; }
+#galleryGrid.eligiendo .gallery-cell { cursor: pointer; }
+#galleryGrid.eligiendo .sel-marca { opacity: 1; }
 
 /* La barra de las fotos, un punto más abajo que la de las secuencias. */
 #barraFotos { bottom: 10px; }
@@ -1787,3 +1787,43 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .bg-thumb.del-contexto { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35); }
 .peek-mini.activo { border-color: rgba(255,255,255,.7); }
 .cal-cell .seq.mine:hover { border-color: var(--border-strong); }
+
+/* ---- Clasificar al subir: que las fotos no se monten unas encima de otras ----
+   Con aspect-ratio en un <button> dentro de una rejilla con scroll, Chrome
+   calculaba las filas más bajas que las fotos y cada fila se metía debajo de
+   la anterior. Con el truco del padding, el alto sale del propio ancho y la
+   fila no tiene nada que calcular. */
+.cs-rejilla {
+    flex: 1 1 auto; min-height: 0;
+    align-content: start; align-items: start;
+    grid-auto-rows: auto;
+}
+.cs-foto {
+    aspect-ratio: auto; height: 0; padding: 0 0 177.78% 0;   /* 16 / 9 = 1,7778 */
+    display: block; width: 100%;
+}
+.cs-lienzo { position: absolute; inset: 0; display: block; background: var(--surface-3); }
+.cs-lienzo canvas { width: 100%; height: 100%; display: block; }
+.cs-lienzo .cs-sin { position: absolute; inset: 0; }
+
+/* ---- Avance de una subida de fotos ---- */
+.prog-subida {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 230;
+    display: flex; flex-direction: column; gap: 7px; min-width: 240px;
+    padding: 10px 14px 12px; border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow);
+    transition: opacity .3s;
+}
+.prog-subida.se-va { opacity: 0; }
+.ps-txt { font-size: 12.5px; color: var(--text); font-variant-numeric: tabular-nums; }
+.ps-barra { height: 3px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.ps-barra i { display: block; height: 100%; width: 0; background: var(--text-2); transition: width .2s; }
+
+/* Sin desenfoque de fondo en las etiquetas de las fotos: medido con 48 fotos,
+   cada toque tardaba 707 ms en pintarse con él y 17 ms sin él. Un
+   backdrop-filter por foto obliga a recomponer cada casilla en cada cambio.
+   El fondo casi opaco basta para que se lea sobre cualquier foto. */
+.gal-ctx.tipo-owner, .gal-ctx.tipo-fondo, .cs-tipo.pill {
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    background: rgba(10,10,10,.86);
+}

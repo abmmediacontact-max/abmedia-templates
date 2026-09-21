@@ -217,7 +217,30 @@ function sePuedeDibujar(blob) {
  * demás se recomprime.
  */
 const LADO_MAX = 1920, CALIDAD = 0.82, JPEG_LIGERO = 450 * 1024;
+
+/*
+ * WebP si el navegador sabe crearlo; si no, JPEG.
+ *
+ * Medido: codificar una foto de 1920 px en JPEG tardaba ~1 s y en WebP ~160
+ * ms, y el WebP pesa un 25-35 % menos, que también es menos que subir y
+ * bajar de la nube. Safari sabe LEER WebP pero no crearlo: si se le pide,
+ * devuelve un PNG enorme sin avisar. Por eso se prueba con un lienzo de 2 px
+ * y se mira qué ha devuelto de verdad, en vez de fiarse del navegador.
+ */
+let _formatoFoto = null;
+function formatoFoto() {
+  if (_formatoFoto) return _formatoFoto;
+  _formatoFoto = new Promise(res => {
+    try {
+      const c = document.createElement("canvas"); c.width = c.height = 2;
+      c.toBlob(b => res(b && b.type === "image/webp" ? "image/webp" : "image/jpeg"), "image/webp", 0.8);
+    } catch { res("image/jpeg"); }
+  });
+  return _formatoFoto;
+}
+
 async function resizeImageBlob(file, maxDim = LADO_MAX, quality = CALIDAD) {
+  const formato = await formatoFoto();
   return new Promise((res, rej) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
@@ -226,7 +249,7 @@ async function resizeImageBlob(file, maxDim = LADO_MAX, quality = CALIDAD) {
       const ratio = Math.min(1, maxDim / Math.max(w0, h0));
       const tw = Math.max(1, Math.round(w0 * ratio));
       const th = Math.max(1, Math.round(h0 * ratio));
-      if (ratio >= 1 && file.type === "image/jpeg" && file.size <= JPEG_LIGERO) {
+      if (ratio >= 1 && (file.type === "image/jpeg" || file.type === "image/webp") && file.size <= JPEG_LIGERO) {
         URL.revokeObjectURL(url); res(file); return;
       }
       const c = document.createElement("canvas");
@@ -236,10 +259,11 @@ async function resizeImageBlob(file, maxDim = LADO_MAX, quality = CALIDAD) {
       // Fondo blanco: un PNG con transparencia saldría con el hueco en negro.
       x.fillStyle = "#fff"; x.fillRect(0, 0, tw, th);
       x.drawImage(img, 0, 0, tw, th);
+      const q = formato === "image/webp" ? 0.8 : quality;
       c.toBlob(b => {
         URL.revokeObjectURL(url);
         res(b || file);
-      }, "image/jpeg", quality);
+      }, formato, q);
     };
     img.onerror = () => { URL.revokeObjectURL(url); res(file); };
     img.src = url;
@@ -456,7 +480,6 @@ function clasificaSubida(files) {
   return new Promise(resolve => {
     const tipos = new Map();           // archivo → "owner" | "fondo"
     const sel = new Set();             // índices marcados
-    const urls = files.map(f => esHeic(f) ? null : URL.createObjectURL(f));
     let hecho = false;
 
     const d = montaDialogo(`
@@ -470,7 +493,7 @@ function clasificaSubida(files) {
       </div>
       <div class="cs-rejilla">${files.map((f, i) => `
         <button class="cs-foto" data-csi="${i}" title="${escapeAttr(f.name)}">
-          ${urls[i] ? `<img src="${urls[i]}" alt="" loading="lazy" decoding="async">` : `<span class="cs-sin">${escapeHtml(f.name)}</span>`}
+          <span class="cs-lienzo"></span>
           <span class="sel-marca"></span>
           <span class="cs-tipo"></span>
         </button>`).join("")}</div>
@@ -480,20 +503,82 @@ function clasificaSubida(files) {
       </div>`, () => {});
     d.querySelector(".modal-box").classList.add("cs-ventana");
 
+    /*
+     * Las miniaturas se hacen pequeñas y sólo cuando entran en pantalla.
+     *
+     * Antes cada una era un <img> con la foto original: con 46 fotos de móvil
+     * de 12 megapíxeles, el navegador decodificaba y guardaba del orden de
+     * 2 GB para pintar cuadraditos de 100 px, y todo iba a tirones. Ahora se
+     * decodifica una, se dibuja en un lienzo de 180 px, se suelta el
+     * original, y así de cuatro en cuatro según se va viendo.
+     */
+    const rejilla = d.querySelector(".cs-rejilla");
+    const botones = [...d.querySelectorAll(".cs-foto")];
+    const cola = [];
+    let enMarcha = 0;
+    const MINI_W = 180, MINI_H = 320;
+    const miniatura = async (i) => {
+      const f = files[i], hueco = botones[i].querySelector(".cs-lienzo");
+      try {
+        let fuente, soltar = () => {};
+        try {
+          // Con resizeWidth el navegador puede decodificar ya en pequeño.
+          fuente = await createImageBitmap(f, { resizeWidth: MINI_W * 2, resizeQuality: "medium" });
+          soltar = () => fuente.close();
+        } catch {
+          const url = URL.createObjectURL(f);
+          fuente = new Image(); fuente.src = url;
+          await fuente.decode();
+          soltar = () => URL.revokeObjectURL(url);
+        }
+        const c = document.createElement("canvas");
+        c.width = MINI_W; c.height = MINI_H;
+        const x = c.getContext("2d");
+        const w = fuente.width, h = fuente.height, k = Math.max(MINI_W / w, MINI_H / h);
+        x.drawImage(fuente, (MINI_W - w * k) / 2, (MINI_H - h * k) / 2, w * k, h * k);
+        soltar();
+        if (!hecho) hueco.appendChild(c);
+      } catch {
+        if (!hecho) hueco.innerHTML = `<span class="cs-sin">${escapeHtml(f.name)}</span>`;
+      }
+    };
+    const siguiente = () => {
+      while (enMarcha < 4 && cola.length && !hecho) {
+        const i = cola.shift(); enMarcha++;
+        miniatura(i).finally(() => { enMarcha--; siguiente(); });
+      }
+    };
+    const visor = new IntersectionObserver(entradas => {
+      entradas.forEach(e => {
+        if (!e.isIntersecting) return;
+        visor.unobserve(e.target);
+        cola.push(Number(e.target.dataset.csi));
+      });
+      siguiente();
+    }, { root: rejilla, rootMargin: "300px" });
+    /* Las primeras se piden ya, sin esperar al vigilante: medido, tarda unos
+       800 ms en dar su primer aviso, y era justo el rato en que la ventana
+       salía con los huecos vacíos. Las demás, según se hace scroll. */
+    const PRIMERAS = 24;
+    botones.forEach((b, i) => { if (i < PRIMERAS) cola.push(i); else visor.observe(b); });
+    siguiente();
+
     const fin = (v) => {
       if (hecho) return; hecho = true;
-      urls.forEach(u => u && URL.revokeObjectURL(u));
+      visor.disconnect();
       cierraDialogo(); resolve(v);
     };
-    const pinta = () => {
-      d.querySelectorAll(".cs-foto").forEach(b => {
-        const i = Number(b.dataset.csi), t = tipos.get(files[i]);
-        b.classList.toggle("sel", sel.has(i));
-        b.querySelector(".sel-marca").classList.toggle("on", sel.has(i));
-        const et = b.querySelector(".cs-tipo");
-        et.className = "cs-tipo" + (t ? " pill tipo-" + t : "");
-        et.textContent = t ? TIPOS_FOTO[t].nombre : "";
-      });
+    // Sólo se retocan las fotos que cambian, no las 46 en cada toque.
+    const pintaFoto = (i) => {
+      const b = botones[i], t = tipos.get(files[i]);
+      b.classList.toggle("sel", sel.has(i));
+      b.querySelector(".sel-marca").classList.toggle("on", sel.has(i));
+      const et = b.querySelector(".cs-tipo");
+      et.className = "cs-tipo" + (t ? " pill tipo-" + t : "");
+      et.textContent = t ? TIPOS_FOTO[t].nombre : "";
+    };
+    const pinta = (cuales) => {
+      (cuales || botones.map((_, i) => i)).forEach(pintaFoto);
       const faltan = files.filter(f => !tipos.has(f)).length;
       const todas = sel.size === files.length;
       d.querySelector('[data-cs="todas"]').textContent = todas ? "Quitar selección" : "Seleccionar todas";
@@ -508,13 +593,16 @@ function clasificaSubida(files) {
     d.addEventListener("click", e => {
       if (e.target === d) return fin(null);
       const foto = e.target.closest("[data-csi]");
-      if (foto) { const i = Number(foto.dataset.csi); sel.has(i) ? sel.delete(i) : sel.add(i); return pinta(); }
+      if (foto) { const i = Number(foto.dataset.csi); sel.has(i) ? sel.delete(i) : sel.add(i); return pinta([i]); }
       const b = e.target.closest("[data-cs]"); if (!b) return;
       const que = b.dataset.cs;
       if (que === "cancelar") return fin(null);
       if (que === "subir") return fin(tipos);
       if (que === "todas") { if (sel.size === files.length) sel.clear(); else files.forEach((_, i) => sel.add(i)); return pinta(); }
-      if (que === "owner" || que === "fondo") { sel.forEach(i => tipos.set(files[i], que)); sel.clear(); return pinta(); }
+      if (que === "owner" || que === "fondo") {
+        const tocadas = [...sel];
+        tocadas.forEach(i => tipos.set(files[i], que)); sel.clear(); return pinta(tocadas);
+      }
     });
     // Escape: montaDialogo quita la ventana; se da por cancelado.
     new MutationObserver((_, obs) => {
@@ -524,6 +612,27 @@ function clasificaSubida(files) {
   });
 }
 
+/* La barra de avance de una subida, abajo del todo y dentro de la web. */
+function progresoSubida(total) {
+  document.getElementById("progSubida")?.remove();
+  const el = document.createElement("div");
+  el.id = "progSubida"; el.className = "prog-subida";
+  el.innerHTML = `<span class="ps-txt">Preparando ${total} ${total === 1 ? "foto" : "fotos"}…</span><span class="ps-barra"><i></i></span>`;
+  document.body.appendChild(el);
+  const txt = el.querySelector(".ps-txt"), i = el.querySelector("i");
+  return {
+    avanza(n) {
+      txt.textContent = `Subiendo ${n} de ${total}`;
+      i.style.width = Math.round(n / total * 100) + "%";
+    },
+    fin() {
+      txt.textContent = total === 1 ? "Foto lista" : `${total} fotos listas`;
+      i.style.width = "100%";
+      setTimeout(() => { el.classList.add("se-va"); setTimeout(() => el.remove(), 300); }, 1200);
+    },
+  };
+}
+
 async function loadFiles(fileList) {
   const files = Array.from(fileList)
     .filter(f => f.type.startsWith("image/") || esHeic(f));
@@ -531,10 +640,21 @@ async function loadFiles(fileList) {
   const tipos = await clasificaSubida(files);
   if (!tipos) return;
   const nuevas = [];
+  /* Una barra con el avance, y las fotos van apareciendo en la galería según
+     se guardan. Antes no se veía nada hasta el final: con 48 fotos eran
+     varios segundos con la pantalla quieta, sin saber si estaba haciendo algo. */
+  let hechas = 0;
+  const barra = progresoSubida(files.length);
+  let pendientePintar = false;
+  const pintaPoco = () => {
+    if (pendientePintar) return;
+    pendientePintar = true;
+    setTimeout(() => { pendientePintar = false; updateImgCount(); if (state.view === "gallery") renderGallery(); }, 500);
+  };
   let added = 0;
   const fallidas = [];
   const yaEstan = new Set(state.images.map(i => i.key));
-  await enParalelo(files, 3, async (file) => {
+  await enParalelo(files, 3, async (file) => { try {
     // Key con el tamaño ORIGINAL — re-subir el mismo archivo siempre dedup
     const key = imgDB.keyOf(file.name, file.size);
     if (yaEstan.has(key)) return;
@@ -551,11 +671,12 @@ async function loadFiles(fileList) {
     try { subirFotoANube(key, file.name, blob); } catch {}
     await new Promise(res => {
       const img = new Image();
-      img.onload = () => { const o = { key, name: file.name, img, tipo }; state.images.push(o); nuevas.push(o); added++; res(); };
+      img.onload = () => { const o = { key, name: file.name, img, tipo }; state.images.push(o); nuevas.push(o); added++; pintaPoco(); res(); };
       img.onerror = () => { fallidas.push(file.name); res(); };
       img.src = URL.createObjectURL(blob);
     });
-  });
+  } finally { hechas++; barra.avanza(hechas); } }).then(() => {}, () => {});
+  barra.fin();
   if (fallidas.length) {
     aviso("No se han podido abrir: " + fallidas.join(", "), "error");
   }
@@ -802,6 +923,7 @@ async function deleteImage(index) {
     try { await sbFotos.sbBorrarTipos([im.key]); } catch {}
   }
   if (im?.key) FOTOS_SEL.delete(im.key);
+  if (im?._mini && im._mini.startsWith("blob:")) URL.revokeObjectURL(im._mini);
   state.images.splice(index, 1);
   /* Sólo cambia la foto en los frames que usaban la que se ha borrado. Antes
      se volvían a repartir las fotos de todas las secuencias y se perdían los
@@ -1069,11 +1191,15 @@ function renderGallery() {
     return pintaBarraFotos();
   }
 
+  grid.classList.toggle("eligiendo", FOTOS_SEL.size > 0);
   visibles.forEach(({ im, i }) => {
     const cell = document.createElement("div");
-    cell.className = "gallery-cell" + (FOTOS_SEL.has(im.key) ? " sel" : "") + (FOTOS_SEL.size ? " eligiendo" : "");
-    const img = document.createElement("img"); img.src = im.img.src;
+    cell.className = "gallery-cell" + (FOTOS_SEL.has(im.key) ? " sel" : "");
+    const img = document.createElement("img");
+    img.decoding = "async";
     img.title = im.name;   // el nombre sólo al pasar por encima: en la foto no aporta nada
+    const mini = miniDe(im, url => { img.src = url; });
+    if (mini) img.src = mini;
     const x = document.createElement("button"); x.className = "x"; x.textContent = "✕"; x.title = "Eliminar";
     x.addEventListener("click", e => { e.stopPropagation(); deleteImage(i); });
 
@@ -1082,8 +1208,7 @@ function renderGallery() {
     marca.title = "Seleccionar";
     marca.addEventListener("click", e => {
       e.stopPropagation();
-      FOTOS_SEL.has(im.key) ? FOTOS_SEL.delete(im.key) : FOTOS_SEL.add(im.key);
-      renderGallery();
+      alternaFoto(im.key, cell, marca);
     });
 
     cell.appendChild(img); cell.appendChild(x); cell.appendChild(marca);
@@ -1092,8 +1217,7 @@ function renderGallery() {
        una casilla de 16 px foto por foto es lo que hacía pesado clasificar. */
     cell.addEventListener("click", () => {
       if (!FOTOS_SEL.size) return;
-      FOTOS_SEL.has(im.key) ? FOTOS_SEL.delete(im.key) : FOTOS_SEL.add(im.key);
-      renderGallery();
+      alternaFoto(im.key, cell, marca);
     });
     if (TIPOS_FOTO[im.tipo]) {
       const et = document.createElement("span");
@@ -1106,8 +1230,44 @@ function renderGallery() {
   pintaBarraFotos();
 }
 
+/*
+ * La miniatura de cada foto para la galería, hecha una sola vez.
+ *
+ * Antes cada casilla de 130 px cargaba la foto de 1920 px: repintar la
+ * galería con 48 fotos tardaba medio segundo y cada toque al seleccionar,
+ * 120 ms, que es un tirón que se nota. Ahora se hace una de 260 px la
+ * primera vez que hace falta y se guarda con la foto.
+ */
+function miniDe(im, alHacer) {
+  if (im._mini) return im._mini;
+  if (!im._haciendoMini) {
+    im._haciendoMini = true;
+    const W = 260, H = 462;
+    const c = document.createElement("canvas"); c.width = W; c.height = H;
+    const w = im.img.naturalWidth || im.img.width, h = im.img.naturalHeight || im.img.height;
+    const k = Math.max(W / w, H / h);
+    c.getContext("2d").drawImage(im.img, (W - w * k) / 2, (H - h * k) / 2, w * k, h * k);
+    c.toBlob(b => {
+      im._mini = b ? URL.createObjectURL(b) : im.img.src;
+      im._haciendoMini = false;
+      if (alHacer) alHacer(im._mini);
+    }, "image/webp", 0.8);
+  }
+  return null;
+}
+
 /* Las fotos marcadas, para marcarlas como owner o background de una vez. */
 const FOTOS_SEL = new Set();
+/* Marca o desmarca una foto tocando sólo esa casilla, no toda la galería. */
+function alternaFoto(key, cell, marca) {
+  const on = !FOTOS_SEL.has(key);
+  on ? FOTOS_SEL.add(key) : FOTOS_SEL.delete(key);
+  cell.classList.toggle("sel", on);
+  marca.classList.toggle("on", on);
+  $("#galleryGrid").classList.toggle("eligiendo", FOTOS_SEL.size > 0);
+  pintaBarraFotos();
+}
+
 const fotosVisibles = () => {
   const ctx = state.galCtx || "all";
   return (state.images || []).filter(im => ctx === "all" || im.tipo === ctx);

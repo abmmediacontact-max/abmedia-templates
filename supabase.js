@@ -194,7 +194,8 @@ async function sbSubirFoto(key, blob) {
   const uid = await sbUidActual();
   if (!uid) return null;
   const { error } = await sb.storage.from(BUCKET)
-    .upload(rutaDeFoto(uid, key), blob, { upsert: true, contentType: "image/jpeg" });
+    // El tipo real del archivo: ahora puede ser WebP (ver formatoFoto en app.js).
+    .upload(rutaDeFoto(uid, key), blob, { upsert: true, contentType: blob.type || "image/jpeg" });
   if (error) { console.warn("sbSubirFoto", error.message); return null; }
   return true;
 }
