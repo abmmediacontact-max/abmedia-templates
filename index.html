@@ -11,7 +11,7 @@
   <!-- Estas cuatro las pinta el generador de stories en el canvas; la
      interfaz ya no pide ninguna: usa SF Pro del sistema. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=66" />
+  <link rel="stylesheet" href="styles.css?v=67" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -341,9 +341,9 @@
       </div>
       <div class="peek-frames" id="seqPeekFrames"></div>
       <div class="peek-actions">
-        <button class="btn danger-text" id="seqPeekRemove">Eliminar secuencia</button>
-        <button class="btn" id="seqPeekOtra" title="Cambiarla por otra plantilla de la misma categoría"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>Otra de la misma categoría</button>
-        <button class="btn btn-primary" id="seqPeekOpen">Abrir en el editor</button>
+        <button class="btn peek-cuadro peek-borrar" id="seqPeekRemove" title="Eliminar secuencia" aria-label="Eliminar secuencia"><svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <button class="btn peek-cuadro" id="seqPeekOtra" title="Otra de la misma categoría" aria-label="Otra de la misma categoría"><svg class="ic" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
+        <button class="btn btn-primary peek-editar" id="seqPeekOpen">Editar</button>
       </div>
     </div>
   </div>
@@ -506,7 +506,7 @@
                 <div class="seg-alin" id="alignChips"><button type="button" data-align="left" title="Izquierda" aria-label="Izquierda"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg></button><button type="button" data-align="center" title="Centrado" aria-label="Centrado"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M5.5 18h13"/></svg></button><button type="button" data-align="right" title="Derecha" aria-label="Derecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M10 12h10M7 18h13"/></svg></button><button type="button" data-align="justify" title="Justificado" aria-label="Justificado"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div>
                 <button type="button" class="ds-campo" id="fuenteCampo" aria-label="Tipografía"></button>
               </div>
-              <span class="cp-sub">Tamaño</span>
+              <span class="cp-sub" id="sizeLabel">Tamaño</span>
               <input type="range" id="sizeRange" min="0.6" max="1.7" step="0.02" value="1" />
               <span class="cp-sub">Colores</span>
               <div class="color-row">
@@ -583,9 +583,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase.js?v=66"></script>
-  <script src="templates.js?v=66"></script>
-  <script src="catalog.js?v=66"></script>
-  <script src="app.js?v=66"></script>
+  <script src="supabase.js?v=67"></script>
+  <script src="templates.js?v=67"></script>
+  <script src="catalog.js?v=67"></script>
+  <script src="app.js?v=67"></script>
 </body>
 </html>

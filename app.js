@@ -2187,33 +2187,27 @@ function setScheduleForSequence(seq, date) {
   if (state.view === "calendar") renderCalendar();
 }
 
-// Reconstruye entradas del calendario para secuencias con scheduledDate al iniciar
+// Reconstruye el calendario al iniciar a partir de la fecha de cada secuencia.
+/*
+ * Manda la fecha guardada en la nube (scheduledDate), no lo que hubiera en el
+ * calendario de este navegador. Antes se conservaban las entradas viejas si
+ * «apuntaban» a alguna secuencia, pero las que se guardaron con el número
+ * local (antes de tener id de la nube) pasaban a apuntar a OTRA secuencia al
+ * recargar, porque esos números se reparten de nuevo: una secuencia aparecía
+ * en un día que no era el suyo y otro día salía con dos. Ahora cada secuencia
+ * sale exactamente en su fecha, una vez, igual en todos los dispositivos.
+ */
 function rebuildScheduleFromSequences() {
-  // 1. Fuera las entradas que apuntan a secuencias que ya no existen: son
-  //    restos de los identificadores viejos y es lo que duplicaba días.
   for (const ym in state.schedule) {
     const map = state.schedule[ym];
-    for (const d in map) {
-      /* Sólo quedan las secuencias de verdad. Las entradas que eran el nombre
-         de una plantilla suelta (de antes, o del relleno automático que había)
-         se quitan: no tenían fotos guardadas y el calendario tiene que
-         arrancar enseñando sólo lo que es tuyo. */
-      const limpio = calList(map, d).filter(e =>
-        typeof e === "string" && e.startsWith("seq:") && !!secuenciaDeTag(e));
-      calSet(map, d, limpio);
-    }
+    for (const d in map) calSet(map, d, []);
   }
-
-  // 2. Cada secuencia con fecha aparece una sola vez, y con el tag estable
   state.sequences.forEach(s => {
     if (!s.scheduledDate) return;
-    const dias = diasDeSecuencia(s.id);
-    if (dias.length) return;              // ya está colocada
     const ym = s.scheduledDate.slice(0, 7);
     state.schedule[ym] = state.schedule[ym] || {};
     calPush(state.schedule[ym], s.scheduledDate, tagDeSecuencia(s));
   });
-
   storeSched.save(state.schedule);
 }
 
@@ -2410,22 +2404,28 @@ function pintaVisor() {
   }
   const n = seq.slides.length;
   _peekFrame = Math.max(0, Math.min(n - 1, _peekFrame));
-  const alto = Math.round(Math.min(window.innerHeight * 0.62, 600));
+  /* El frame que se está viendo, en grande; al lado, en vertical, todos los
+     frames en pequeño para saltar a cualquiera. Con más de 4 van en dos
+     columnas para que la tira no sea más alta que el frame grande. */
+  const alto = Math.round(Math.min(window.innerHeight * 0.6, 580));
   const ancho = Math.round(alto * 9 / 16);
   const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const cols = n > 4 ? 2 : 1, filas = Math.ceil(n / cols), hueco = 8;
+  const altoMini = n > 1 ? Math.floor(Math.min(alto * 0.34, (alto - hueco * (filas - 1)) / filas)) : 0;
+  const anchoMini = Math.round(altoMini * 9 / 16);
 
   cont.innerHTML = `
     <div class="peek-visor">
-      <button class="peek-flecha" data-pk="-1" aria-label="Frame anterior" ${_peekFrame === 0 ? "disabled" : ""}>‹</button>
-      <div class="peek-grande" style="width:${ancho}px;height:${alto}px">
-        <div class="peek-barras">${seq.slides.map((_, i) => `<i class="${i < _peekFrame ? "vista" : i === _peekFrame ? "actual" : ""}"></i>`).join("")}</div>
-        <button class="peek-toque izq" data-pk="-1" aria-label="Anterior"></button>
-        <button class="peek-toque der" data-pk="1" aria-label="Siguiente"></button>
+      <div class="peek-principal">
+        <div class="peek-grande" style="width:${ancho}px;height:${alto}px">
+          <div class="peek-barras">${seq.slides.map((_, i) => `<i class="${i < _peekFrame ? "vista" : i === _peekFrame ? "actual" : ""}"></i>`).join("")}</div>
+          <button class="peek-toque izq" data-pk="-1" aria-label="Anterior"></button>
+          <button class="peek-toque der" data-pk="1" aria-label="Siguiente"></button>
+        </div>
+        <span class="tiny dim peek-num">Frame ${_peekFrame + 1} de ${n}</span>
       </div>
-      <button class="peek-flecha" data-pk="1" aria-label="Frame siguiente" ${_peekFrame === n - 1 ? "disabled" : ""}>›</button>
-    </div>
-    <div class="peek-pie"><span class="tiny dim">Frame ${_peekFrame + 1} de ${n}</span></div>
-    <div class="peek-tira"></div>`;
+      ${n > 1 ? `<div class="peek-lado" style="grid-template-columns:repeat(${cols}, ${anchoMini}px);gap:${hueco}px"></div>` : ""}
+    </div>`;
 
   const cv = document.createElement("canvas");
   cv.width = Math.round(ancho * dpr); cv.height = Math.round(alto * dpr);
@@ -2433,25 +2433,29 @@ function pintaVisor() {
   drawSlide(cv.getContext("2d"), seq.slides[_peekFrame], cv.width, cv.height, seq.style);
   cont.querySelector(".peek-grande").prepend(cv);
 
-  const tira = cont.querySelector(".peek-tira");
-  seq.slides.forEach((sl, i) => {
+  const lado = cont.querySelector(".peek-lado");
+  if (lado) seq.slides.forEach((sl, i) => {
     const b = document.createElement("button");
     b.className = "peek-mini" + (i === _peekFrame ? " activo" : "");
     b.setAttribute("aria-label", "Frame " + (i + 1));
     b.dataset.pkIr = i;
     const m = document.createElement("canvas");
-    m.width = Math.round(46 * dpr); m.height = Math.round(82 * dpr);
+    m.width = Math.round(anchoMini * dpr); m.height = Math.round(altoMini * dpr);
+    m.style.width = anchoMini + "px"; m.style.height = altoMini + "px";
     drawSlide(m.getContext("2d"), sl, m.width, m.height, seq.style);
     b.appendChild(m);
-    tira.appendChild(b);
+    lado.appendChild(b);
   });
+  // La fila de botones mide lo mismo que la vista previa
+  const acciones = $("#seqPeekModal .peek-actions");
+  if (acciones) acciones.style.width = (ancho + (lado ? 20 + cols * anchoMini + (cols - 1) * hueco : 0)) + "px";
 }
 function muevePeek(delta) { _peekFrame += delta; pintaVisor(); }
 
 function closeSeqPeek() {
   $("#seqPeekModal").classList.add("hidden");
   $("#seqPeekRemove").classList.remove("hidden");
-  $("#seqPeekOpen").textContent = "Abrir en el editor";
+  $("#seqPeekOpen").textContent = "Editar";
   _peek = null;
 }
 
@@ -2768,7 +2772,7 @@ function drawSlide(c, slide, w, h, style, guides) {
  *  en la miniatura del calendario que en el editor.
  * ========================================================================= */
 const FUENTE_STICKER = '-apple-system, "SF Pro Display", "Helvetica Neue", Arial, sans-serif';
-const limpiaMarcas = t => String(t || "").replace(/==|__|\*\*/g, "");
+const limpiaMarcas = t => String(t || "").replace(/==|__|\*\*|\{s:\d+(?:\.\d+)?\}|\{\/s\}/g, "");
 
 function lineasQueCaben(c, texto, maxW) {
   const palabras = limpiaMarcas(texto).split(/\s+/).filter(Boolean);
@@ -2908,10 +2912,18 @@ function drawInset(c, inset, w, h) {
   c.drawImage(inset.img, x, y, iw, ih);
   c.restore();
 }
+/* Tamaño por trozo de texto: {s:1.4}así{/s} multiplica el tamaño de la
+   story sólo en ese trozo. El resto de marcas (==, __, **) no cambian. */
+const RE_TAM = /^\{s:(\d+(?:\.\d+)?)\}/;
 function tokenizeLine(line) {
-  const segs = []; let hl = false, ul = false, ac = false, buf = "";
-  const flush = () => { if (buf) { segs.push({ text: buf, hl, ul, ac }); buf = ""; } };
+  const segs = []; let hl = false, ul = false, ac = false, sz = 1, buf = "";
+  const flush = () => { if (buf) { segs.push({ text: buf, hl, ul, ac, sz }); buf = ""; } };
   for (let i = 0; i < line.length;) {
+    if (line[i] === "{") {
+      const m = line.slice(i).match(RE_TAM);
+      if (m) { flush(); sz = Math.max(0.3, Math.min(4, parseFloat(m[1]) || 1)); i += m[0].length; continue; }
+      if (line.startsWith("{/s}", i)) { flush(); sz = 1; i += 4; continue; }
+    }
     const two = line.substr(i, 2);
     if (two === "==") { flush(); hl = !hl; i += 2; continue; }
     if (two === "__") { flush(); ul = !ul; i += 2; continue; }
@@ -2923,10 +2935,17 @@ function tokenizeLine(line) {
 }
 function segsToWords(segs) {
   const words = [];
-  segs.forEach(s => s.text.split(/\s+/).forEach(p => {
-    if (p === "") return;
-    words.push({ text: p, hl: s.hl, ul: s.ul, ac: s.ac });
-  }));
+  let finConEspacio = true;
+  segs.forEach(s => {
+    const partes = s.text.split(/\s+/);
+    partes.forEach((p, k) => {
+      if (p === "") return;
+      // Un cambio de marca a mitad de palabra no mete un espacio
+      const pegado = k === 0 && !finConEspacio && !/^\s/.test(s.text);
+      words.push({ text: p, hl: s.hl, ul: s.ul, ac: s.ac, sz: s.sz || 1, pegado });
+    });
+    if (s.text) finConEspacio = /\s$/.test(s.text);
+  });
   return words;
 }
 const TXT = { left: 0.05, right: 0.95 };
@@ -2938,7 +2957,8 @@ function layoutBody(c, slide, style, scale, w, h) {
   const size = 46 * style.size * scale;
   const lh = size * 1.34;
   const parGap = size * 0.6;
-  c.font = `${style.weight} ${size}px ${style.font}`;
+  const fuente = sz => `${style.weight} ${size * sz}px ${style.font}`;
+  c.font = fuente(1);
   c.textAlign = "left";
   c.textBaseline = "alphabetic";
   const lx = slide.pos.x;
@@ -2950,26 +2970,29 @@ function layoutBody(c, slide, style, scale, w, h) {
     if (par.trim() === "") { layout.push({ gap: true }); return; }
     const fitted = [];
     segsToWords(tokenizeLine(par)).forEach(t => {
+      c.font = fuente(t.sz);
       const wd = c.measureText(t.text).width;
       if (wd <= maxW) { t.w = wd; fitted.push(t); return; }
       let chunk = "";
       for (const ch of t.text) {
         if (chunk && c.measureText(chunk + ch).width > maxW) {
-          fitted.push({ text: chunk, hl: t.hl, ul: t.ul, ac: t.ac, w: c.measureText(chunk).width });
+          fitted.push({ text: chunk, hl: t.hl, ul: t.ul, ac: t.ac, sz: t.sz, w: c.measureText(chunk).width });
           chunk = ch;
         } else chunk += ch;
       }
-      if (chunk) fitted.push({ text: chunk, hl: t.hl, ul: t.ul, ac: t.ac, w: c.measureText(chunk).width });
+      if (chunk) fitted.push({ text: chunk, hl: t.hl, ul: t.ul, ac: t.ac, sz: t.sz, w: c.measureText(chunk).width });
     });
+    c.font = fuente(1);
     const lines = []; let line = [], lineW = 0;
+    const cierra = () => { lines.push({ words: line, width: lineW, sz: Math.max(...line.map(t => t.sz)) }); };
     fitted.forEach(t => {
-      const gap = line.length ? sp : 0;
+      const gap = line.length && !t.pegado ? sp * Math.max(t.sz, line[line.length - 1].sz) : 0;
       if (lineW + gap + t.w > maxW && line.length) {
-        lines.push({ words: line, width: lineW }); line = []; lineW = 0;
+        cierra(); line = []; lineW = 0;
         t.x = 0; line.push(t); lineW = t.w;
       } else { t.x = lineW + gap; line.push(t); lineW += gap + t.w; }
     });
-    if (line.length) lines.push({ words: line, width: lineW });
+    if (line.length) cierra();
     // Alineación: a la izquierda, centrado, a la derecha o justificado
     // (la última línea de cada párrafo se queda a la izquierda, como en
     // cualquier texto justificado).
@@ -2991,54 +3014,61 @@ function layoutBody(c, slide, style, scale, w, h) {
     layout.push({ lines });
   });
   let total = 0;
-  layout.forEach(b => { total += b.gap ? parGap : b.lines.length * lh; });
-  return { layout, blockW, total, size, lh, parGap, left, topY: slide.pos.y * h };
+  // Cada línea mide según la letra más grande que lleve
+  layout.forEach(b => { total += b.gap ? parGap : b.lines.reduce((a, l) => a + lh * l.sz, 0); });
+  return { layout, blockW, total, size, lh, parGap, left, topY: slide.pos.y * h, fuente };
 }
 function drawBody(c, slide, style, scale, w, h) {
   slide._textBox = null;
   const L = layoutBody(c, slide, style, scale, w, h);
   if (!L) return;
-  const { layout, blockW, total, size, lh, parGap, left, topY } = L;
+  const { layout, blockW, total, size, lh, parGap, left, topY, fuente } = L;
   const pad = size * 0.3;
   slide._textBox = { x: (left - pad) / scale, y: (topY - pad) / scale, w: (blockW + pad * 2) / scale, h: (total + pad * 2) / scale };
-  let y = topY + size;
+  c.font = fuente(1);
   const mt = c.measureText("H"), mg = c.measureText("g");
+  const asc = (mt.actualBoundingBoxAscent || size * 0.72) / size, desc = (mg.actualBoundingBoxDescent || size * 0.2) / size;
+  let top = topY;
   layout.forEach(block => {
-    if (block.gap) { y += parGap; return; }
+    if (block.gap) { top += parGap; return; }
     block.lines.forEach(ln => {
+      const y = top + size * ln.sz;   // línea base
       for (let i = 0; i < ln.words.length;) {
         if (ln.words[i].hl) {
-          let j = i, sX = ln.words[i].x, eX = ln.words[i].x + ln.words[i].w;
-          while (j < ln.words.length && ln.words[j].hl) { eX = ln.words[j].x + ln.words[j].w; j++; }
+          let j = i, sX = ln.words[i].x, eX = ln.words[i].x + ln.words[i].w, sz = 0;
+          while (j < ln.words.length && ln.words[j].hl) { eX = ln.words[j].x + ln.words[j].w; sz = Math.max(sz, ln.words[j].sz); j++; }
           // La caja va centrada sobre las letras, no sobre la línea entera:
           // antes sobraba por arriba y quedaba descolgada.
-          const padX = size * 0.16, padY = size * 0.15;
-          const alto = mt.actualBoundingBoxAscent || size * 0.72, bajo = (mg.actualBoundingBoxDescent || size * 0.2) * 0.6;
+          const s2 = size * sz, padX = s2 * 0.16, padY = s2 * 0.15;
+          const alto = asc * s2, bajo = desc * s2 * 0.6;
           c.fillStyle = acentoDe(style);
-          roundRect(c, left + sX - padX, y - alto - padY, (eX - sX) + padX * 2, alto + bajo + padY * 2, size * 0.18);
+          roundRect(c, left + sX - padX, y - alto - padY, (eX - sX) + padX * 2, alto + bajo + padY * 2, s2 * 0.18);
           c.fill();
           i = j;
         } else i++;
       }
       ln.words.forEach(t => {
+        const s2 = size * t.sz;
+        c.font = fuente(t.sz);
         c.fillStyle = t.hl ? (style.highlightText || "#ffffff") : (t.ac ? acentoDe(style) : style.textColor);
-        if (!t.hl) { c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = size * 0.12; c.shadowOffsetY = size * 0.025; }
+        if (!t.hl) { c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = s2 * 0.12; c.shadowOffsetY = s2 * 0.025; }
         c.fillText(t.text, left + t.x, y);
         c.shadowColor = "transparent"; c.shadowBlur = 0; c.shadowOffsetY = 0;
       });
       for (let k = 0; k < ln.words.length;) {
         if (ln.words[k].ul) {
-          let j = k, sX = ln.words[k].x, eX = ln.words[k].x + ln.words[k].w;
-          while (j < ln.words.length && ln.words[j].ul) { eX = ln.words[j].x + ln.words[j].w; j++; }
-          c.strokeStyle = acentoDe(style); c.lineWidth = size * 0.1; c.lineCap = "round";
-          const uy = y + size * 0.19;
+          let j = k, sX = ln.words[k].x, eX = ln.words[k].x + ln.words[k].w, sz = 0;
+          while (j < ln.words.length && ln.words[j].ul) { eX = ln.words[j].x + ln.words[j].w; sz = Math.max(sz, ln.words[j].sz); j++; }
+          c.strokeStyle = acentoDe(style); c.lineWidth = size * sz * 0.1; c.lineCap = "round";
+          const uy = y + size * sz * 0.19;
           c.beginPath(); c.moveTo(left + sX, uy); c.lineTo(left + eX, uy); c.stroke();
           k = j;
         } else k++;
       }
-      y += lh;
+      top += lh * ln.sz;
     });
   });
+  c.font = fuente(1);
 }
 
 /* =========================================================================
@@ -3348,15 +3378,24 @@ function marcasAChars(body) {
   const chars = [];
   (body || "").split("\n").forEach((linea, i) => {
     if (i) chars.push({ ch: "\n" });
-    tokenizeLine(linea).forEach(sg => { for (const ch of sg.text.split("")) chars.push({ ch, hl: sg.hl, ul: sg.ul, ac: sg.ac }); });
+    tokenizeLine(linea).forEach(sg => { for (const ch of sg.text.split("")) chars.push({ ch, hl: sg.hl, ul: sg.ul, ac: sg.ac, sz: sg.sz }); });
   });
   return chars;
 }
+const tamDe = c => (c && c.sz && Math.abs(c.sz - 1) > 0.001) ? Math.round(c.sz * 100) / 100 : 1;
 function charsAMarcas(chars) {
-  let out = "", ab = { hl: false, ul: false, ac: false };
-  const cierra = () => { for (const k of ["ac", "ul", "hl"]) if (ab[k]) { out += MARCAS[k]; ab[k] = false; } };
+  let out = "", ab = { hl: false, ul: false, ac: false }, sz = 1;
+  const cierra = () => { for (const k of ["ac", "ul", "hl"]) if (ab[k]) { out += MARCAS[k]; ab[k] = false; } if (sz !== 1) { out += "{/s}"; sz = 1; } };
   for (const c of chars) {
     if (c.ch === "\n") { cierra(); out += "\n"; continue; }
+    const t = tamDe(c);
+    if (t !== sz) {
+      // El tamaño va por fuera de las demás marcas: se cierran y se reabren
+      for (const k of ["ac", "ul", "hl"]) if (ab[k]) { out += MARCAS[k]; ab[k] = false; }
+      if (sz !== 1) out += "{/s}";
+      if (t !== 1) out += `{s:${t}}`;
+      sz = t;
+    }
     for (const k of ["hl", "ul", "ac"]) if (!!c[k] !== ab[k]) { out += MARCAS[k]; ab[k] = !!c[k]; }
     out += c.ch;
   }
@@ -3372,10 +3411,11 @@ function leeRico(root) {
       const bloque = n.nodeName === "DIV" || n.nodeName === "P";
       if (bloque && chars.length && chars[chars.length - 1].ch !== "\n") chars.push({ ch: "\n" });
       const cl = n.classList || { contains: () => false };
-      rec(n, { hl: f.hl || cl.contains("m-hl"), ul: f.ul || cl.contains("m-ul"), ac: f.ac || cl.contains("m-ac") });
+      const dsz = n.dataset && n.dataset.sz ? parseFloat(n.dataset.sz) : null;
+      rec(n, { hl: f.hl || cl.contains("m-hl"), ul: f.ul || cl.contains("m-ul"), ac: f.ac || cl.contains("m-ac"), sz: dsz || f.sz || 1 });
     });
   };
-  rec(root, { hl: false, ul: false, ac: false });
+  rec(root, { hl: false, ul: false, ac: false, sz: 1 });
   return chars;
 }
 function pintaRico(root, chars) {
@@ -3384,9 +3424,11 @@ function pintaRico(root, chars) {
     const c = chars[i];
     if (c.ch === "\n") { html += "\n"; i++; continue; }
     let j = i, txt = "";
-    while (j < chars.length && chars[j].ch !== "\n" && !!chars[j].hl === !!c.hl && !!chars[j].ul === !!c.ul && !!chars[j].ac === !!c.ac) txt += chars[j++].ch;
+    while (j < chars.length && chars[j].ch !== "\n" && !!chars[j].hl === !!c.hl && !!chars[j].ul === !!c.ul && !!chars[j].ac === !!c.ac && tamDe(chars[j]) === tamDe(c)) txt += chars[j++].ch;
     const cls = ["hl", "ul", "ac"].filter(k => c[k]).map(k => "m-" + k).join(" ");
-    html += cls ? `<span class="${cls}">${escapeHtml(txt)}</span>` : escapeHtml(txt);
+    const t = tamDe(c);
+    const tam = t !== 1 ? ` data-sz="${t}" style="font-size:${Math.min(t, 1.8)}em"` : "";
+    html += (cls || tam) ? `<span${cls ? ` class="${cls}"` : ""}${tam}>${escapeHtml(txt)}</span>` : escapeHtml(txt);
     i = j;
   }
   // Un salto al final no se ve sin algo detrás
@@ -3477,7 +3519,26 @@ function pideAcento() {
   inp.closest("details")?.setAttribute("open", "");
   try { inp.showPicker ? inp.showPicker() : inp.click(); } catch { inp.click(); }
 }
-let _ultimaSel = null;
+let _ultimaSel = null, _tamSel = null;
+/* El trozo al que se aplica el tamaño: la última selección con texto dentro
+   del cuadro. Si se hizo clic sin seleccionar, no hay trozo (toda la story). */
+function rangoTamano() {
+  const s = _tamSel || _ultimaSel;
+  if (!s || s[0] === s[1]) return null;
+  return [Math.min(s[0], s[1]), Math.max(s[0], s[1])];
+}
+function pintaTamano() {
+  const lab = $("#sizeLabel"), inp = $("#sizeRange");
+  if (!inp || !state.active) return;
+  const r = rangoTamano();
+  const base = state.active.style.size || 1;
+  if (lab) lab.textContent = r ? "Tamaño · texto seleccionado" : "Tamaño";
+  if (r) {
+    const chars = leeRico($("#bodyRico"));
+    const c = chars.slice(r[0], r[1]).find(x => x.ch.trim());
+    inp.value = String(base * (c ? tamDe(c) : 1));
+  } else inp.value = String(base);
+}
 function pintaBotonesMarca() {
   const root = $("#bodyRico"); if (!root) return;
   const sel = seleccionRico(root);
@@ -3488,6 +3549,7 @@ function pintaBotonesMarca() {
   [["hl", "#mkHighlight"], ["ul", "#mkUnderline"], ["ac", "#mkAccent"]].forEach(([k, id]) => {
     $(id)?.classList.toggle("on", trozo.length > 0 && trozo.every(c => c[k]));
   });
+  if (sel) { _tamSel = null; pintaTamano(); }
 }
 function montaRico() {
   const root = $("#bodyRico");
@@ -3496,7 +3558,7 @@ function montaRico() {
     const chars = leeRico(root);
     const [a, b] = seleccionRico(root) || [chars.length, chars.length];
     const plantilla = chars[a - 1] && chars[a - 1].ch !== "\n" ? chars[a - 1] : {};
-    const nuevos = texto.replace(/\r/g, "").split("").map(ch => ch === "\n" ? { ch } : { ch, hl: plantilla.hl, ul: plantilla.ul, ac: plantilla.ac });
+    const nuevos = texto.replace(/\r/g, "").split("").map(ch => ch === "\n" ? { ch } : { ch, hl: plantilla.hl, ul: plantilla.ul, ac: plantilla.ac, sz: plantilla.sz });
     chars.splice(a, b - a, ...nuevos);
     cambiaRico(root, chars, a + nuevos.length);
   };
@@ -3750,8 +3812,23 @@ function bind() {
   buildFontChips();
   $("#highlightColor").addEventListener("input", e => { state.active.style.highlightColor = e.target.value; recuerdaAcento(e.target.value); updateColorDots(); drawEditor(); renderThumbs(); persist(); });
   $("#textColor").addEventListener("input", e => { state.active.style.textColor = e.target.value; updateColorDots(); drawEditor(); renderThumbs(); persist(); });
-  $("#sizeRange").addEventListener("input", e => { state.active.style.size = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
+  // Con un trozo de texto seleccionado, el tamaño cambia sólo ese trozo; sin
+  // selección, el de toda la story.
+  $("#sizeRange").addEventListener("input", e => {
+    const v = parseFloat(e.target.value);
+    const r = rangoTamano();
+    if (r) {
+      const root = $("#bodyRico"), chars = leeRico(root);
+      const base = state.active.style.size || 1;
+      for (let i = r[0]; i < r[1]; i++) if (chars[i] && chars[i].ch !== "\n") chars[i].sz = v / base;
+      pintaRico(root, chars); guardaRico(chars);
+    } else {
+      state.active.style.size = v; drawEditor(); refreshActiveThumb();
+    }
+  });
   $("#sizeRange").addEventListener("change", persist);
+  // Que tocar la barra no le quite la selección al texto
+  $("#sizeRange").addEventListener("pointerdown", () => { _tamSel = _ultimaSel && _ultimaSel[0] !== _ultimaSel[1] ? _ultimaSel.slice() : null; });
   document.querySelectorAll("[data-elige-tipo]").forEach(b => b.addEventListener("click", () => abreFotosTipo(b.dataset.eligeTipo)));
   const campoSticker = (id, aplica) => $(id).addEventListener("input", e => {
     const st = curSlide().sticker; if (!st) return;

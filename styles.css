@@ -2046,3 +2046,30 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .fotos-pop-rejilla { flex: 1 1 auto; min-height: 0; align-content: start; grid-auto-rows: max-content; }
 .fotos-pop-foto { position: relative; display: block; width: 100%; height: 0; padding: 0 0 177.78%; aspect-ratio: auto; align-self: start; }
 .fotos-pop-foto img { position: absolute; inset: 0; }
+
+/* Vista rápida del calendario: frame grande y, al lado, todos los frames en
+   vertical (dos columnas si son más de 4). Debajo, eliminar y «otra» como
+   cuadrados con icono y «Editar» ocupando el resto, centrados y del mismo
+   ancho que la vista previa. */
+#seqPeekModal .modal-box { width: auto; max-width: 94vw; }
+.peek-frames { padding: 10px 0 14px; }
+.peek-visor { display: flex; align-items: flex-start; justify-content: center; gap: 20px; }
+.peek-principal { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.peek-num { text-align: center; }
+.peek-lado { display: grid; align-content: start; }
+.peek-lado .peek-mini { padding: 0; border-radius: 8px; overflow: hidden; line-height: 0; opacity: .7; }
+.peek-lado .peek-mini canvas { display: block; }
+.peek-actions { display: flex; gap: 10px; justify-content: center; margin: 0 auto; max-width: 100%; }
+.peek-actions .btn { height: 44px; }
+.peek-cuadro { width: 44px; min-width: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.peek-cuadro .ic { width: 18px; height: 18px; margin: 0; }
+.peek-borrar { color: #ff6b6e; }
+.peek-borrar:hover { border-color: #e5484d; }
+.peek-editar { flex: 1 1 auto; justify-content: center; }
+@media (max-width: 640px) {
+  .peek-visor { flex-direction: column; align-items: center; }
+  .peek-lado { grid-auto-flow: column; grid-template-columns: none !important; }
+  .peek-actions { width: 100% !important; }
+}
+.peek-actions .btn.peek-cuadro { flex: none; width: 44px; }
+.peek-actions .btn.peek-editar { flex: 1 1 auto; }
