@@ -1442,6 +1442,7 @@ body.lateral-plegada .side-row { flex-direction: column; }
 
 /* ---- Utilidades que usan las filas ---- */
 .tiny { font-size: 11.5px; }
+.dim { color: var(--text-3); }
 .nums { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
 .strong { font-weight: 600; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -1449,7 +1450,9 @@ body.lateral-plegada .side-row { flex-direction: column; }
 /* ---- La tabla, agrupada por estado ---- */
 .vt { display: flex; flex-direction: column; gap: 10px; }
 .vt-group { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); box-shadow: var(--shadow-sm); overflow: hidden; }
-.vt-group-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 15px; border: 0; background: none; cursor: pointer; font: inherit; text-align: left; }
+/*  Ojo con el color: es un <button>, y si no se le dice nada coge el negro
+    por defecto del navegador. Sobre el fondo oscuro no se lee nada. */
+.vt-group-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 15px; border: 0; background: none; cursor: pointer; font: inherit; color: var(--text); text-align: left; }
 .vt-group-head:hover .vt-caret { color: var(--text-2); }
 .vt-group-head .pill { flex: none; }
 .vt-caret { display: inline-block; color: var(--text-3); font-size: 13px; transition: transform .12s ease; }
