@@ -96,12 +96,12 @@ const imgDB = {
     });
   },
   keyOf(name, size) { return `${name}|${size || 0}`; },
-  async put(name, blob, key, contexto = null) {
+  async put(name, blob, key, tipo = null) {
     const db = await this.open();
     const k = key || this.keyOf(name, blob.size);
     return new Promise((res, rej) => {
       const tx = db.transaction(this.STORE, "readwrite");
-      tx.objectStore(this.STORE).put({ key: k, name, size: blob.size, blob, t: Date.now(), contexto });
+      tx.objectStore(this.STORE).put({ key: k, name, size: blob.size, blob, t: Date.now(), tipo });
       tx.oncomplete = () => res();
       tx.onerror = () => rej(tx.error);
     });
@@ -299,11 +299,53 @@ function fromStructure(frames, category) {
 function fromTemplate(tpl, extra = {}) {
   return instantiate({ title: tpl.title, category: tpl.category, slides: tpl.slides, style: tpl.style, ...extra });
 }
+/*
+ * Qué frame lleva la llamada a la acción.
+ *
+ * Las plantillas no traen marca de CTA, así que se reconoce por lo que dice.
+ * Revisado contra las 80 del catálogo: 38 lo llevan en el último frame, 2 en
+ * el segundo de tres, y 40 no piden nada. Por eso no vale «el último siempre»:
+ * se busca el último frame que pida algo, y si ninguno pide nada, no hay CTA.
+ */
+const RE_CTA = /\b(dm|md|escr[ií]beme|escribe|responde|resp[oó]ndeme|comenta|link|enlace|pincha|toca|swipe|desliza|encuesta|reserva|ap[uú]ntate|inscr[ií]b\w*|compra|plazas|cupos|mensaje|env[ií]a|caja de preguntas|clic|en mi perfil|bio)\b/i;
+function frameCta(seq) {
+  for (let i = seq.slides.length - 1; i >= 0; i--) {
+    if (RE_CTA.test(seq.slides[i].body || "")) return i;
+  }
+  return -1;
+}
+
+/* El frame que tiene que llevar una foto del owner: el primero y el del CTA. */
+function pideOwner(seq, i) { return i === 0 || i === frameCta(seq); }
+
+/**
+ * Reparte las fotos: owner en el primero y en el del CTA, background en el
+ * resto. Si falta un tipo se tira del otro, para que ningún frame se quede
+ * sin foto; y las fotos sin clasificar entran como último recurso.
+ * Dentro de cada montón se barajan y se gastan en orden, para no repetir.
+ */
 function assignRandomImages(seq) {
   const n = state.images.length;
   if (!n) { seq.slides.forEach(s => s.bgIndex = -1); return; }
-  const pool = shuffle([...Array(n).keys()]);
-  seq.slides.forEach((s, i) => { s.bgIndex = pool[i % pool.length]; });
+  const idx = [...Array(n).keys()];
+  const montones = {
+    owner: shuffle(idx.filter(i => state.images[i].tipo === "owner")),
+    fondo: shuffle(idx.filter(i => state.images[i].tipo === "fondo")),
+    resto: shuffle(idx.filter(i => !state.images[i].tipo)),
+  };
+  const usadas = { owner: 0, fondo: 0, resto: 0 };
+  const saca = (orden) => {
+    for (const m of orden) {
+      const l = montones[m];
+      if (l.length) return l[usadas[m]++ % l.length];
+    }
+    return -1;
+  };
+  seq.slides.forEach((s, i) => {
+    s.bgIndex = pideOwner(seq, i)
+      ? saca(["owner", "resto", "fondo"])
+      : saca(["fondo", "resto", "owner"]);
+  });
 }
 function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
@@ -435,21 +477,37 @@ async function subirPendientes() {
   } catch (e) { console.warn("subirPendientes", e); }
 }
 
-/* Cambia el contexto de una foto guardada. Se relee el registro para no
-   perder el blob: `put` reemplaza la fila entera. */
-async function ponContextoFoto(im, contexto) {
-  im.contexto = contexto;
+/*
+ * Owner o Background.
+ *
+ * Owner es la foto en la que sale la persona; Background, todo lo demás
+ * —un paisaje, el portátil, la mesa—. La diferencia importa porque una
+ * secuencia de stories funciona cuando abre con una cara: es lo que para el
+ * dedo. Y el frame que pide algo —el CTA— también tiene que ser la persona,
+ * porque a una cara se le contesta y a un paisaje no.
+ */
+const TIPOS_FOTO = {
+  owner: { nombre: "Owner" },
+  fondo: { nombre: "Background" },
+};
+const pillTipo = (t) => TIPOS_FOTO[t]
+  ? `<span class="pill tipo-${t}">${TIPOS_FOTO[t].nombre}</span>` : "";
+
+/* Cambia el tipo de una foto guardada. Se relee el registro para no perder
+   el blob: `put` reemplaza la fila entera. */
+async function ponTipoFoto(im, tipo) {
+  im.tipo = tipo;
   try {
     const db = await imgDB.open();
     await new Promise((res, rej) => {
       const tx = db.transaction(imgDB.STORE, "readwrite");
       const st = tx.objectStore(imgDB.STORE);
       const g = st.get(im.key);
-      g.onsuccess = () => { const r = g.result; if (r) { r.contexto = contexto; st.put(r); } };
+      g.onsuccess = () => { const r = g.result; if (r) { r.tipo = tipo; st.put(r); } };
       tx.oncomplete = () => res();
       tx.onerror = () => rej(tx.error);
     });
-  } catch (e) { console.warn("contexto", e); }
+  } catch (e) { console.warn("tipo de foto", e); }
 }
 
 async function loadImagesFromDB() {
@@ -462,7 +520,7 @@ async function loadImagesFromDB() {
       if (seen.has(key)) continue;
       seen.add(key);
       const o = await blobToImage(r.blob, r.name);
-      if (o) { o.key = key; o.contexto = r.contexto || null; state.images.push(o); }
+      if (o) { o.key = key; o.tipo = TIPOS_FOTO[r.tipo] ? r.tipo : null; state.images.push(o); }
     }
   } catch (e) { console.warn("loadImagesFromDB", e); }
   updateImgCount();
@@ -637,11 +695,12 @@ function aviso(texto, tipo = "ok") {
  * ---------------------------------------------------------------------- */
 function renderMias() {
   const grid = $("#miasGrid");
-  const filtro = state.miasFiltro || "todas";
-  $$("#miasFiltro .seg").forEach(b => b.classList.toggle("active", b.dataset.estado === filtro));
-
   const todas = state.sequences || [];
-  const lista = filtro === "todas" ? todas : todas.filter(s => estadoDe(s) === filtro);
+  const filtro = state.miasFiltro && state.miasFiltro !== "todas" ? state.miasFiltro : "all";
+  $("#miasFiltro").innerHTML = [["all", "Todas"], ...ORDEN_CATEGORIAS.map(k => [k, CATEGORIES[k].name])]
+    .map(([k, nom]) => `<button class="${filtro === k ? "active" : ""}" data-miascat="${k}">${escapeHtml(nom)} <span class="dim nums">${
+      k === "all" ? todas.length : todas.filter(s => s.category === k).length}</span></button>`).join("");
+  const lista = filtro === "all" ? todas : todas.filter(s => s.category === filtro);
   $("#miasCount").textContent = `${todas.length} ${todas.length === 1 ? "secuencia" : "secuencias"}`;
 
   grid.innerHTML = "";
@@ -649,7 +708,7 @@ function renderMias() {
     grid.innerHTML = `<p class="empty">${
       filtro === "todas"
         ? "Todavía no has guardado ninguna. Coge una de la biblioteca o crea una nueva y pulsa Guardar."
-        : "No tienes ninguna secuencia en este estado."}</p>`;
+        : "No tienes ninguna secuencia de esta categoría."}</p>`;
     return;
   }
   lista.forEach(seq => grid.appendChild(tarjetaMia(seq)));
@@ -678,7 +737,7 @@ function tarjetaMia(seq) {
   box.innerHTML =
     `<div class="card-row">
        <h3>${escapeHtml(seq.title || "Secuencia")}</h3>
-       <span class="cat-tag">${cat.name}</span>
+       <span class="cat-tag pill cat-${escapeAttr(seq.category || "venta")}">${cat.name}</span>
      </div>
      <p class="estado-linea">
        <span class="estado-punto ${info.cls}"></span>
@@ -720,11 +779,9 @@ function renderGallery() {
   const ctx = state.galCtx || "all";
 
   // El filtro: sólo los contextos que existan, más «sin contexto» si los hay.
-  const cuenta = k => k === "all" ? todas.length : todas.filter(i => i.contexto === k).length;
-  const opciones = [["all", "Todas"], ...ORDEN_CATEGORIAS.map(k => [k, CATEGORIES[k].name])];
-  $("#galCtx").innerHTML = opciones
-    .filter(([k]) => k === "all" || cuenta(k))
-    .map(([k, n]) => `<button class="${ctx === k ? "active" : ""}" data-galctx="${k}">${escapeHtml(n)} <span class="dim nums">${cuenta(k)}</span></button>`)
+  const cuenta = k => k === "all" ? todas.length : todas.filter(i => i.tipo === k).length;
+  $("#galCtx").innerHTML = [["all", "Todas"], ...Object.entries(TIPOS_FOTO).map(([k, t]) => [k, t.nombre])]
+    .map(([k, n]) => `<button class="${ctx === k ? "active" : ""} ${k !== "all" ? "tipo-" + k : ""}" data-galctx="${k}">${escapeHtml(n)} <span class="dim nums">${cuenta(k)}</span></button>`)
     .join("");
 
   $("#galBarra").classList.toggle("hidden", !todas.length);
@@ -735,10 +792,10 @@ function renderGallery() {
 
   const visibles = todas
     .map((im, i) => ({ im, i }))
-    .filter(({ im }) => ctx === "all" || im.contexto === ctx);
+    .filter(({ im }) => ctx === "all" || im.tipo === ctx);
 
   if (!visibles.length) {
-    grid.innerHTML = `<p class="empty">Ninguna foto con ese contexto.</p>`;
+    grid.innerHTML = `<p class="empty">Todavía no has marcado ninguna como ${TIPOS_FOTO[ctx] ? TIPOS_FOTO[ctx].nombre : "esa"}.</p>`;
     return pintaBarraFotos();
   }
 
@@ -760,10 +817,10 @@ function renderGallery() {
     });
 
     cell.appendChild(img); cell.appendChild(name); cell.appendChild(x); cell.appendChild(marca);
-    if (im.contexto && CATEGORIES[im.contexto]) {
+    if (TIPOS_FOTO[im.tipo]) {
       const et = document.createElement("span");
-      et.className = "pill cat-" + im.contexto + " gal-ctx";
-      et.textContent = CATEGORIES[im.contexto].name;
+      et.className = "gal-ctx pill tipo-" + im.tipo;
+      et.textContent = TIPOS_FOTO[im.tipo].nombre;
       cell.appendChild(et);
     }
     grid.appendChild(cell);
@@ -771,7 +828,7 @@ function renderGallery() {
   pintaBarraFotos();
 }
 
-/* Las fotos marcadas, para asignarles contexto a todas de una vez. */
+/* Las fotos marcadas, para marcarlas como owner o background de una vez. */
 const FOTOS_SEL = new Set();
 
 function pintaBarraFotos() {
@@ -781,7 +838,8 @@ function pintaBarraFotos() {
   if (!b) { b = document.createElement("div"); b.id = "barraFotos"; b.className = "barra-sel"; document.body.appendChild(b); }
   document.body.classList.add("con-barra-sel");
   b.innerHTML = `<span class="bs-n"><b>${n}</b> ${n === 1 ? "foto" : "fotos"}</span>` +
-    ORDEN_CATEGORIAS.map(k => `<button class="btn sm" data-galpon="${k}">${escapeHtml(CATEGORIES[k].name)}</button>`).join("") +
+    Object.entries(TIPOS_FOTO).map(([k, t]) =>
+      `<button class="btn sm tipo-${k}" data-galpon="${k}">${t.nombre}</button>`).join("") +
     `<button class="btn sm ghost" data-galpon="nada">Cancelar</button>`;
 }
 
@@ -1796,13 +1854,13 @@ function renderBgPicker() {
   box.innerHTML = "";
   if (!state.images.length) { box.innerHTML = `<span class="bg-empty">Sube fotos en "Galería" para elegir el fondo.</span>`; return; }
 
-  /* Delante las del contexto de esta secuencia. No se esconde el resto: una
-     foto puede valer para dos cosas y esconderla obligaría a ir a la galería
-     a reclasificarla en mitad del trabajo. Sólo se ordenan. */
-  const ctx = state.active && state.active.category;
+  /* Delante las que tocan en este frame: owner en el primero y en el del CTA,
+     background en el resto. No se esconde ninguna —puede que quieras romper
+     la regla a propósito—, sólo se ordenan. */
+  const quiere = state.active && pideOwner(state.active, state.current) ? "owner" : "fondo";
   const orden = state.images
     .map((im, i) => ({ im, i }))
-    .sort((a, b) => (b.im.contexto === ctx) - (a.im.contexto === ctx));
+    .sort((a, b) => (b.im.tipo === quiere) - (a.im.tipo === quiere));
 
   orden.forEach(({ im, i }) => {
     const t = document.createElement("button");
@@ -1810,8 +1868,8 @@ function renderBgPicker() {
     const cv = document.createElement("canvas"); cv.width = 54; cv.height = 96;
     drawCover(cv.getContext("2d"), im.img, 54, 96, { zoom: 1, ox: 0, oy: 0 });
     t.appendChild(cv);
-    if (ctx && im.contexto === ctx) t.classList.add("del-contexto");
-    t.title = im.contexto && CATEGORIES[im.contexto] ? CATEGORIES[im.contexto].name : "Sin contexto";
+    if (im.tipo === quiere) t.classList.add("del-contexto");
+    t.title = TIPOS_FOTO[im.tipo] ? TIPOS_FOTO[im.tipo].nombre : "Sin marcar";
     t.addEventListener("click", () => { curSlide().bgIndex = i; curSlide().bg = { zoom: 1, ox: 0, oy: 0 }; drawEditor(); refreshActiveThumb(); persist(); });
     box.appendChild(t);
   });
@@ -2419,10 +2477,10 @@ function bind() {
     const que = b.dataset.galpon;
     if (que === "nada") { FOTOS_SEL.clear(); return renderGallery(); }
     const fotos = state.images.filter(im => FOTOS_SEL.has(im.key));
-    for (const im of fotos) await ponContextoFoto(im, que || null);
+    for (const im of fotos) await ponTipoFoto(im, que || null);
     FOTOS_SEL.clear();
     renderGallery();
-    aviso(fotos.length + (fotos.length === 1 ? " foto clasificada" : " fotos clasificadas"));
+    aviso(`${fotos.length} ${fotos.length === 1 ? "foto marcada" : "fotos marcadas"} como ${TIPOS_FOTO[que] ? TIPOS_FOTO[que].nombre : "sin tipo"}`);
   });
   $("#galleryInput").addEventListener("change", e => loadFiles(e.target.files));
   ["dragover", "dragenter"].forEach(ev => gDrop.addEventListener(ev, e => { e.preventDefault(); gDrop.classList.add("hover"); }));
@@ -2634,9 +2692,10 @@ function bind() {
   $("#btnPlegar").addEventListener("click", () =>
     plegar(!document.body.classList.contains("lateral-plegada")));
   try { if (localStorage.getItem("abmedia_lateral") === "1") plegar(true); } catch {}
-  $$("#miasFiltro .seg").forEach(b => b.addEventListener("click", () => {
-    state.miasFiltro = b.dataset.estado; renderMias();
-  }));
+  $("#miasFiltro").addEventListener("click", e => {
+    const b = e.target.closest("[data-miascat]"); if (!b) return;
+    state.miasFiltro = b.dataset.miascat; renderMias();
+  });
 
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#overlay").classList.contains("hidden")) closeEditor(); });
   window.addEventListener("resize", () => { if (!$("#tour").classList.contains("hidden")) positionTourSpot(TOUR_STEPS[tourIdx]?.sel); });

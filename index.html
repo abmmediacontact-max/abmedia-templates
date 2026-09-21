@@ -11,7 +11,7 @@
   <!-- Estas cuatro las pinta el generador de stories en el canvas; la
      interfaz ya no pide ninguna: usa SF Pro del sistema. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=36" />
+  <link rel="stylesheet" href="styles.css?v=40" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -157,11 +157,10 @@
           </div>
           <span class="pill" id="miasCount">0</span>
         </header>
-        <div class="lib-filter" id="miasFiltro">
-          <button class="seg active" data-estado="todas">Todas</button>
-          <button class="seg" data-estado="draft">Borrador</button>
-          <button class="seg" data-estado="scheduled">Programadas</button>
-          <button class="seg" data-estado="published">Publicadas</button>
+        <!-- El mismo filtro que la biblioteca: por categoría y con el recuento.
+             Por estado ya se ve en «Gestión de stories». -->
+        <div class="vm-bar">
+          <div class="segmented inline" id="miasFiltro"></div>
         </div>
         <div id="miasGrid" class="grid"></div>
       </section>
@@ -188,16 +187,14 @@
           <input type="file" id="galleryInput" accept="image/*,.heic,.heif" multiple hidden />
         </div>
         <!--
-          Las fotos se clasifican por contexto, con las mismas categorías que
-          las secuencias. No son carpetas: una foto de tu escritorio sirve
-          igual para una de valor que para una personal, y una carpeta te
-          obliga a elegir. Así una foto puede no tener contexto, tenerlo, y
-          cambiarlo después sin moverla de sitio.
+          Owner (sale la persona) o Background (paisaje, portátil, mesa…).
+          Sirve para que cada secuencia abra con una cara y para que el frame
+          que pide algo —el CTA— también la lleve.
         -->
         <div class="vm-bar" id="galBarra">
           <div class="segmented inline" id="galCtx"></div>
           <div class="vm-end">
-            <span class="tiny dim" id="galPista">Marca fotos para asignarles un contexto</span>
+            <span class="tiny dim" id="galPista">Marca fotos para decir si son Owner o Background</span>
           </div>
         </div>
         <div id="galleryGrid" class="gallery-grid"></div>
@@ -561,9 +558,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase.js?v=36"></script>
-  <script src="templates.js?v=36"></script>
-  <script src="catalog.js?v=36"></script>
-  <script src="app.js?v=36"></script>
+  <script src="supabase.js?v=40"></script>
+  <script src="templates.js?v=40"></script>
+  <script src="catalog.js?v=40"></script>
+  <script src="app.js?v=40"></script>
 </body>
 </html>

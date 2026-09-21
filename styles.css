@@ -1653,3 +1653,26 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 /* En el selector de fondo, las del contexto de la secuencia van delante y
    llevan un filo para que se distingan de las demás. */
 .bg-thumb.del-contexto { box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ---- Owner / Background: nombre y color ----
+   Mismo trato que las categorías de la biblioteca: fondo al 15 % y el texto
+   en el color pleno. Colores que no coinciden con ninguna categoría, para que
+   una etiqueta de foto no se confunda con una de secuencia. */
+.pill.tipo-owner { background: rgba(240,129,159,.15); color: #f0819f; }
+.pill.tipo-fondo { background: rgba(86,203,230,.15);  color: #56cbe6; }
+.btn.tipo-owner { color: #f0819f; }
+.btn.tipo-fondo { color: #56cbe6; }
+/* En la foto, justo encima de la franja del nombre: así no se pisan. Y con
+   el fondo casi opaco: al 15 % dejaba ver la foto por detrás y el texto se
+   perdía (rosa sobre piel, azul sobre cielo). */
+.gal-ctx { left: 6px !important; right: auto !important; bottom: 28px !important; }
+.gal-ctx.tipo-owner, .gal-ctx.tipo-fondo { background: rgba(10,10,10,.78); backdrop-filter: blur(4px); }
+
+/* ---- Lateral: más aire entre elementos ---- */
+.nav { gap: 3px; }
+.nav-item, .nav-item.active { padding: 8px 10px; }
+.nav-group-label { padding: 20px 10px 6px; }
+.nav-group-label:first-child { padding-top: 6px; }
+.nav-foot { gap: 8px; padding-top: 12px; }
+/* Con etiqueta, el nombre del archivo se corta antes de llegar a ella. */
+
