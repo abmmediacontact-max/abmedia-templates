@@ -562,12 +562,20 @@ function drawPlaceholder(c, w, h) {
   c.fillStyle = grad; c.fillRect(0, 0, w, h);
 }
 function drawOverlay(c, type, w, h) {
-  if (type === "none") return;
-  let g;
-  if (type === "bottom") { g = c.createLinearGradient(0, h*0.4, 0, h); g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,0.78)"); }
-  else if (type === "soft") { c.fillStyle = "rgba(0,0,0,0.28)"; c.fillRect(0,0,w,h); return; }
-  else { g = c.createLinearGradient(0,0,0,h); g.addColorStop(0,"rgba(0,0,0,0.45)"); g.addColorStop(0.5,"rgba(0,0,0,0.30)"); g.addColorStop(1,"rgba(0,0,0,0.62)"); }
-  c.fillStyle = g; c.fillRect(0, 0, w, h);
+  if (!type || type === "none") return;
+  const lineal = (y0, y1, paradas) => { const g = c.createLinearGradient(0, y0, 0, y1); paradas.forEach(([p, col]) => g.addColorStop(p, col)); c.fillStyle = g; c.fillRect(0, 0, w, h); };
+  if (type === "bottom") return lineal(h * 0.4, h, [[0, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0.78)"]]);
+  if (type === "top") return lineal(0, h * 0.6, [[0, "rgba(0,0,0,0.78)"], [1, "rgba(0,0,0,0)"]]);
+  if (type === "both") return lineal(0, h, [[0, "rgba(0,0,0,0.72)"], [0.35, "rgba(0,0,0,0.05)"], [0.65, "rgba(0,0,0,0.05)"], [1, "rgba(0,0,0,0.72)"]]);
+  if (type === "soft") { c.fillStyle = "rgba(0,0,0,0.28)"; c.fillRect(0, 0, w, h); return; }
+  if (type === "strong") { c.fillStyle = "rgba(0,0,0,0.62)"; c.fillRect(0, 0, w, h); return; }
+  if (type === "light") { c.fillStyle = "rgba(255,255,255,0.32)"; c.fillRect(0, 0, w, h); return; }
+  if (type === "vignette") {
+    const g = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.25, w / 2, h / 2, Math.max(w, h) * 0.72);
+    g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,0.75)");
+    c.fillStyle = g; c.fillRect(0, 0, w, h); return;
+  }
+  lineal(0, h, [[0, "rgba(0,0,0,0.45)"], [0.5, "rgba(0,0,0,0.30)"], [1, "rgba(0,0,0,0.62)"]]);
 }
 function roundRect(c,x,y,w,h,r){ r=Math.min(r,w/2,h/2); c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r); c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath(); }
 function tokenizeLine(line) {
