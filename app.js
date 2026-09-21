@@ -2656,7 +2656,8 @@ function renderThumbs() {
   add.className = "thumb add"; add.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>Añadir frame</span>`;
   add.addEventListener("click", () => {
     state.active.slides.push(makeSlide({ body: blankBody(0), overlay: "bottom" }));
-    assignRandomImages(state.active);
+    // Sólo el frame nuevo recibe foto: los que ya tienen la suya no se tocan
+    assignRandomImages(state.active, { soloVacios: true });
     state.current = state.active.slides.length - 1;
     persist(); renderThumbs(); drawEditor();
   });
