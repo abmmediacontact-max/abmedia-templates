@@ -1847,3 +1847,12 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 }
 .cs-foto:focus-visible { outline: 2px solid rgba(255,255,255,.6); outline-offset: 2px; }
 .cs-lienzo canvas { object-fit: cover; }
+
+/* ---- Aviso de versión nueva ---- */
+.version-nueva {
+    position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 400;
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 8px 8px 14px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow);
+    font-size: 13px; color: var(--text);
+}

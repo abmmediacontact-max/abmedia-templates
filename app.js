@@ -1146,14 +1146,9 @@ function tarjetaMia(seq) {
     e.stopPropagation(); openEditor(seq.id);
   });
   // Borra de un clic, sin preguntar
-  box.querySelector('[data-act="del"]').addEventListener("click", async e => {
+  box.querySelector('[data-act="del"]').addEventListener("click", e => {
     e.stopPropagation();
-    if (state.user && seq.cloudId) await sbDB.sbDeleteSequence(seq.cloudId);
-    removeScheduleEntriesForSeq(seq.id);
-    storeSched.save(state.schedule);
-    state.sequences = state.sequences.filter(x => x.id !== seq.id);
-    store.save(state.sequences);
-    renderMias();
+    eliminaSecuencias([seq]);   // la misma que usan Gestión y el calendario
   });
 
   card.appendChild(box);
@@ -1513,23 +1508,40 @@ function ponTituloEnLote(seqs) {
   });
 }
 
+/*
+ * Borra secuencias de verdad: de la lista, del calendario y de la nube.
+ *
+ * Es la ÚNICA forma de borrar, se haga desde Gestión o desde el calendario.
+ * Antes el calendario sólo les quitaba la fecha: la secuencia seguía viva, y
+ * marcada como «Programada», así que Gestión se llenaba de programadas sin
+ * día que ya no estaban en ningún calendario.
+ */
+async function eliminaSecuencias(seqs) {
+  if (!seqs.length) return;
+  const ids = new Set(seqs.map(s => s.id));
+  seqs.forEach(s => { s._borrada = true; removeScheduleEntriesForSeq(s.id); });
+  state.sequences = state.sequences.filter(s => !ids.has(s.id));
+  seqs.forEach(s => SELECCION.delete(String(s.id)));
+  store.save(state.sequences);
+  storeSched.save(state.schedule);
+  renderAll();
+  if (state.view === "calendar") renderCalendar();
+  if (!state.user) return;
+  // Una secuencia recién creada puede no tener aún su fila en la nube: se
+  // espera a que termine de guardarse, o se borraría aquí y volvería al recargar.
+  await Promise.all(seqs.map(s => s._guardando || null));
+  const nube = seqs.map(s => s.cloudId).filter(Boolean);
+  if (nube.length) { try { await sbDB.sbDeleteSequences(nube); } catch (e) { console.warn("borrar en la nube", e); } }
+}
+
 function borraEnLote(seqs) {
   pregunta({
     titulo: "Borrar " + seqs.length + (seqs.length === 1 ? " secuencia" : " secuencias"),
     sub: "No se puede deshacer. También se quitan del calendario.",
     ok: "Borrar", peligro: true,
     alAceptar: async () => {
-      const ids = new Set(seqs.map(s => s.id));
-      for (const s of seqs) {
-        if (state.user && s.cloudId) { try { await sbDB.sbDeleteSequence(s.cloudId); } catch {} }
-        removeScheduleEntriesForSeq(s.id);
-      }
-      state.sequences = state.sequences.filter(s => !ids.has(s.id));
-      store.save(state.sequences);
-      storeSched.save(state.schedule);
-      SELECCION.clear(); ultimaMarcada = null;
-      renderAll();
-      if (state.view === "calendar") renderCalendar();
+      ultimaMarcada = null;
+      await eliminaSecuencias(seqs);
       aviso(seqs.length + (seqs.length === 1 ? " secuencia borrada" : " secuencias borradas"));
     }
   });
@@ -1842,8 +1854,11 @@ function sincronizarFechaSecuencia(seqId) {
 function guardarSecuencia(seq) {
   store.save(state.sequences);
   if (!state.user || !seq) return;
-  sbDB.sbUpsertSequence(seq).then(row => {
+  // Se guarda la petición en marcha: si se borra antes de que acabe, el
+  // borrado la espera para saber qué fila de la nube quitar.
+  seq._guardando = sbDB.sbUpsertSequence(seq).then(row => {
     if (row && !seq.cloudId) seq.cloudId = row.id;
+    if (seq._borrada && seq.cloudId) sbDB.sbDeleteSequences([seq.cloudId]).catch(() => {});
   }).catch(() => {});
 }
 
@@ -2005,7 +2020,7 @@ function renderCalendar() {
         `<span class="ct cat-${escapeAttr(r.category || "venta")}">${cat.name}</span>` +
         `<span class="sq-t">${escapeHtml(r.title)}</span>` +
         `<div class="sq-minis"></div>` +
-        `<button class="sq-x" title="Quitar de este día">✕</button>`;
+        `<button class="sq-x" title="Eliminar secuencia">✕</button>`;
 
       /* Las stories de la secuencia, en pequeño.
          Antes el día sólo decía el título, y para saber qué había ahí había
@@ -2031,14 +2046,11 @@ function renderCalendar() {
 
       seqEl.querySelector(".sq-x").addEventListener("click", e => {
         e.stopPropagation();
-        const cur = calList(map, key);
-        cur.splice(idx, 1);
-        calSet(map, key, cur);
-        if (typeof entry === "string" && entry.startsWith("seq:")) {
-          { const sq = secuenciaDeTag(entry); if (sq) sincronizarFechaSecuencia(sq.id); }
-        }
-        storeSched.save(state.schedule);
-        renderCalendar();
+        const sq = secuenciaDeTag(entry);
+        if (sq) return borraEnLote([sq]);
+        // Una entrada suelta sin secuencia detrás: sólo se quita del día.
+        const cur = calList(map, key); cur.splice(idx, 1); calSet(map, key, cur);
+        storeSched.save(state.schedule); renderCalendar();
       });
 
       // Al pulsar se ve de qué va la secuencia antes de abrir nada
@@ -2205,6 +2217,8 @@ function peekOpenInEditor() {
 function peekRemoveFromDay() {
   if (!_peek) return;
   const { entry, key, idx } = _peek;
+  const sq = secuenciaDeTag(entry);
+  if (sq) { closeSeqPeek(); return borraEnLote([sq]); }
   const map = state.schedule[key.slice(0, 7)];
   if (map) {
     const cur = calList(map, key);
@@ -3462,10 +3476,44 @@ async function bootOnce(user) {
   await bootLoggedIn(user);
 }
 
+/*
+ * ¿Hay una versión publicada más nueva que la que está abierta?
+ *
+ * GitHub Pages deja guardar la página hasta 10 minutos, y una pestaña que se
+ * deja abierta sigue con el código de cuando se abrió. Así se estuvo mirando
+ * una versión vieja creyendo que un arreglo no funcionaba. Cada 5 minutos, y
+ * al volver a la pestaña, se mira qué versión de app.js pide la página
+ * publicada; si no es la cargada, se avisa con un botón para recargar.
+ */
+function vigilaVersion() {
+  const actual = (document.querySelector('script[src^="app.js"]')?.getAttribute("src").match(/v=(\d+)/) || [])[1];
+  if (!actual) return;
+  let avisado = false;
+  const mira = async () => {
+    if (avisado || document.visibilityState !== "visible") return;
+    try {
+      const html = await (await fetch(location.pathname + "?comprobar=" + Date.now(), { cache: "no-store" })).text();
+      const publicada = (html.match(/app\.js\?v=(\d+)/) || [])[1];
+      if (publicada && Number(publicada) > Number(actual)) { avisado = true; avisaVersionNueva(); }
+    } catch {}
+  };
+  setInterval(mira, 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", mira);
+}
+function avisaVersionNueva() {
+  if (document.getElementById("versionNueva")) return;
+  const el = document.createElement("div");
+  el.id = "versionNueva"; el.className = "version-nueva";
+  el.innerHTML = `<span>Hay una versión nueva del Builder</span><button class="btn sm primary">Recargar</button>`;
+  el.querySelector("button").addEventListener("click", () => location.reload());
+  document.body.appendChild(el);
+}
+
 async function init() {
   fillFontSelect();
   bind();
   bindLogin();
+  vigilaVersion();
 
   sb.auth.onAuthStateChange(async (event, session) => {
     if (session && session.user) await bootOnce(session.user);

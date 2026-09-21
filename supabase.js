@@ -70,6 +70,12 @@ async function sbDeleteSequence(cloudId) {
   if (!cloudId) return;
   await sb.from("sequences").delete().eq("id", cloudId);
 }
+/* Varias de una vez, en una sola petición. La RLS sólo deja borrar las propias. */
+async function sbDeleteSequences(ids) {
+  if (!ids || !ids.length) return;
+  const { error } = await sb.from("sequences").delete().in("id", ids);
+  if (error) throw error;
+}
 
 /* ------------------------- Plantillas ---------------------------------- */
 
@@ -300,4 +306,4 @@ window.sbFotos = { sbSubirFoto, sbListarFotos, sbDescargarFoto, sbBorrarFoto, sb
                    sbLeerTipos, sbGuardarTipos, sbBorrarTipos };
 
 window.sbAuth = { sbGetSession, sbSignIn, sbSignUp, sbSignOut, isAdmin, sbIsAllowed };
-window.sbDB = { sbFetchCatalogo, sbFetchSequences, sbUpsertSequence, sbDeleteSequence, sbFetchTemplates, sbUpsertTemplate, sbDeleteTemplate, sbRevisarTemplate, sbFetchAvisos, sbMarcarAvisoLeido };
+window.sbDB = { sbFetchCatalogo, sbFetchSequences, sbUpsertSequence, sbDeleteSequence, sbDeleteSequences, sbFetchTemplates, sbUpsertTemplate, sbDeleteTemplate, sbRevisarTemplate, sbFetchAvisos, sbMarcarAvisoLeido };
