@@ -1616,3 +1616,44 @@ body.con-barra-sel .content { padding-bottom: 88px; }
     color: var(--text-3); font-size: 12px;
 }
 .cal-add:hover { color: var(--text); background: var(--surface-3); border-color: var(--border-strong); }
+
+/* ---- Un color por categoría ----
+   Las cinco venían con el mismo naranja en catalog.js, así que la etiqueta no
+   decía nada de un vistazo. Colores suaves, del mismo juego que usa Content OS
+   para las etapas: el fondo al 15 % y el texto en el color pleno. */
+.pill.cat-personal  { background: rgba(163,113,247,.15); color: #a371f7; }
+.pill.cat-venta     { background: rgba(240,136,62,.15);  color: #f0883e; }
+.pill.cat-puente    { background: rgba(88,166,255,.15);  color: #58a6ff; }
+.pill.cat-flex      { background: rgba(79,209,197,.15);  color: #4fd1c5; }
+.pill.cat-valor     { background: rgba(63,185,80,.15);   color: #3fb950; }
+
+/* ---- Las stories del día, en miniatura ---- */
+.cal-cell { min-height: 118px; }
+.cal-cell .seq { padding: 4px 20px 5px 6px; }
+.sq-minis { display: flex; flex-wrap: wrap; gap: 3px; align-items: flex-end; margin-top: 4px; }
+.sq-mini {
+    width: 24px; height: 34px; display: block; flex: 0 0 auto;
+    border-radius: 4px; overflow: hidden;
+    background: var(--surface-3); border: 1px solid var(--border);
+}
+.sq-mas { font-size: 9.5px; color: var(--text-3); font-weight: 600; align-self: center; }
+/* El rótulo de categoría del día hereda el color de su etiqueta, pero sin
+   fondo: dentro de la entrada ya hay bastante caja. */
+.cal-cell .seq .ct { background: none !important; padding: 0; }
+.cal-cell .seq .ct.cat-personal { color: #a371f7; }
+.cal-cell .seq .ct.cat-venta    { color: #f0883e; }
+.cal-cell .seq .ct.cat-puente   { color: #58a6ff; }
+.cal-cell .seq .ct.cat-flex     { color: #4fd1c5; }
+.cal-cell .seq .ct.cat-valor    { color: #3fb950; }
+
+/* ---- Galería por contexto ---- */
+.gallery-cell { position: relative; }
+.gallery-cell .sel-marca { position: absolute; top: 6px; left: 6px; z-index: 3; }
+.gallery-cell:hover .sel-marca, .gallery-cell.sel .sel-marca { opacity: 1; }
+.gallery-cell.sel { box-shadow: inset 0 0 0 2px var(--accent); }
+/* Abajo a la derecha: abajo-izquierda lo ocupa el nombre del archivo y
+   arriba-derecha el aspa de borrar. */
+.gal-ctx { position: absolute; right: 6px; bottom: 6px; z-index: 2; }
+/* En el selector de fondo, las del contexto de la secuencia van delante y
+   llevan un filo para que se distingan de las demás. */
+.bg-thumb.del-contexto { box-shadow: inset 0 0 0 1px var(--accent); }

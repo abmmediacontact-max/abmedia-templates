@@ -96,12 +96,12 @@ const imgDB = {
     });
   },
   keyOf(name, size) { return `${name}|${size || 0}`; },
-  async put(name, blob, key) {
+  async put(name, blob, key, contexto = null) {
     const db = await this.open();
     const k = key || this.keyOf(name, blob.size);
     return new Promise((res, rej) => {
       const tx = db.transaction(this.STORE, "readwrite");
-      tx.objectStore(this.STORE).put({ key: k, name, size: blob.size, blob, t: Date.now() });
+      tx.objectStore(this.STORE).put({ key: k, name, size: blob.size, blob, t: Date.now(), contexto });
       tx.oncomplete = () => res();
       tx.onerror = () => rej(tx.error);
     });
@@ -435,6 +435,23 @@ async function subirPendientes() {
   } catch (e) { console.warn("subirPendientes", e); }
 }
 
+/* Cambia el contexto de una foto guardada. Se relee el registro para no
+   perder el blob: `put` reemplaza la fila entera. */
+async function ponContextoFoto(im, contexto) {
+  im.contexto = contexto;
+  try {
+    const db = await imgDB.open();
+    await new Promise((res, rej) => {
+      const tx = db.transaction(imgDB.STORE, "readwrite");
+      const st = tx.objectStore(imgDB.STORE);
+      const g = st.get(im.key);
+      g.onsuccess = () => { const r = g.result; if (r) { r.contexto = contexto; st.put(r); } };
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  } catch (e) { console.warn("contexto", e); }
+}
+
 async function loadImagesFromDB() {
   state.images = []; // limpia siempre: si bootLoggedIn se llama 2 veces no se duplica
   try {
@@ -445,7 +462,7 @@ async function loadImagesFromDB() {
       if (seen.has(key)) continue;
       seen.add(key);
       const o = await blobToImage(r.blob, r.name);
-      if (o) { o.key = key; state.images.push(o); }
+      if (o) { o.key = key; o.contexto = r.contexto || null; state.images.push(o); }
     }
   } catch (e) { console.warn("loadImagesFromDB", e); }
   updateImgCount();
@@ -540,7 +557,7 @@ function tablaBiblioteca(lista, catSel) {
     return `<div class="vt-group">
       <button class="vt-group-head" aria-expanded="${abierto}" data-libplegar="${key}">
         <span class="vt-caret${abierto ? " open" : ""}">›</span>
-        <span class="pill">${escapeHtml(c.name)}</span>
+        <span class="pill cat-${key}">${escapeHtml(c.name)}</span>
         <span class="tiny dim nums">${items.length || "—"}</span>
       </button>
       ${abierto ? `<p class="vt-group-desc">${escapeHtml(c.desc)}</p>
@@ -699,19 +716,77 @@ function tarjetaMia(seq) {
 function renderGallery() {
   updateImgCount();
   const grid = $("#galleryGrid"); grid.innerHTML = "";
-  if (!state.images.length) {
+  const todas = state.images || [];
+  const ctx = state.galCtx || "all";
+
+  // El filtro: sólo los contextos que existan, más «sin contexto» si los hay.
+  const cuenta = k => k === "all" ? todas.length
+    : k === "none" ? todas.filter(i => !i.contexto).length
+    : todas.filter(i => i.contexto === k).length;
+  const opciones = [["all", "Todas"], ...ORDEN_CATEGORIAS.map(k => [k, CATEGORIES[k].name])];
+  if (cuenta("none")) opciones.push(["none", "Sin contexto"]);
+  $("#galCtx").innerHTML = opciones
+    .filter(([k]) => k === "all" || cuenta(k))
+    .map(([k, n]) => `<button class="${ctx === k ? "active" : ""}" data-galctx="${k}">${escapeHtml(n)} <span class="dim nums">${cuenta(k)}</span></button>`)
+    .join("");
+
+  $("#galBarra").classList.toggle("hidden", !todas.length);
+  if (!todas.length) {
     grid.innerHTML = `<p class="empty">Aún no has cargado imágenes. Pulsa el botón de arriba para elegir tu carpeta.</p>`;
-    return;
+    return pintaBarraFotos();
   }
-  state.images.forEach((im, i) => {
-    const cell = document.createElement("div"); cell.className = "gallery-cell";
+
+  const visibles = todas
+    .map((im, i) => ({ im, i }))
+    .filter(({ im }) => ctx === "all" || (ctx === "none" ? !im.contexto : im.contexto === ctx));
+
+  if (!visibles.length) {
+    grid.innerHTML = `<p class="empty">Ninguna foto con ese contexto.</p>`;
+    return pintaBarraFotos();
+  }
+
+  visibles.forEach(({ im, i }) => {
+    const cell = document.createElement("div");
+    cell.className = "gallery-cell" + (FOTOS_SEL.has(im.key) ? " sel" : "");
     const img = document.createElement("img"); img.src = im.img.src;
     const name = document.createElement("div"); name.className = "name"; name.textContent = im.name;
     const x = document.createElement("button"); x.className = "x"; x.textContent = "✕"; x.title = "Eliminar";
     x.addEventListener("click", e => { e.stopPropagation(); deleteImage(i); });
-    cell.appendChild(img); cell.appendChild(name); cell.appendChild(x);
+
+    const marca = document.createElement("span");
+    marca.className = "sel-marca" + (FOTOS_SEL.has(im.key) ? " on" : "");
+    marca.title = "Seleccionar";
+    marca.addEventListener("click", e => {
+      e.stopPropagation();
+      FOTOS_SEL.has(im.key) ? FOTOS_SEL.delete(im.key) : FOTOS_SEL.add(im.key);
+      renderGallery();
+    });
+
+    cell.appendChild(img); cell.appendChild(name); cell.appendChild(x); cell.appendChild(marca);
+    if (im.contexto && CATEGORIES[im.contexto]) {
+      const et = document.createElement("span");
+      et.className = "pill cat-" + im.contexto + " gal-ctx";
+      et.textContent = CATEGORIES[im.contexto].name;
+      cell.appendChild(et);
+    }
     grid.appendChild(cell);
   });
+  pintaBarraFotos();
+}
+
+/* Las fotos marcadas, para asignarles contexto a todas de una vez. */
+const FOTOS_SEL = new Set();
+
+function pintaBarraFotos() {
+  const n = FOTOS_SEL.size;
+  let b = document.getElementById("barraFotos");
+  if (!n) { if (b) b.remove(); document.body.classList.remove("con-barra-sel"); return; }
+  if (!b) { b = document.createElement("div"); b.id = "barraFotos"; b.className = "barra-sel"; document.body.appendChild(b); }
+  document.body.classList.add("con-barra-sel");
+  b.innerHTML = `<span class="bs-n"><b>${n}</b> ${n === 1 ? "foto" : "fotos"}</span>` +
+    ORDEN_CATEGORIAS.map(k => `<button class="btn sm" data-galpon="${k}">${escapeHtml(CATEGORIES[k].name)}</button>`).join("") +
+    `<button class="btn sm ghost" data-galpon="">Sin contexto</button>` +
+    `<button class="btn sm ghost" data-galpon="nada">Cancelar</button>`;
 }
 
 /* ---------------------------------------------------------------------- *
@@ -790,7 +865,7 @@ function filaGestion(seq) {
   const est = estadoDe(seq);
   return `<div class="vt-row${SELECCION.has(seq.id) ? " sel" : ""}">
     <div class="vt-title">${marca(seq.id)}<span class="vt-name"><a class="truncate" href="#" data-abrir="${seq.id}">${escapeHtml(seq.title || "Sin título")}</a></span></div>
-    <div class="vt-area"><span class="pill">${escapeHtml(cat.name)}</span></div>
+    <div class="vt-area"><span class="pill cat-${seq.category}">${escapeHtml(cat.name)}</span></div>
     <div class="vt-stage"><span class="pill ${STATUS[est].cls}">${STATUS[est].label}</span></div>
     <div class="vt-datewrap${seq.scheduledDate ? "" : " vt-unset"}"><span class="vt-cell">${fechaMini(seq.scheduledDate) || "—"}</span></div>
     <div class="vt-pts"><span class="vt-cell nums">${seq.slides.length}</span></div>
@@ -828,7 +903,7 @@ function tableroGestion(lista) {
           const cat = CATEGORIES[seq.category] || CATEGORIES.venta;
           return `<a class="vcard${SELECCION.has(seq.id) ? " sel" : ""}" href="#" data-abrir="${seq.id}">
             ${marca(seq.id)}<span class="small strong">${escapeHtml(seq.title || "Sin título")}</span>
-            <div class="row-between"><span class="pill">${escapeHtml(cat.name)}</span><span class="tiny dim nums">${fechaMini(seq.scheduledDate) || seq.slides.length + " frames"}</span></div></a>`;
+            <div class="row-between"><span class="pill cat-${seq.category}">${escapeHtml(cat.name)}</span><span class="tiny dim nums">${fechaMini(seq.scheduledDate) || seq.slides.length + " frames"}</span></div></a>`;
         }).join("")}</div>` : '<div class="board-empty">Nada aquí</div>'}
       </div>`;
     }).join("")}
@@ -1188,6 +1263,24 @@ function resolveCalEntry(entry) {
   return { title: c.title, category: c.category, isUserSeq: false, ref: c.id };
 }
 
+/* De dónde salen las stories y el estilo de una entrada del calendario: de la
+   secuencia del usuario si es suya, y si no de la plantilla del catálogo. */
+function slidesDeEntrada(r) {
+  if (r.isUserSeq) {
+    const sq = state.sequences.find(x => x.id === r.ref);
+    return (sq && sq.slides) || [];
+  }
+  const c = CATALOG.find(x => x.id === r.ref);
+  return (c && c.slides) || [];
+}
+function estiloDeEntrada(r) {
+  if (r.isUserSeq) {
+    const sq = state.sequences.find(x => x.id === r.ref);
+    if (sq && sq.style) return sq.style;
+  }
+  return DEFAULT_STYLE;
+}
+
 // Quita todas las referencias 'seq:<id>' del schedule
 function removeScheduleEntriesForSeq(seqId) {
   const seq = state.sequences.find(x => x.id === seqId);
@@ -1291,9 +1384,31 @@ function renderCalendar() {
       seqEl.className = "seq" + (r.isUserSeq ? " mine" : "");
       seqEl.setAttribute("draggable", "true");
       seqEl.innerHTML =
-        `<span class="ct">${cat.name}${r.isUserSeq ? " · tuya" : ""}</span>` +
+        `<span class="ct cat-${escapeAttr(r.category || "venta")}">${cat.name}${r.isUserSeq ? " · tuya" : ""}</span>` +
         `<span class="sq-t">${escapeHtml(r.title)}</span>` +
+        `<div class="sq-minis"></div>` +
         `<button class="sq-x" title="Quitar de este día">✕</button>`;
+
+      /* Las stories de la secuencia, en pequeño.
+         Antes el día sólo decía el título, y para saber qué había ahí había
+         que abrirlo. Con las miniaturas se ve el mes entero de un vistazo,
+         que es justo para lo que sirve un calendario.
+         Se dibujan al doble de tamaño y se encogen por CSS, si no en pantalla
+         de retina salen borrosas. Sólo caben cuatro; el resto se cuenta. */
+      const minis = seqEl.querySelector(".sq-minis");
+      const diapos = slidesDeEntrada(r);
+      const estilo = estiloDeEntrada(r);
+      diapos.slice(0, 4).forEach(sl => {
+        const cv = makeCardCanvas(sl, estilo, 48, 68);
+        cv.className = "sq-mini";
+        minis.appendChild(cv);
+      });
+      if (diapos.length > 4) {
+        const mas = document.createElement("span");
+        mas.className = "sq-mas";
+        mas.textContent = "+" + (diapos.length - 4);
+        minis.appendChild(mas);
+      }
 
       seqEl.querySelector(".sq-x").addEventListener("click", e => {
         e.stopPropagation();
@@ -1369,7 +1484,9 @@ function openSeqPeek(entry, key, idx) {
 
   const cat = CATEGORIES[r.category] || CATEGORIES.venta;
   $("#seqPeekTitle").textContent = r.title;
-  $("#seqPeekCat").textContent = cat.name + (r.isUserSeq ? " · tuya" : " · del catálogo");
+  const etiqueta = $("#seqPeekCat");
+  etiqueta.textContent = cat.name + (r.isUserSeq ? " · tuya" : " · del catálogo");
+  etiqueta.className = "peek-cat pill cat-" + (r.category || "venta");
 
   const [y, mo, d] = key.split("-");
   const fecha = new Date(+y, +mo - 1, +d);
@@ -1599,12 +1716,23 @@ function renderBgPicker() {
   const box = $("#bgPicker"); if (!box) return;
   box.innerHTML = "";
   if (!state.images.length) { box.innerHTML = `<span class="bg-empty">Sube fotos en "Galería" para elegir el fondo.</span>`; return; }
-  state.images.forEach((im, i) => {
+
+  /* Delante las del contexto de esta secuencia. No se esconde el resto: una
+     foto puede valer para dos cosas y esconderla obligaría a ir a la galería
+     a reclasificarla en mitad del trabajo. Sólo se ordenan. */
+  const ctx = state.active && state.active.category;
+  const orden = state.images
+    .map((im, i) => ({ im, i }))
+    .sort((a, b) => (b.im.contexto === ctx) - (a.im.contexto === ctx));
+
+  orden.forEach(({ im, i }) => {
     const t = document.createElement("button");
     t.className = "bg-thumb" + (i === curSlide().bgIndex ? " active" : "");
     const cv = document.createElement("canvas"); cv.width = 54; cv.height = 96;
     drawCover(cv.getContext("2d"), im.img, 54, 96, { zoom: 1, ox: 0, oy: 0 });
     t.appendChild(cv);
+    if (ctx && im.contexto === ctx) t.classList.add("del-contexto");
+    t.title = im.contexto && CATEGORIES[im.contexto] ? CATEGORIES[im.contexto].name : "Sin contexto";
     t.addEventListener("click", () => { curSlide().bgIndex = i; curSlide().bg = { zoom: 1, ox: 0, oy: 0 }; drawEditor(); refreshActiveThumb(); persist(); });
     box.appendChild(t);
   });
@@ -2202,6 +2330,21 @@ function bind() {
   gDrop.addEventListener("click", () => $("#galleryInput").click());
   $("#galleryPickBtn").addEventListener("click", e => { e.stopPropagation(); $("#galleryInput").click(); });
   $("#galleryClearBtn").addEventListener("click", e => { e.stopPropagation(); clearGallery(); });
+  $("#galCtx").addEventListener("click", e => {
+    const b = e.target.closest("[data-galctx]"); if (!b) return;
+    state.galCtx = b.dataset.galctx; renderGallery();
+  });
+  document.addEventListener("click", async e => {
+    const b = e.target.closest("[data-galpon]"); if (!b) return;
+    e.preventDefault();
+    const que = b.dataset.galpon;
+    if (que === "nada") { FOTOS_SEL.clear(); return renderGallery(); }
+    const fotos = state.images.filter(im => FOTOS_SEL.has(im.key));
+    for (const im of fotos) await ponContextoFoto(im, que || null);
+    FOTOS_SEL.clear();
+    renderGallery();
+    aviso(fotos.length + (fotos.length === 1 ? " foto clasificada" : " fotos clasificadas"));
+  });
   $("#galleryInput").addEventListener("change", e => loadFiles(e.target.files));
   ["dragover", "dragenter"].forEach(ev => gDrop.addEventListener(ev, e => { e.preventDefault(); gDrop.classList.add("hover"); }));
   ["dragleave", "drop"].forEach(ev => gDrop.addEventListener(ev, e => { e.preventDefault(); gDrop.classList.remove("hover"); }));

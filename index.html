@@ -11,7 +11,7 @@
   <!-- Estas cuatro las pinta el generador de stories en el canvas; la
      interfaz ya no pide ninguna: usa SF Pro del sistema. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=33" />
+  <link rel="stylesheet" href="styles.css?v=35" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -187,6 +187,19 @@
           </div>
           <input type="file" id="galleryInput" accept="image/*,.heic,.heif" multiple hidden />
         </div>
+        <!--
+          Las fotos se clasifican por contexto, con las mismas categorías que
+          las secuencias. No son carpetas: una foto de tu escritorio sirve
+          igual para una de valor que para una personal, y una carpeta te
+          obliga a elegir. Así una foto puede no tener contexto, tenerlo, y
+          cambiarlo después sin moverla de sitio.
+        -->
+        <div class="vm-bar" id="galBarra">
+          <div class="segmented inline" id="galCtx"></div>
+          <div class="vm-end">
+            <span class="tiny dim" id="galPista">Marca fotos para asignarles un contexto</span>
+          </div>
+        </div>
         <div id="galleryGrid" class="gallery-grid"></div>
       </section>
 
@@ -331,7 +344,7 @@
       </div>
       <div class="peek-frames" id="seqPeekFrames"></div>
       <div class="peek-actions">
-        <button class="btn btn-ghost danger" id="seqPeekRemove">Quitar de este día</button>
+        <button class="btn danger-text" id="seqPeekRemove">Quitar de este día</button>
         <button class="btn btn-primary" id="seqPeekOpen">Abrir en el editor</button>
       </div>
     </div>
