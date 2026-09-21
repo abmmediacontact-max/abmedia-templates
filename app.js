@@ -803,7 +803,7 @@ function renderGallery() {
     const cell = document.createElement("div");
     cell.className = "gallery-cell" + (FOTOS_SEL.has(im.key) ? " sel" : "");
     const img = document.createElement("img"); img.src = im.img.src;
-    const name = document.createElement("div"); name.className = "name"; name.textContent = im.name;
+    img.title = im.name;   // el nombre sólo al pasar por encima: en la foto no aporta nada
     const x = document.createElement("button"); x.className = "x"; x.textContent = "✕"; x.title = "Eliminar";
     x.addEventListener("click", e => { e.stopPropagation(); deleteImage(i); });
 
@@ -816,7 +816,7 @@ function renderGallery() {
       renderGallery();
     });
 
-    cell.appendChild(img); cell.appendChild(name); cell.appendChild(x); cell.appendChild(marca);
+    cell.appendChild(img); cell.appendChild(x); cell.appendChild(marca);
     if (TIPOS_FOTO[im.tipo]) {
       const et = document.createElement("span");
       et.className = "gal-ctx pill tipo-" + im.tipo;

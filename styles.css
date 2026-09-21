@@ -1662,10 +1662,9 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .pill.tipo-fondo { background: rgba(86,203,230,.15);  color: #56cbe6; }
 .btn.tipo-owner { color: #f0819f; }
 .btn.tipo-fondo { color: #56cbe6; }
-/* En la foto, justo encima de la franja del nombre: así no se pisan. Y con
-   el fondo casi opaco: al 15 % dejaba ver la foto por detrás y el texto se
-   perdía (rosa sobre piel, azul sobre cielo). */
-.gal-ctx { left: 6px !important; right: auto !important; bottom: 28px !important; }
+/* Abajo a la izquierda, con el fondo casi opaco: al 15 % dejaba ver la foto
+   por detrás y el texto se perdía (rosa sobre piel, azul sobre cielo). */
+.gal-ctx { left: 6px !important; right: auto !important; bottom: 6px !important; }
 .gal-ctx.tipo-owner, .gal-ctx.tipo-fondo { background: rgba(10,10,10,.78); backdrop-filter: blur(4px); }
 
 /* ---- Lateral: más aire entre elementos ---- */
