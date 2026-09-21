@@ -13,7 +13,6 @@ const state = {
   active: null,
   current: 0,
   view: "library",
-  libraryStage: "categories",
   libraryFilter: "all",
   libraryCat: null,
   calMonth: null,  // Date (1st of visible month)
@@ -233,11 +232,6 @@ const store = {
     }));
     try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch {}
   }
-};
-const storeIdeas = {
-  KEY: "abmedia_ideas_v1",
-  load() { try { return JSON.parse(localStorage.getItem(this.KEY)) || []; } catch { return []; } },
-  save(items) { try { localStorage.setItem(this.KEY, JSON.stringify(items)); } catch {} }
 };
 const storeSched = {
   KEY: "abmedia_schedule_v1",
@@ -487,17 +481,16 @@ function setView(view) {
   try { localStorage.setItem("abmedia_vista", view); } catch {}
   $$(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === view));
   $("#avisosTab").classList.toggle("activo", view === "avisos");
-  ["library", "mias", "gallery", "desk", "calendar", "avisos"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
+  ["library", "mias", "gallery", "gestion", "calendar", "avisos"].forEach(v => $("#view-" + v).classList.toggle("hidden", v !== view));
   if (view === "avisos") renderAvisos();
   if (view === "mias") renderMias();
-  if (view === "library") { state.libraryStage = "categories"; state.libraryCat = null; }
   renderAll();
 }
 function renderAll() {
   if (state.view === "library") renderLibrary();
   else if (state.view === "mias") renderMias();
   else if (state.view === "gallery") renderGallery();
-  else if (state.view === "desk") renderIdeas();
+  else if (state.view === "gestion") renderGestion();
   else if (state.view === "calendar") renderCalendar();
 }
 
@@ -514,57 +507,95 @@ function getCategoryItems(catKey) {
 }
 
 function renderLibrary() {
-  $("#libBack").classList.toggle("hidden", state.libraryStage === "categories");
-  if (state.libraryStage === "categories") {
-    $("#libTitle").textContent = "Biblioteca de secuencias";
-    $("#libSub").textContent = "Plantillas de ABMedia. Elige una categoría y adapta la que quieras.";
-  } else {
-    const cat = CATEGORIES[state.libraryCat];
-    $("#libTitle").textContent = cat.name;
-    // Dentro de la categoría no se repite su descripción: ya la has leído
-    const n = getCategoryItems(state.libraryCat).length;
-    $("#libSub").textContent = `${n} ${n === 1 ? "secuencia" : "secuencias"}`;
-  }
-  $$(".lib-filter .seg").forEach(s => s.classList.toggle("active", s.dataset.libfilter === state.libraryFilter));
-  if (state.libraryStage === "categories") {
-    $("#catTiles").classList.remove("hidden");
-    $("#catalogGrid").classList.add("hidden");
-    renderCatTiles();
-  } else {
-    $("#catTiles").classList.add("hidden");
-    $("#catalogGrid").classList.remove("hidden");
-    renderCatalogList();
-  }
+  const todas = getCategoryItems(null);
+  const cat = state.libraryCat || "all";
+  const q = (state.libraryBusca || "").trim().toLowerCase();
+
+  $("#libSub").textContent = `${todas.length} plantillas de ABMedia, por categoría.`;
+
+  $("#libCat").innerHTML = [["all", "Todas"], ...ORDEN_CATEGORIAS.map(k => [k, CATEGORIES[k].name])]
+    .map(([k, nom]) => `<button class="${cat === k ? "active" : ""}" data-libcat="${k}">${escapeHtml(nom)} <span class="dim nums">${
+      k === "all" ? todas.length : todas.filter(i => i.category === k).length}</span></button>`).join("");
+
+  const lista = todas.filter(i =>
+    (cat === "all" || i.category === cat) &&
+    (!q || (i.title || "").toLowerCase().includes(q)));
+
+  $("#catalogGrid").innerHTML = tablaBiblioteca(lista, cat);
 }
 
-function renderCatTiles() {
-  const box = $("#catTiles"); box.innerHTML = "";
-  Object.entries(CATEGORIES).forEach(([key, cat]) => {
-    const items = getCategoryItems(key);
-    const tile = document.createElement("button");
-    tile.className = "cat-tile";
-    // Sin icono: el nombre y la explicación mandan
-    tile.innerHTML = `
-      <span class="count">${items.length}</span>
-      <h3>${cat.name}</h3>
-      <p>${cat.desc}</p>`;
-    tile.addEventListener("click", () => {
-      state.libraryStage = "list"; state.libraryCat = key; renderLibrary();
-    });
-    box.appendChild(tile);
+/**
+ * La biblioteca en una tabla, agrupada por categoría y con todo en una línea.
+ * Cada grupo lleva debajo del rótulo para qué sirve esa categoría: era lo
+ * único que aportaba el mosaico que había antes, y así no se pierde.
+ */
+function tablaBiblioteca(lista, catSel) {
+  const plegados = state.libPlegados || [];
+  const grupos = catSel === "all" ? ORDEN_CATEGORIAS : [catSel];
+  const cuerpo = grupos.map(key => {
+    const c = CATEGORIES[key];
+    const items = lista.filter(i => i.category === key);
+    if (!items.length && catSel === "all") return "";
+    const abierto = !plegados.includes(key);
+    return `<div class="vt-group">
+      <button class="vt-group-head" aria-expanded="${abierto}" data-libplegar="${key}">
+        <span class="vt-caret${abierto ? " open" : ""}">›</span>
+        <span class="pill">${escapeHtml(c.name)}</span>
+        <span class="tiny dim nums">${items.length || "—"}</span>
+      </button>
+      ${abierto ? `<p class="vt-group-desc">${escapeHtml(c.desc)}</p>
+      <div class="vt-rows">
+        <div class="vt-row vt-lib vt-head"><span class="vt-col">Secuencia</span><span class="vt-col">Objetivo</span><span class="vt-col">Frames</span><span class="vt-col vt-right"></span></div>
+        ${items.length ? items.map(filaBiblioteca).join("") : '<div class="board-empty">Nada aquí</div>'}
+      </div>` : ""}
+    </div>`;
+  }).join("");
+  return `<div class="vt">${cuerpo || '<p class="empty">No hay plantillas que coincidan con la búsqueda.</p>'}</div>`;
+}
+
+/**
+ * Coger una plantilla de la biblioteca y meterla en la planificación.
+ *
+ * Antes se creaba siempre como borrador y se abría el editor sin más. El
+ * problema es que la planificación es justo lo que hay que decidir en ese
+ * momento —cuándo sale y en qué punto está—, y quedaba para después, que es
+ * cuando se olvida. Ahora se pregunta aquí, con la plantilla delante y sus
+ * datos a la vista, y el editor se abre ya con todo puesto.
+ */
+function usarPlantilla(id) {
+  const item = CATALOG.find(x => x.id === id);
+  if (!item) return;
+  const c = CATEGORIES[item.category] || CATEGORIES.venta;
+  pideDato({
+    titulo: item.title,
+    sub: `${c.name} · ${item.slides.length} ${item.slides.length === 1 ? "story" : "stories"}${item.objective ? " · " + item.objective : ""}`,
+    campos: [
+      { id: "t", tipo: "text", etiqueta: "Título", valor: item.title },
+      { id: "e", tipo: "select", etiqueta: "Estado", valor: "draft",
+        opciones: ORDEN_ESTADOS.map(k => [k, STATUS[k].label]) },
+      { id: "f", tipo: "date", etiqueta: "Día (opcional)", valor: "" }
+    ],
+    ok: "Crear y abrir",
+    alAceptar: (v) => {
+      const seq = fromCatalog(item.id, { status: v.e || "draft" });
+      if (v.t.trim()) seq.title = v.t.trim();
+      state.sequences.unshift(seq);
+      // La fecha se pone después de meterla en la lista: setScheduleForSequence
+      // busca la secuencia por id y si no está todavía no encuentra nada.
+      if (v.f) { setScheduleForSequence(seq, v.f); seq.scheduledDate = v.f; }
+      persist();
+      openEditor(seq.id);
+    }
   });
 }
 
-function renderCatalogList() {
-  const grid = $("#catalogGrid"); grid.innerHTML = "";
-  const items = getCategoryItems(state.libraryCat);
-  if (!items.length) {
-    grid.innerHTML = `<p class="empty">${state.libraryFilter === "mine"
-      ? "Todavía no tienes plantillas propias en esta categoría. Abre una secuencia y pulsa \"Guardar como plantilla\"."
-      : "No hay secuencias en esta categoría."}</p>`;
-    return;
-  }
-  items.forEach(item => grid.appendChild(makeLibCard(item)));
+function filaBiblioteca(item) {
+  return `<div class="vt-row vt-lib">
+    <div class="vt-title"><span class="vt-name"><span class="truncate">${escapeHtml(item.title)}</span></span></div>
+    <div class="vt-obj truncate">${item.objective ? escapeHtml(item.objective) : "—"}</div>
+    <div class="vt-pts"><span class="vt-cell nums">${item.slides.length}</span></div>
+    <div class="vt-right"><button class="btn sm" data-usar="${escapeAttr(item.id)}">Usar</button></div>
+  </div>`;
 }
 
 /* Aviso breve dentro de la propia web. Las ventanas del navegador cortan
@@ -662,42 +693,6 @@ function tarjetaMia(seq) {
   return card;
 }
 
-function makeLibCard(item) {
-  const seq = item.isUser ? fromTemplate(item) : fromCatalog(item.id);
-  const cat = CATEGORIES[item.category] || CATEGORIES.venta;
-  const card = document.createElement("div"); card.className = "card";
-  card.appendChild(makeCardCanvas(seq.slides[0], seq.style));
-  const badge = document.createElement("span");
-  badge.className = "frames-badge"; badge.textContent = `${seq.slides.length} frames`;
-  card.appendChild(badge);
-  const info = document.createElement("div"); info.className = "card-info";
-  info.innerHTML = `<div class="card-row"><h3>${item.title}</h3>
-      <span class="cat-tag">${cat.name}</span></div>
-      ${item.objective ? `<p class="card-obj">${item.objective}</p>` : ""}
-      <div class="card-acciones">
-        <button class="btn btn-primary sm card-cta" data-act="use">Usar esta secuencia →</button>
-        ${item.isUser ? `<button class="card-borrar" data-act="del" title="Borrar" aria-label="Borrar">
-            <svg viewBox="0 0 24 24"><path d="M4 7 H20 M9 7 V5 a1 1 0 0 1 1 -1 h4 a1 1 0 0 1 1 1 v2 M6.5 7 L7.5 20 a1 1 0 0 0 1 1 h7 a1 1 0 0 0 1 -1 L18 7"/></svg>
-          </button>` : ""}
-      </div>`;
-  info.querySelector('[data-act="use"]').addEventListener("click", (e) => {
-    e.stopPropagation();
-    const created = item.isUser
-      ? fromTemplate(item, { status: "draft" })
-      : fromCatalog(item.id, { status: "draft" });
-    state.sequences.unshift(created); persist(); openEditor(created.id);
-  });
-  if (item.isUser) info.querySelector('[data-act="del"]').addEventListener("click", async (e) => {
-    e.stopPropagation();
-    if (!confirm("¿Borrar esta plantilla?")) return;
-    if (state.user && item.cloudId) await sbDB.sbDeleteTemplate(item.cloudId);
-    state.userTemplates = state.userTemplates.filter(t => t.id !== item.id);
-    storeT.save(state.userTemplates); renderLibrary();
-  });
-  card.appendChild(info);
-  return card;
-}
-
 /* ---------------------------------------------------------------------- *
  *  GALERÍA
  * ---------------------------------------------------------------------- */
@@ -722,45 +717,307 @@ function renderGallery() {
 /* ---------------------------------------------------------------------- *
  *  IDEAS (tipo tabla)
  * ---------------------------------------------------------------------- */
-function renderIdeas() {
-  const box = $("#inboxList");
-  box.innerHTML = "";
-  if (!state.inbox.length) {
-    box.innerHTML = `<p class="empty">Aún no tienes ideas. Añade la primera con el formulario de arriba.</p>`;
-    return;
+/* ---------------------------------------------------------------------- *
+ *  GESTIÓN DE STORIES
+ *
+ *  Lo mismo que «Gestión de vídeos» en Content OS, con las secuencias en
+ *  lugar de las piezas: la lista agrupada por estado, marcar varias y
+ *  hacerles lo mismo a todas de una vez.
+ *
+ *  Sustituye a «Ideas de stories», que era un cuaderno suelto: apuntabas una
+ *  frase y la convertías en secuencia. Todo lo que hacía falta de verdad —ver
+ *  qué hay, en qué estado y cuándo sale— no estaba en ninguna parte.
+ * ---------------------------------------------------------------------- */
+
+/* Lo marcado vive fuera del pintado: la vista se rehace entera a cada cambio
+   y si no se perdería la selección en cuanto se tocara nada. */
+const SELECCION = new Set();
+let ultimaMarcada = null;          // para marcar un rango con Mayúsculas
+
+const ORDEN_ESTADOS = ["draft", "scheduled", "published"];
+const ORDEN_CATEGORIAS = Object.keys(CATEGORIES);
+
+const seleccionadas = () => (state.sequences || []).filter(s => SELECCION.has(s.id));
+
+function limpiaSeleccion() { SELECCION.clear(); ultimaMarcada = null; renderGestion(); }
+
+/** La casilla que se pone en cada fila o tarjeta. */
+function marca(id) {
+  return `<span class="sel-marca${SELECCION.has(id) ? " on" : ""}" data-sel="${id}" role="checkbox"
+    aria-checked="${SELECCION.has(id)}" tabindex="0" title="Seleccionar"></span>`;
+}
+
+/**
+ * Marca o desmarca. Con Mayúsculas pulsadas coge todo lo que haya entre la
+ * última que se tocó y ésta, dentro de la misma lista.
+ */
+function alternaMarca(id, conRango, nodo) {
+  if (conRango && ultimaMarcada && ultimaMarcada !== id) {
+    const caja = nodo.closest(".vt-rows, .board-cards") || document;
+    const lista = Array.from(caja.querySelectorAll("[data-sel]")).map(x => x.dataset.sel);
+    const a = lista.indexOf(ultimaMarcada), b = lista.indexOf(id);
+    if (a >= 0 && b >= 0) {
+      const poner = !SELECCION.has(id);
+      lista.slice(Math.min(a, b), Math.max(a, b) + 1)
+        .forEach(x => poner ? SELECCION.add(x) : SELECCION.delete(x));
+      ultimaMarcada = id;
+      return renderGestion();
+    }
   }
-  state.inbox.forEach((item, i) => {
-    const cat = CATEGORIES[item.category] || CATEGORIES.venta;
-    const row = document.createElement("div");
-    row.className = "idea-row";
-    row.innerHTML = `
-      <div class="txt" title="${escapeAttr(item.brief)}">${escapeHtml(item.brief)}</div>
-      <span class="cat-pill">${cat.name}</span>
-      <button class="btn btn-primary" data-act="use">Convertir</button>
-      <button class="icon-btn" data-act="del" title="Eliminar">🗑</button>`;
-    row.querySelector('[data-act="use"]').addEventListener("click", () => {
-      const seq = fromStructure(3, item.category);
-      seq.title = item.brief.length > 46 ? item.brief.slice(0, 46) + "…" : item.brief;
-      state.sequences.unshift(seq);
-      state.inbox.splice(i, 1); storeIdeas.save(state.inbox);
-      persist(); renderAll(); openEditor(seq.id);
-    });
-    row.querySelector('[data-act="del"]').addEventListener("click", () => {
-      state.inbox.splice(i, 1); storeIdeas.save(state.inbox); renderIdeas();
-    });
-    box.appendChild(row);
+  SELECCION.has(id) ? SELECCION.delete(id) : SELECCION.add(id);
+  ultimaMarcada = id;
+  renderGestion();
+}
+
+function fechaMini(f) {
+  if (!f) return "";
+  const d = new Date(f + "T00:00:00");
+  if (isNaN(d)) return "";
+  return d.toLocaleDateString("es-ES", { day: "numeric", month: "short" });
+}
+
+/** Las que pasan el filtro de categoría y el buscador. */
+function secuenciasFiltradas() {
+  const cat = state.gestionCat || "all";
+  const q = (state.gestionBusca || "").trim().toLowerCase();
+  return (state.sequences || []).filter(s =>
+    (cat === "all" || s.category === cat) &&
+    (!q || (s.title || "").toLowerCase().includes(q)));
+}
+
+function filaGestion(seq) {
+  const cat = CATEGORIES[seq.category] || CATEGORIES.venta;
+  const est = estadoDe(seq);
+  return `<div class="vt-row${SELECCION.has(seq.id) ? " sel" : ""}">
+    <div class="vt-title">${marca(seq.id)}<span class="vt-name"><a class="truncate" href="#" data-abrir="${seq.id}">${escapeHtml(seq.title || "Sin título")}</a></span></div>
+    <div class="vt-area"><span class="pill">${escapeHtml(cat.name)}</span></div>
+    <div class="vt-stage"><span class="pill ${STATUS[est].cls}">${STATUS[est].label}</span></div>
+    <div class="vt-datewrap${seq.scheduledDate ? "" : " vt-unset"}"><span class="vt-cell">${fechaMini(seq.scheduledDate) || "—"}</span></div>
+    <div class="vt-pts"><span class="vt-cell nums">${seq.slides.length}</span></div>
+  </div>`;
+}
+
+function tablaGestion(lista) {
+  const plegados = state.gestionPlegados || [];
+  return `<div class="vt">${ORDEN_ESTADOS.map(id => {
+    const info = STATUS[id];
+    const grupo = lista.filter(s => estadoDe(s) === id)
+      .sort((a, b) => String(a.scheduledDate || "9999").localeCompare(String(b.scheduledDate || "9999")));
+    const abierto = !plegados.includes(id);
+    return `<div class="vt-group">
+      <button class="vt-group-head" aria-expanded="${abierto}" data-plegar="${id}">
+        <span class="vt-caret${abierto ? " open" : ""}">›</span>
+        <span class="pill ${info.cls}">${info.label}</span>
+        <span class="tiny dim nums">${grupo.length || "—"}</span>
+      </button>
+      ${abierto ? `<div class="vt-rows">
+        <div class="vt-row vt-head"><span class="vt-col">Secuencia</span><span class="vt-col">Categoría</span><span class="vt-col">Estado</span><span class="vt-col">Fecha</span><span class="vt-col vt-right">Frames</span></div>
+        ${grupo.length ? grupo.map(filaGestion).join("") : '<div class="board-empty">Nada aquí</div>'}
+      </div>` : ""}
+    </div>`;
+  }).join("")}</div>`;
+}
+
+function tableroGestion(lista) {
+  return `<div class="board-frame"><div class="board"><div class="board-phase"><div class="board-phase-cols">
+    ${ORDEN_ESTADOS.map(id => {
+      const info = STATUS[id], grupo = lista.filter(s => estadoDe(s) === id);
+      return `<div class="board-col">
+        <div class="board-head"><span class="board-dot ${info.cls}"></span><span class="board-label">${info.label}</span><span class="board-count nums">${grupo.length}</span></div>
+        ${grupo.length ? `<div class="board-cards">${grupo.map(seq => {
+          const cat = CATEGORIES[seq.category] || CATEGORIES.venta;
+          return `<a class="vcard${SELECCION.has(seq.id) ? " sel" : ""}" href="#" data-abrir="${seq.id}">
+            ${marca(seq.id)}<span class="small strong">${escapeHtml(seq.title || "Sin título")}</span>
+            <div class="row-between"><span class="pill">${escapeHtml(cat.name)}</span><span class="tiny dim nums">${fechaMini(seq.scheduledDate) || seq.slides.length + " frames"}</span></div></a>`;
+        }).join("")}</div>` : '<div class="board-empty">Nada aquí</div>'}
+      </div>`;
+    }).join("")}
+  </div></div></div></div>`;
+}
+
+function renderGestion() {
+  const cuerpo = $("#gestionCuerpo");
+  if (!cuerpo) return;
+  const todas = state.sequences || [];
+  const lista = secuenciasFiltradas();
+
+  // Filtro de categorías: sólo las que existen, para no enseñar botones vacíos.
+  const usadas = ORDEN_CATEGORIAS.filter(k => todas.some(s => s.category === k));
+  const cat = state.gestionCat || "all";
+  $("#gestionCat").innerHTML = [["all", "Todas"], ...usadas.map(k => [k, CATEGORIES[k].name])]
+    .map(([k, n]) => `<button class="${cat === k ? "active" : ""}" data-cat="${k}">${escapeHtml(n)} <span class="dim nums">${
+      k === "all" ? todas.length : todas.filter(s => s.category === k).length}</span></button>`).join("");
+
+  $("#gestionSub").textContent = todas.length
+    ? `${todas.length} ${todas.length === 1 ? "secuencia" : "secuencias"} · marca varias para editarlas a la vez`
+    : "Todavía no has guardado ninguna secuencia.";
+
+  const vista = state.gestionVista || "list";
+  $$("#gestionVista button").forEach(b => b.classList.toggle("active", b.dataset.vista === vista));
+
+  cuerpo.innerHTML = todas.length
+    ? (vista === "board" ? tableroGestion(lista) : tablaGestion(lista))
+    : `<p class="empty">Coge una de la biblioteca o crea una nueva y aparecerá aquí.</p>`;
+
+  pintaBarraSeleccion();
+}
+
+/** La barra de abajo, que sale sola cuando hay algo marcado. */
+function pintaBarraSeleccion() {
+  const n = seleccionadas().length;
+  let b = document.getElementById("barraSel");
+  if (!n) { if (b) b.remove(); document.body.classList.remove("con-barra-sel"); return; }
+  if (!b) { b = document.createElement("div"); b.id = "barraSel"; b.className = "barra-sel"; document.body.appendChild(b); }
+  document.body.classList.add("con-barra-sel");
+  b.innerHTML = `
+    <span class="bs-n"><b>${n}</b> ${n === 1 ? "seleccionada" : "seleccionadas"}</span>
+    <button class="btn sm" data-bs="fecha">Fecha</button>
+    <button class="btn sm" data-bs="categoria">Categoría</button>
+    <button class="btn sm" data-bs="estado">Estado</button>
+    <button class="btn sm" data-bs="titulo">Título</button>
+    <button class="btn sm danger-text" data-bs="borrar">Borrar</button>
+    <button class="btn sm ghost" data-bs="nada" title="Quitar la selección">Cancelar</button>`;
+}
+
+/* ---- Lo que se hace con lo marcado ------------------------------------ */
+
+/* Guarda todas de una vez y repinta una sola. Antes de tocar nada se apunta
+   lo que había, para poder dejarlo como estaba si algo falla. */
+function guardaEnLote(seqs, cambia) {
+  seqs.forEach(cambia);
+  store.save(state.sequences);
+  storeSched.save(state.schedule);
+  if (state.user) seqs.forEach(s => { try { sbDB.sbUpsertSequence(s); } catch {} });
+  renderAll();
+  if (state.view === "calendar") renderCalendar();
+}
+
+function ponFechaEnLote(seqs) {
+  pideDato({
+    titulo: "Fecha para " + seqs.length + (seqs.length === 1 ? " secuencia" : " secuencias"),
+    sub: "Se pone la misma a todas. Déjalo vacío para quitarles la fecha.",
+    campos: [{ id: "f", tipo: "date", etiqueta: "Día", valor: seqs[0].scheduledDate || "" }],
+    alAceptar: (v) => guardaEnLote(seqs, s => {
+      setScheduleForSequence(s, v.f || null);
+      s.scheduledDate = v.f || undefined;
+      if (v.f && estadoDe(s) === "draft") s.status = "scheduled";
+    })
   });
 }
-function addIdea() {
-  const input = $("#ideaInput");
-  const txt = input.value.trim();
-  if (!txt) return;
-  const cat = $("#ideaCat").value;
-  state.inbox.unshift({ brief: txt, category: cat });
-  storeIdeas.save(state.inbox);
-  input.value = "";
-  renderIdeas();
+
+function ponCategoriaEnLote(seqs) {
+  pideDato({
+    titulo: "Categoría",
+    sub: "La misma para las " + seqs.length + " seleccionadas.",
+    campos: [{ id: "c", tipo: "select", etiqueta: "Categoría",
+      opciones: ORDEN_CATEGORIAS.map(k => [k, CATEGORIES[k].name]), valor: seqs[0].category }],
+    alAceptar: (v) => guardaEnLote(seqs, s => { s.category = v.c; })
+  });
 }
+
+function ponEstadoEnLote(seqs) {
+  pideDato({
+    titulo: "Estado",
+    sub: "El mismo para las " + seqs.length + " seleccionadas.",
+    campos: [{ id: "e", tipo: "select", etiqueta: "Estado",
+      opciones: ORDEN_ESTADOS.map(k => [k, STATUS[k].label]), valor: estadoDe(seqs[0]) }],
+    alAceptar: (v) => guardaEnLote(seqs, s => { s.status = v.e; })
+  });
+}
+
+function ponTituloEnLote(seqs) {
+  pideDato({
+    titulo: "Título",
+    sub: "Se le pone el mismo a las " + seqs.length + " seleccionadas.",
+    campos: [{ id: "t", tipo: "text", etiqueta: "Título", valor: seqs[0].title || "" }],
+    alAceptar: (v) => { if (v.t.trim()) guardaEnLote(seqs, s => { s.title = v.t.trim(); }); }
+  });
+}
+
+function borraEnLote(seqs) {
+  pregunta({
+    titulo: "Borrar " + seqs.length + (seqs.length === 1 ? " secuencia" : " secuencias"),
+    sub: "No se puede deshacer. También se quitan del calendario.",
+    ok: "Borrar", peligro: true,
+    alAceptar: async () => {
+      const ids = new Set(seqs.map(s => s.id));
+      for (const s of seqs) {
+        if (state.user && s.cloudId) { try { await sbDB.sbDeleteSequence(s.cloudId); } catch {} }
+        removeScheduleEntriesForSeq(s.id);
+      }
+      state.sequences = state.sequences.filter(s => !ids.has(s.id));
+      store.save(state.sequences);
+      storeSched.save(state.schedule);
+      SELECCION.clear(); ultimaMarcada = null;
+      renderAll();
+      if (state.view === "calendar") renderCalendar();
+      aviso(seqs.length + (seqs.length === 1 ? " secuencia borrada" : " secuencias borradas"));
+    }
+  });
+}
+
+/* ---- Diálogos, dentro de la web ---------------------------------------
+ *
+ * Nada de `prompt()` ni `confirm()` del navegador: salen fuera de la página,
+ * con otra tipografía y otro idioma, y no se pueden cerrar con Escape.
+ * ---------------------------------------------------------------------- */
+function cierraDialogo() { document.getElementById("dlgLote")?.remove(); }
+
+function montaDialogo(html, alMontar) {
+  cierraDialogo();
+  const d = document.createElement("div");
+  d.id = "dlgLote";
+  d.className = "modal";
+  d.innerHTML = `<div class="modal-box small">${html}</div>`;
+  document.body.appendChild(d);
+  d.addEventListener("click", e => { if (e.target === d) cierraDialogo(); });
+  document.addEventListener("keydown", function esc(e) {
+    if (e.key === "Escape") { cierraDialogo(); document.removeEventListener("keydown", esc); }
+  });
+  alMontar(d);
+  return d;
+}
+
+function pideDato({ titulo, sub, campos, ok = "Aplicar", alAceptar }) {
+  const cuerpo = campos.map(c => {
+    if (c.tipo === "select") {
+      return `<label class="field"><span>${escapeHtml(c.etiqueta)}</span>
+        <select class="status-select" data-campo="${c.id}">${c.opciones.map(([k, n]) =>
+          `<option value="${k}"${k === c.valor ? " selected" : ""}>${escapeHtml(n)}</option>`).join("")}</select></label>`;
+    }
+    return `<label class="field"><span>${escapeHtml(c.etiqueta)}</span>
+      <input type="${c.tipo}" data-campo="${c.id}" value="${escapeAttr(String(c.valor || ""))}" /></label>`;
+  }).join("");
+  montaDialogo(`
+    <div class="modal-head"><h2>${escapeHtml(titulo)}</h2></div>
+    ${sub ? `<p class="modal-sub">${escapeHtml(sub)}</p>` : ""}
+    ${cuerpo}
+    <div class="save-row"><button class="btn" data-dlg="no">Cancelar</button><button class="btn primary" data-dlg="si">${escapeHtml(ok)}</button></div>`,
+    (d) => {
+      const leer = () => {
+        const v = {};
+        d.querySelectorAll("[data-campo]").forEach(x => { v[x.dataset.campo] = x.value; });
+        return v;
+      };
+      d.querySelector('[data-dlg="no"]').addEventListener("click", cierraDialogo);
+      d.querySelector('[data-dlg="si"]').addEventListener("click", () => { const v = leer(); cierraDialogo(); alAceptar(v); });
+      d.querySelector("[data-campo]")?.focus();
+    });
+}
+
+function pregunta({ titulo, sub, ok = "Aceptar", peligro = false, alAceptar }) {
+  montaDialogo(`
+    <div class="modal-head"><h2>${escapeHtml(titulo)}</h2></div>
+    ${sub ? `<p class="modal-sub">${escapeHtml(sub)}</p>` : ""}
+    <div class="save-row"><button class="btn" data-dlg="no">Cancelar</button>
+      <button class="btn ${peligro ? "danger" : "primary"}" data-dlg="si">${escapeHtml(ok)}</button></div>`,
+    (d) => {
+      d.querySelector('[data-dlg="no"]').addEventListener("click", cierraDialogo);
+      d.querySelector('[data-dlg="si"]').addEventListener("click", () => { cierraDialogo(); alAceptar(); });
+      d.querySelector('[data-dlg="si"]').focus();
+    });
+}
+
 function escapeHtml(s) { return s.replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])); }
 function escapeAttr(s) { return escapeHtml(s); }
 
@@ -1860,8 +2117,8 @@ const TOUR_STEPS = [
     body: "Aquí están todas las secuencias preestablecidas y las tuyas. Filtra entre 'Todas' o 'Mis secuencias' y entra en una categoría (Personal, Venta o Puente) para verlas." },
   { view: "gallery", sel: '[data-tour="gallery"]', title: "Galería de imágenes",
     body: "Sube tu carpeta de fotos. Se quedan guardadas en tu navegador y se usan como fondo de las stories. Puedes vaciarlas o eliminar imágenes una a una." },
-  { view: "desk", sel: '[data-tour="desk"]', title: "Ideas de stories",
-    body: "Tu cuaderno de inspiración. Anota ideas con su categoría y conviértelas en secuencias en un clic." },
+  { view: "gestion", sel: '[data-tour="gestion"]', title: "Gestión de stories",
+    body: "Todas tus secuencias agrupadas por estado. Marca varias con la casilla —o con Mayúsculas para coger un rango— y cámbiales la fecha, la categoría, el estado o el título de golpe." },
   { view: "calendar", sel: '[data-tour="calendar"]', title: "Calendario de stories",
     body: "Te proponemos 3 publicaciones por semana. Pulsa cualquier día para abrir la secuencia y editarla con tus textos y fotos." },
   { view: "library", sel: '[data-tour="new"]', title: "Empezar a crear",
@@ -1919,11 +2176,24 @@ function bind() {
 
   $$(".nav-item").forEach(n => n.addEventListener("click", () => setView(n.dataset.view)));
 
-  $$(".lib-filter .seg").forEach(s => s.addEventListener("click", () => {
-    state.libraryFilter = s.dataset.libfilter; renderLibrary();
-  }));
-  $("#libBack").addEventListener("click", () => {
-    state.libraryStage = "categories"; state.libraryCat = null; renderLibrary();
+  $("#libCat").addEventListener("click", e => {
+    const b = e.target.closest("[data-libcat]"); if (!b) return;
+    state.libraryCat = b.dataset.libcat; renderLibrary();
+  });
+  $("#libBusca").addEventListener("input", e => {
+    state.libraryBusca = e.target.value;
+    renderLibrary();
+  });
+  $("#catalogGrid").addEventListener("click", e => {
+    const pl = e.target.closest("[data-libplegar]");
+    if (pl) {
+      const k = pl.dataset.libplegar;
+      const l = state.libPlegados || (state.libPlegados = []);
+      const i = l.indexOf(k); i >= 0 ? l.splice(i, 1) : l.push(k);
+      return renderLibrary();
+    }
+    const usar = e.target.closest("[data-usar]");
+    if (usar) usarPlantilla(usar.dataset.usar);
   });
 
   // Galería
@@ -1945,8 +2215,6 @@ function bind() {
   drop.addEventListener("drop", e => loadFiles(e.dataTransfer.files));
 
   // Ideas
-  $("#addIdeaBtn").addEventListener("click", addIdea);
-  $("#ideaInput").addEventListener("keydown", e => { if (e.key === "Enter") addIdea(); });
 
   // Calendar
   $("#calPrev").addEventListener("click", () => calMove(-1));
@@ -2073,6 +2341,78 @@ function bind() {
   $("#tourSkip").addEventListener("click", endTour);
   $("#restartTourBtn").addEventListener("click", () => startTour(true));
   $("#avisosTab").addEventListener("click", () => setView("avisos"));
+
+  /* ---- Gestión de stories ---- */
+  $("#gestionNueva").addEventListener("click", () => $("#newSeq").click());
+  $("#gestionBusca").addEventListener("input", e => {
+    state.gestionBusca = e.target.value;
+    renderGestion();
+    // El buscador se rehace con la vista, así que hay que devolverle el foco.
+    const c = $("#gestionBusca"); c.focus(); c.setSelectionRange(c.value.length, c.value.length);
+  });
+  $("#gestionCat").addEventListener("click", e => {
+    const b = e.target.closest("[data-cat]"); if (!b) return;
+    state.gestionCat = b.dataset.cat; renderGestion();
+  });
+  $("#gestionVista").addEventListener("click", e => {
+    const b = e.target.closest("[data-vista]"); if (!b) return;
+    state.gestionVista = b.dataset.vista; renderGestion();
+  });
+  $("#gestionCuerpo").addEventListener("click", e => {
+    const plegar = e.target.closest("[data-plegar]");
+    if (plegar) {
+      const id = plegar.dataset.plegar;
+      const l = state.gestionPlegados || (state.gestionPlegados = []);
+      const i = l.indexOf(id); i >= 0 ? l.splice(i, 1) : l.push(id);
+      return renderGestion();
+    }
+    const abrir = e.target.closest("[data-abrir]");
+    if (abrir) { e.preventDefault(); openEditor(abrir.dataset.abrir); }
+  });
+
+  /* La casilla no abre la secuencia: se queda el clic. En captura, porque el
+     enlace de la fila está por encima. */
+  document.addEventListener("click", e => {
+    const m = e.target.closest("[data-sel]");
+    if (!m) return;
+    e.preventDefault(); e.stopPropagation();
+    alternaMarca(m.dataset.sel, e.shiftKey, m);
+  }, true);
+  document.addEventListener("keydown", e => {
+    const m = e.target.closest && e.target.closest("[data-sel]");
+    if (m && (e.key === " " || e.key === "Enter")) { e.preventDefault(); alternaMarca(m.dataset.sel, e.shiftKey, m); }
+  });
+
+  /* La barra de abajo. */
+  document.addEventListener("click", e => {
+    const b = e.target.closest("[data-bs]");
+    if (!b) return;
+    e.preventDefault();
+    const seqs = seleccionadas();
+    if (!seqs.length) return limpiaSeleccion();
+    const que = b.dataset.bs;
+    if (que === "nada") return limpiaSeleccion();
+    if (que === "fecha") return ponFechaEnLote(seqs);
+    if (que === "categoria") return ponCategoriaEnLote(seqs);
+    if (que === "estado") return ponEstadoEnLote(seqs);
+    if (que === "titulo") return ponTituloEnLote(seqs);
+    if (que === "borrar") return borraEnLote(seqs);
+  });
+
+  // La marca lleva a la biblioteca, como el logo de Content OS lleva al inicio.
+  $("#btnHome").addEventListener("click", () => setView("library"));
+
+  /* Encoger el lateral. Se recuerda porque quien lo encoge lo quiere encogido
+     siempre, no sólo en esta pestaña. */
+  const plegar = (v) => {
+    document.body.classList.toggle("lateral-plegada", v);
+    $("#btnPlegar").setAttribute("aria-expanded", String(!v));
+    $("#btnPlegar").title = v ? "Desplegar el menú" : "Encoger el menú";
+    try { localStorage.setItem("abmedia_lateral", v ? "1" : "0"); } catch {}
+  };
+  $("#btnPlegar").addEventListener("click", () =>
+    plegar(!document.body.classList.contains("lateral-plegada")));
+  try { if (localStorage.getItem("abmedia_lateral") === "1") plegar(true); } catch {}
   $$("#miasFiltro .seg").forEach(b => b.addEventListener("click", () => {
     state.miasFiltro = b.dataset.estado; renderMias();
   }));
@@ -2172,7 +2512,6 @@ async function bootLoggedIn(user) {
   const cloudTpls = await sbDB.sbFetchTemplates("mine");
   state.userTemplates = cloudTpls.map(r => ({ id: "u" + r.id, cloudId: r.id, title: r.title, category: r.category, style: r.style, slides: r.slides, submitted: r.submitted, isUser: true }));
 
-  state.inbox = storeIdeas.load();
   state.schedule = storeSched.load() || {};
   state.calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   rebuildScheduleFromSequences();
@@ -2180,7 +2519,7 @@ async function bootLoggedIn(user) {
   // Vuelve a donde estabas antes de recargar, no siempre a la biblioteca
   let vistaGuardada = "library";
   try { vistaGuardada = localStorage.getItem("abmedia_vista") || "library"; } catch {}
-  const validas = ["library", "mias", "gallery", "desk", "calendar", "avisos"];
+  const validas = ["library", "mias", "gallery", "gestion", "calendar", "avisos"];
   setView(validas.includes(vistaGuardada) ? vistaGuardada : "library");
   contarAvisos();
   setTimeout(() => startTour(false), 600);

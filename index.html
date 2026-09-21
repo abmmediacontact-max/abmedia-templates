@@ -11,7 +11,7 @@
   <!-- Estas cuatro las pinta el generador de stories en el canvas; la
      interfaz ya no pide ninguna: usa SF Pro del sistema. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=31" />
+  <link rel="stylesheet" href="styles.css?v=32" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -55,70 +55,97 @@
     <!-- ===================== SIDEBAR ===================== -->
     <aside class="sidebar">
       <div class="brand">
-        <span class="logo"><img src="assets/logo.png" alt="ABMedia" class="logo-img" /></span>
-        <div class="brand-text">
-          <strong>Sequence Builder</strong>
-          <small>by ABMedia</small>
-        </div>
+        <button class="brand-home" id="btnHome" type="button" title="Inicio" aria-label="Ir a la biblioteca">
+          <span class="logo"><img src="assets/logo.png" alt="ABMedia" class="logo-img" /></span>
+          <div class="brand-text">
+            <strong>Sequence Builder</strong>
+            <small>by ABMedia</small>
+          </div>
+        </button>
+        <button class="plegar" id="btnPlegar" type="button" title="Encoger el menú" aria-expanded="true" aria-label="Encoger el menú">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+        </button>
       </div>
-      <nav class="nav">
+
+      <nav class="nav" aria-label="Secciones">
+        <div class="nav-group-label">Contenido</div>
         <a class="nav-item active" data-view="library" data-tour="library">
-          <svg class="ni" viewBox="0 0 24 24"><rect x="3" y="4" width="4" height="16" rx="1"/><rect x="9" y="4" width="4" height="16" rx="1"/><rect x="15" y="6" width="6" height="14" rx="1"/></svg>
-          <span>Biblioteca</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="16" rx="1.5"/><path d="M17.5 5.5 20.5 5 22 18.5 19 19z"/></svg>
+          <span class="nav-txt">Biblioteca</span>
         </a>
         <a class="nav-item" data-view="mias">
-          <svg class="ni" viewBox="0 0 24 24"><path d="M5 3 H15 L19 7 V21 H5 Z"/><path d="M8 12 H16 M8 16 H14" stroke="#0c0a09" stroke-width="1.8" fill="none" stroke-linecap="round"/></svg>
-          <span>Mis secuencias</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+          <span class="nav-txt">Mis secuencias</span>
         </a>
         <a class="nav-item" data-view="gallery" data-tour="gallery">
-          <svg class="ni" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.7" fill="#0c0a09"/><path d="M3 17 L8 13 L13 17 L17 14 L21 18 V19 H3 Z" fill="#0c0a09" opacity=".55"/></svg>
-          <span>Galería de imágenes</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="m3 16 4.5-4 3.5 3 4-4.5L21 16"/></svg>
+          <span class="nav-txt">Galería de imágenes</span>
         </a>
-        <a class="nav-item" data-view="desk" data-tour="desk">
-          <svg class="ni" viewBox="0 0 24 24"><path d="M9 21 H15 V20 H9 Z"/><path d="M12 2 C8 2 5.2 5 5.2 9 C5.2 11.5 6.5 13.7 8.5 15 V18 H15.5 V15 C17.5 13.7 18.8 11.5 18.8 9 C18.8 5 16 2 12 2 Z"/></svg>
-          <span>Ideas de stories</span>
+
+        <div class="nav-group-label">Planificación</div>
+        <a class="nav-item" data-view="gestion" data-tour="gestion">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 7 2 2 3-3"/><path d="m3 17 2 2 3-3"/><path d="M12 8h9M12 18h9"/></svg>
+          <span class="nav-txt">Gestión de stories</span>
         </a>
         <a class="nav-item" data-view="calendar" data-tour="calendar">
-          <svg class="ni" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><rect x="3" y="5" width="18" height="5" fill="#0c0a09"/><rect x="6.5" y="3" width="2" height="4" rx="1"/><rect x="15.5" y="3" width="2" height="4" rx="1"/><circle cx="8" cy="14" r="1.1" fill="#0c0a09"/><circle cx="12" cy="14" r="1.1" fill="#0c0a09"/><circle cx="16" cy="14" r="1.1" fill="#0c0a09"/><circle cx="8" cy="18" r="1.1" fill="#0c0a09"/><circle cx="12" cy="18" r="1.1" fill="#0c0a09"/></svg>
-          <span>Calendario de stories</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+          <span class="nav-txt">Calendario de stories</span>
         </a>
-        <a class="nav-item hidden" id="adminTab" href="/admin/">
-          <svg class="ni" viewBox="0 0 24 24"><path d="M12 2 L20 5 V11 C20 16 16.5 20 12 22 C7.5 20 4 16 4 11 V5 Z"/></svg>
-          <span>Panel de ABMedia</span>
-        </a>
+
+        <div class="nav-foot">
+          <a class="nav-item hidden" id="adminTab" href="/admin/">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 20 6v5.5c0 4.6-3.3 8.4-8 9.5-4.7-1.1-8-4.9-8-9.5V6z"/></svg>
+            <span class="nav-txt">Panel de ABMedia</span>
+          </a>
+          <button class="btn primary sm full" id="newSeq" data-tour="new">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            <span class="nav-txt">Nueva secuencia</span>
+          </button>
+        </div>
       </nav>
-      <button class="btn btn-primary full" id="newSeq" data-tour="new">＋ Nueva secuencia</button>
+
       <div class="sidebar-foot">
-        <button class="foot-btn" id="avisosTab" data-view="avisos" title="Notificaciones" aria-label="Notificaciones">
-          <svg viewBox="0 0 24 24"><path d="M12 3.5 C8.9 3.5 6.4 6 6.4 9.1 v3.6 l-1.7 2.6 v1.1 h14.6 v-1.1 l-1.7-2.6 V9.1 C17.6 6 15.1 3.5 12 3.5 Z"/><path d="M10.1 18.2 a1.9 1.9 0 0 0 3.8 0 Z"/></svg>
-          <span class="foot-dot hidden" id="avisosBadge"></span>
-        </button>
-        <button class="foot-btn" id="restartTourBtn" title="Repetir tutorial" aria-label="Repetir tutorial">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5 a8 8 0 1 1 -2.5 -5.6"/><path d="M20 4 v4.5 h-4.5"/></svg>
-        </button>
-        <button class="foot-btn" id="logoutBtn" title="Cerrar sesión" aria-label="Cerrar sesión">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4 h3 a2 2 0 0 1 2 2 v12 a2 2 0 0 1 -2 2 h-3"/><path d="M10 8 L6 12 L10 16 M6 12 H16"/></svg>
-        </button>
-        <span id="userEmail" class="hidden"></span>
+        <div class="side-row">
+          <button class="side-icon" id="avisosTab" data-view="avisos" title="Notificaciones" aria-label="Notificaciones">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+            <i class="foot-dot hidden" id="avisosBadge"></i>
+          </button>
+          <button class="side-icon" id="restartTourBtn" title="Repetir tutorial" aria-label="Repetir tutorial">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5a8 8 0 1 1-2.5-5.6"/><path d="M20 4v4.5h-4.5"/></svg>
+          </button>
+          <button class="side-icon" id="logoutBtn" title="Cerrar sesión" aria-label="Cerrar sesión">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+          </button>
+        </div>
+        <span class="side-mail truncate" id="userEmail"></span>
       </div>
     </aside>
 
     <!-- ===================== CONTENIDO ===================== -->
     <main class="content">
       <!-- ---------- VISTA: BIBLIOTECA ---------- -->
+      <!--
+        Una sola tabla con todo, agrupada por categoría, en vez de los dos
+        pasos de antes (mosaico de categorías → rejilla de tarjetas). Cada
+        secuencia cabe en una línea, así que no hay motivo para esconderla
+        detrás de un clic ni para gastar una tarjeta entera en cada una.
+      -->
       <section id="view-library" class="hidden">
         <header class="topbar">
           <div>
             <h1 id="libTitle">Biblioteca de secuencias</h1>
-            <p id="libSub">Plantillas de ABMedia. Elige una categoría y adapta la que quieras.</p>
+            <p id="libSub">Plantillas de ABMedia, por categoría.</p>
           </div>
-          <button class="foot-btn hidden" id="libBack" title="Volver a categorías" aria-label="Volver a categorías">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5 L8 12 L15 19"/></svg>
-          </button>
         </header>
 
-        <div id="catTiles" class="cat-tiles"></div>
-        <div id="catalogGrid" class="grid hidden"></div>
+        <div class="vm-bar">
+          <div class="segmented inline" id="libCat"></div>
+          <div class="vm-end">
+            <input class="input sm vm-search" id="libBusca" placeholder="Buscar títulos…" />
+          </div>
+        </div>
+
+        <div id="catalogGrid"></div>
       </section>
 
       <!-- ---------- VISTA: MIS SECUENCIAS ---------- -->
@@ -163,28 +190,33 @@
         <div id="galleryGrid" class="gallery-grid"></div>
       </section>
 
-      <!-- ---------- VISTA: IDEAS DE STORIES ---------- -->
-      <section id="view-desk" class="hidden">
+      <!-- ---------- VISTA: GESTIÓN DE STORIES ---------- -->
+      <!--
+        El mismo aparato que «Gestión de vídeos» de Content OS: la lista
+        agrupada por estado, casillas para marcar varias y una barra abajo
+        para hacerles lo mismo a todas de golpe.
+      -->
+      <section id="view-gestion" class="hidden">
         <header class="topbar">
           <div>
-            <h1>Ideas de stories</h1>
-            <p>Anota las ideas que tengas para luego convertirlas en secuencias.</p>
+            <h1>Gestión de stories</h1>
+            <p id="gestionSub">Todas tus secuencias, por estado.</p>
           </div>
         </header>
 
-        <div class="ideas-form">
-          <input type="text" id="ideaInput" placeholder="Escribe una idea (ej: contar cómo organizo mi semana)…" />
-          <select id="ideaCat" class="ideas-cat">
-            <option value="personal">Personal</option>
-            <option value="venta" selected>Venta</option>
-            <option value="puente">Puente</option>
-            <option value="flex">Flex</option>
-            <option value="valor">Valor</option>
-          </select>
-          <button class="btn btn-primary" id="addIdeaBtn">＋ Añadir idea</button>
+        <div class="vm-bar">
+          <div class="segmented inline" id="gestionCat"></div>
+          <div class="vm-end">
+            <input class="input sm vm-search" id="gestionBusca" placeholder="Buscar títulos…" />
+            <div class="segmented inline" id="gestionVista">
+              <button data-vista="list" class="active">Tabla</button>
+              <button data-vista="board">Por estado</button>
+            </div>
+            <button class="btn primary sm" id="gestionNueva">Nueva secuencia</button>
+          </div>
         </div>
 
-        <div id="inboxList" class="ideas-list"></div>
+        <div id="gestionCuerpo"></div>
       </section>
 
       <!-- ---------- VISTA: CALENDARIO ---------- -->
@@ -202,14 +234,14 @@
         </header>
         <div class="cal-toolbar">
           <div class="cal-toolbar-group">
-            <button class="btn btn-ghost sm danger" id="calClearAll">🗑 Borrar todo</button>
-            <button class="btn btn-ghost sm danger" id="calClearMonth">🗑 Borrar este mes</button>
+            <button class="btn sm danger-text" id="calClearAll">🗑 Borrar todo</button>
+            <button class="btn sm danger-text" id="calClearMonth">🗑 Borrar este mes</button>
           </div>
           <div class="cal-toolbar-group">
             <input type="date" id="calRangeFrom" class="status-select" title="Desde" />
             <span class="cal-range-sep">→</span>
             <input type="date" id="calRangeTo" class="status-select" title="Hasta" />
-            <button class="btn btn-ghost sm danger" id="calClearRange">Borrar rango</button>
+            <button class="btn sm danger-text" id="calClearRange">Borrar rango</button>
           </div>
         </div>
         <div class="cal-scroll">
