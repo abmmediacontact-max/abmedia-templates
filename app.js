@@ -2100,6 +2100,16 @@ function sincronizarFechaSecuencia(seqId) {
   guardarSecuencia(seq);
 }
 
+/* Pone una secuencia en un día concreto: una sola entrada en el calendario,
+   la fecha en la secuencia y guardado en la nube. */
+function fijaFecha(seq, dia) {
+  setScheduleForSequence(seq, dia);
+  seq.scheduledDate = dia || undefined;
+  if (dia && estadoDe(seq) === "draft") seq.status = "scheduled";
+  guardarSecuencia(seq);
+  if (state.view === "calendar") renderCalendar();
+}
+
 /* Guarda una secuencia concreta, esté abierta o no. */
 function guardarSecuencia(seq) {
   store.save(state.sequences);
@@ -2339,13 +2349,17 @@ function renderCalendar() {
       const origen = calList(fromMap, from.key);
       const movida = origen.splice(from.idx, 1)[0];
       if (movida == null) return;
+      const sqMovida = secuenciaDeTag(movida);
+      if (sqMovida) {
+        // Una secuencia tuya: su fecha pasa a ser EXACTAMENTE el día donde se
+        // suelta, y desaparece de cualquier otro. Antes se guardaba el primer
+        // día en que apareciera, y un resto viejo en el calendario hacía que
+        // se guardara un día que no era.
+        fijaFecha(sqMovida, key);
+        return;
+      }
       calSet(fromMap, from.key, origen);
       calPush(toMap, key, movida);
-      // Si es una secuencia del usuario, se actualiza su fecha
-      if (typeof movida === "string" && movida.startsWith("seq:")) {
-        const sq = secuenciaDeTag(movida);
-        if (sq) sincronizarFechaSecuencia(sq.id);
-      }
       storeSched.save(state.schedule);
       renderCalendar();
     });
@@ -2548,8 +2562,8 @@ function renderCalPickList() {
       const ym = _calPickKey.slice(0, 7);
       state.schedule[ym] = state.schedule[ym] || {};
       if (x.mine) {
-        calPush(state.schedule[ym], _calPickKey, x.entry);
-        const sq = secuenciaDeTag(x.entry); if (sq) sincronizarFechaSecuencia(sq.id);
+        const sq = secuenciaDeTag(x.entry);
+        if (sq) fijaFecha(sq, _calPickKey);
       } else {
         // Una plantilla del catálogo se convierte en secuencia tuya al ponerla en un día.
         guardarSecuencia(programaPlantilla(x.entry, _calPickKey));
@@ -2885,12 +2899,20 @@ function drawPlaceholder(c, w, h) {
   c.fillText("＋ foto", w / 2, h / 2);
 }
 function drawOverlay(c, type, w, h) {
-  if (type === "none") return;
-  let g;
-  if (type === "bottom") { g = c.createLinearGradient(0, h * 0.4, 0, h); g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,0.78)"); }
-  else if (type === "soft") { c.fillStyle = "rgba(0,0,0,0.28)"; c.fillRect(0, 0, w, h); return; }
-  else { g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, "rgba(0,0,0,0.45)"); g.addColorStop(0.5, "rgba(0,0,0,0.30)"); g.addColorStop(1, "rgba(0,0,0,0.62)"); }
-  c.fillStyle = g; c.fillRect(0, 0, w, h);
+  if (!type || type === "none") return;
+  const lineal = (y0, y1, paradas) => { const g = c.createLinearGradient(0, y0, 0, y1); paradas.forEach(([p, col]) => g.addColorStop(p, col)); c.fillStyle = g; c.fillRect(0, 0, w, h); };
+  if (type === "bottom") return lineal(h * 0.4, h, [[0, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0.78)"]]);
+  if (type === "top") return lineal(0, h * 0.6, [[0, "rgba(0,0,0,0.78)"], [1, "rgba(0,0,0,0)"]]);
+  if (type === "both") return lineal(0, h, [[0, "rgba(0,0,0,0.72)"], [0.35, "rgba(0,0,0,0.05)"], [0.65, "rgba(0,0,0,0.05)"], [1, "rgba(0,0,0,0.72)"]]);
+  if (type === "soft") { c.fillStyle = "rgba(0,0,0,0.28)"; c.fillRect(0, 0, w, h); return; }
+  if (type === "strong") { c.fillStyle = "rgba(0,0,0,0.62)"; c.fillRect(0, 0, w, h); return; }
+  if (type === "light") { c.fillStyle = "rgba(255,255,255,0.32)"; c.fillRect(0, 0, w, h); return; }
+  if (type === "vignette") {
+    const g = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.25, w / 2, h / 2, Math.max(w, h) * 0.72);
+    g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(0,0,0,0.75)");
+    c.fillStyle = g; c.fillRect(0, 0, w, h); return;
+  }
+  lineal(0, h, [[0, "rgba(0,0,0,0.45)"], [0.5, "rgba(0,0,0,0.30)"], [1, "rgba(0,0,0,0.62)"]]);
 }
 function roundRect(c, x, y, w, h, r) {
   r = Math.min(r, w / 2, h / 2);

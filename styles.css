@@ -2073,3 +2073,12 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 }
 .peek-actions .btn.peek-cuadro { flex: none; width: 44px; }
 .peek-actions .btn.peek-editar { flex: 1 1 auto; }
+
+/* Fondo de la foto: más tipos de oscurecido, en rejilla de 3 */
+.fondo-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.fondo-chips .chip-vis { min-width: 0; }
+.chip-vis .prev-top::after { background: linear-gradient(to top, transparent 40%, rgba(0,0,0,0.8) 100%); }
+.chip-vis .prev-both::after { background: linear-gradient(to bottom, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.05) 35%, rgba(0,0,0,0.05) 65%, rgba(0,0,0,0.72) 100%); }
+.chip-vis .prev-vignette::after { background: radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.78) 100%); }
+.chip-vis .prev-strong::after { background: rgba(0,0,0,0.62); }
+.chip-vis .prev-light::after { background: rgba(255,255,255,0.32); }
