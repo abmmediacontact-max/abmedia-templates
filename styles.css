@@ -1827,3 +1827,23 @@ body.con-barra-sel .content { padding-bottom: 88px; }
     backdrop-filter: none; -webkit-backdrop-filter: none;
     background: rgba(10,10,10,.86);
 }
+
+/* ---- Clasificar al subir: filas de alto FIJO ----
+   Dos intentos anteriores (aspect-ratio, y después el alto sacado del ancho
+   con padding) dependían de que el navegador calculara el alto de cada fila
+   a partir de su contenido. En el navegador de pruebas salía bien y en el de
+   Álvaro no: las filas quedaban más bajas que las fotos y se montaban. Con
+   un alto de fila fijo no hay nada que calcular y no se puede solapar en
+   ningún navegador. La foto rellena su hueco recortando lo que sobre. */
+.cs-rejilla {
+    grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+    grid-auto-rows: 196px;
+    align-items: stretch;
+}
+.cs-foto {
+    height: 100%; width: 100%; padding: 0;
+    aspect-ratio: auto; box-sizing: border-box;
+    display: block; position: relative; overflow: hidden;
+}
+.cs-foto:focus-visible { outline: 2px solid rgba(255,255,255,.6); outline-offset: 2px; }
+.cs-lienzo canvas { object-fit: cover; }

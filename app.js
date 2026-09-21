@@ -492,11 +492,11 @@ function clasificaSubida(files) {
         <button class="btn sm tipo-fondo" data-cs="fondo" disabled>Background</button>
       </div>
       <div class="cs-rejilla">${files.map((f, i) => `
-        <button class="cs-foto" data-csi="${i}" title="${escapeAttr(f.name)}">
+        <div class="cs-foto" role="button" tabindex="0" data-csi="${i}" title="${escapeAttr(f.name)}">
           <span class="cs-lienzo"></span>
           <span class="sel-marca"></span>
           <span class="cs-tipo"></span>
-        </button>`).join("")}</div>
+        </div>`).join("")}</div>
       <div class="save-row">
         <button class="btn" data-cs="cancelar">Cancelar</button>
         <button class="btn primary" data-cs="subir" disabled></button>
