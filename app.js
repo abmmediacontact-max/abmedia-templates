@@ -1857,9 +1857,9 @@ const PESOS_LIBRES = { valor: 0.45, personal: 0.35, flex: 0.2 };
    Con 5, la venta cae en viernes y el domingo queda para algo ligero. */
 const DIAS_RITMO = { 2: [3, 6], 3: [1, 3, 6], 5: [1, 2, 4, 5, 0] };
 const NOMBRE_DIAS = {
-  2: "miércoles (engagement o puente) y sábado (venta)",
-  3: "lunes, miércoles (engagement o puente) y sábado (venta)",
-  5: "lunes, martes, jueves (engagement o puente), viernes (venta) y domingo",
+  2: "miércoles (engagement o nutrición) y sábado (venta)",
+  3: "lunes, miércoles (engagement o nutrición) y sábado (venta)",
+  5: "lunes, martes, jueves (engagement o nutrición), viernes (venta) y domingo",
 };
 
 /** El lunes de la semana de una fecha. */
@@ -1901,7 +1901,7 @@ function abrePropuesta() {
   };
   montaDialogo(`
     <div class="modal-head"><h2>Generar propuesta</h2></div>
-    <p class="modal-sub">Cada semana lleva una de venta, con una de engagement o puente el día antes para que llegue a más gente. El resto, valor, personal y flex. Los días que ya tengan algo no se tocan.</p>
+    <p class="modal-sub">Cada semana lleva una de venta, con una de engagement o nutrición el día antes para que llegue a más gente. El resto, valor, personal y flex. Los días que ya tengan algo no se tocan.</p>
     <div class="campo-seg"><span>Para</span>
       <div class="segmented"><button data-per="semana">Esta semana</button><button data-per="mes">Todo el mes</button></div>
     </div>
@@ -3483,7 +3483,7 @@ function montaRico() {
 const TOUR_KEY = "abmedia_tour_done_v3";
 const TOUR_STEPS = [
   { view: "library", sel: '[data-tour="library"]', title: "Biblioteca",
-    body: "Aquí están todas las secuencias preestablecidas y las tuyas. Filtra entre 'Todas' o 'Mis secuencias' y entra en una categoría (Personal, Venta o Puente) para verlas." },
+    body: "Aquí están todas las secuencias preestablecidas y las tuyas. Filtra entre 'Todas' o 'Mis secuencias' y entra en una categoría (Personal, Venta o Nutrición) para verlas." },
   { view: "gallery", sel: '[data-tour="gallery"]', title: "Galería de imágenes",
     body: "Sube tu carpeta de fotos. Se quedan guardadas en tu navegador y se usan como fondo de las stories. Puedes vaciarlas o eliminar imágenes una a una." },
   { view: "gestion", sel: '[data-tour="gestion"]', title: "Gestión de stories",

@@ -26,7 +26,7 @@ const CATEGORIES = {
                               color: "#ff6a1a"
             },
             puente: {
-                              name: "Puente",
+                              name: "Nutrición",
                               icon: '<svg viewBox="0 0 24 24"><path d="M2 17 H22 V19 H2 Z"/><path d="M4 17 V11 C4 8 7 6 12 6 S20 8 20 11 V17 H17 V12 H7 V17 Z"/><path d="M4 13 H20 V14 H4 Z"/></svg>',
                               desc: "El paso intermedio: lead magnets, encuestas y stories que acaban en un enlace o un DM. Úsala para calentar antes de vender y para recoger contactos sin pedir dinero.",
                               color: "#ff6a1a"
