@@ -37,7 +37,7 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { height: 100%; }
 body {
-    font-family: 'Figtree', system-ui, sans-serif;
+    /* La tipografía la fija el re-skin del final del archivo (SF Pro). */
     letter-spacing: -.011em;
     background: var(--bg);
     color: var(--text);
@@ -1139,3 +1139,222 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.02); }
 .aviso:hover .aviso-x { opacity: 1; }
 .aviso-x:hover { color: #ff8f92; border-color: rgba(229,72,77,.4); background: rgba(229,72,77,.10); }
 @media (hover: none) { .aviso-x { opacity: .5; } }
+
+
+/* =========================================================================
+ *  Re-skin APEX HQ · la estética nueva de Content OS
+ *
+ *  Content OS y Sequence Builder compartían look desde el principio: fondo
+ *  oscuro, metal cálido y el naranja sólo como acento. Content OS se rehízo
+ *  al estilo APEX HQ —más plano, más apretado, bordes sólidos en vez de
+ *  translúcidos, el naranja como color de acción— y aquí se replica igual.
+ *
+ *  Va como capa al final en vez de reescribir las 1141 líneas de arriba:
+ *  casi todo el archivo tira de las variables, así que redefinirlas arrastra
+ *  el resto solo. Debajo sólo queda lo que no se puede expresar con un token:
+ *  los degradados metálicos, los radios y las proporciones.
+ * ========================================================================= */
+:root {
+    --bg: #0A0A0A;
+    --bg-2: #0D0D0D;
+    --surface: #111111;
+    --surface-2: #161616;
+    --surface-3: #1F1F1F;
+    --border: #232323;
+    --border-strong: #323232;
+    --text: #F0F0F2;
+    --text-2: #9B9BA4;
+    --text-3: #6A6A73;
+    --accent: #FF5208;
+    --accent-text: #FFFFFF;
+    --accent-soft: rgba(255,82,8,.16);
+    --accent-soft-text: #FF8A3D;
+    --green: #3fb950;  --green-soft: rgba(63,185,80,.15);
+    --red:   #f85149;  --red-soft:   rgba(248,81,73,.15);
+    --amber: #d29922;  --amber-soft: rgba(210,153,34,.15);
+    --r-sm: 8px; --r: 12px; --r-lg: 16px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.6);
+
+    /* Los nombres viejos siguen vivos en todo el archivo de arriba; se
+       reapuntan a la paleta nueva para no tener que tocarlos uno a uno. */
+    --panel:   var(--surface);
+    --panel-2: var(--surface-2);
+    --muted:   var(--text-2);
+    --faint:   var(--text-3);
+    --radius:  var(--r-lg);
+    --shadow:  0 1px 3px rgba(0,0,0,.7), 0 8px 24px rgba(0,0,0,.45);
+    --orange-soft: var(--surface-3);
+}
+
+/*  SF Pro, la del sistema de Apple: no se aloja porque su licencia no deja
+    repartirla, se le pide al sistema igual que hace la propia Apple. De paso
+    Figtree sale de la petición a Google Fonts; las otras cuatro se quedan
+    porque las pinta el generador de stories en el canvas. */
+body {
+    font-family: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont,
+        "Segoe UI Variable", "Segoe UI", system-ui, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    letter-spacing: -.006em;
+}
+
+/*  Titulares planos. El degradado a transparente era de la versión anterior;
+    APEX los quiere en color sólido y con menos peso. */
+.topbar h1, .modal-head h2, .login-box h2, .tour-card h3, .cat-tile h3 {
+    background: none;
+    -webkit-text-fill-color: var(--text);
+    color: var(--text);
+    font-weight: 620;
+    letter-spacing: -.025em;
+}
+.topbar { margin-bottom: 24px; }
+.topbar h1 { font-size: 26px; }
+.topbar p { font-size: 14px; color: var(--text-2); margin-top: 4px; }
+.modal-head h2 { font-size: 17px; }
+.login-box h2 { font-size: 20px; }
+
+/*  La rejilla de fondo desaparece, dentro y en la pantalla de entrada:
+    APEX es fondo liso. */
+.content { padding: 28px 32px 64px; background: var(--bg); }
+.content::before, .login::before { display: none !important; }
+
+/* ------------------------------ Botones -------------------------------- */
+.btn {
+    font-size: 13px; font-weight: 550;
+    padding: 7px 13px; border-radius: var(--r-sm);
+    border: 1px solid var(--border-strong); background: var(--surface);
+    gap: 6px;
+    transition: background .12s, border-color .12s, opacity .12s;
+}
+.btn:hover { background: var(--surface-3); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.sm { padding: 4px 9px; font-size: 12px; border-radius: 7px; }
+.btn.xs  { padding: 3px 8px; font-size: 11.5px; border-radius: 6px; }
+
+/*  El botón principal deja de ser el aro metálico y pasa a ser el naranja de
+    marca, que es lo que hace Content OS: la acción se ve a la primera. */
+.btn-primary {
+    border-radius: var(--r-sm);
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: var(--accent-text);
+    font-weight: 600;
+    box-shadow: none;
+    transform: none;
+}
+.btn-primary:hover { background: var(--accent); opacity: .9; transform: none; }
+.btn-primary::before, .btn-primary::after { display: none !important; }
+
+.btn-ghost { background: var(--surface); border: 1px solid var(--border-strong); color: var(--text); }
+.btn-ghost:hover { background: var(--surface-3); border-color: var(--border-strong); color: var(--text); }
+.btn-ghost:hover .ic, .icon-btn:hover .ic { stroke: var(--text); }
+.btn.danger { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
+.btn.danger:hover:not(:disabled) { filter: brightness(.92); background: var(--red); }
+.icon-btn {
+    width: 30px; height: 30px; border-radius: var(--r-sm);
+    background: transparent; border: 1px solid transparent; color: var(--text-2);
+}
+.icon-btn:hover { background: var(--surface-3); color: var(--text); }
+.icon-btn.sm { width: 26px; height: 26px; }
+.icon-btn.sm.danger:hover { background: var(--red-soft); border-color: var(--red); color: var(--red); }
+
+/* ------------------------------ Campos --------------------------------- */
+.field input, .field textarea, .status-select, #fontSelect, #schedDate {
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    font-size: 13px;
+    padding: 8px 11px;
+}
+.field input:focus, .field textarea:focus { border-color: var(--accent); }
+.field label, .col-label { font-size: 12.5px; color: var(--text-2); }
+
+/* ------------------------------ Tarjetas ------------------------------- */
+.card, .tpl-card, .cat-tile, .modal-box, .login-box, .toast, .aviso, .peek-head {
+    border-radius: var(--r-lg);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+.card:hover, .tpl-card:hover, .cat-tile:hover { border-color: var(--border-strong); }
+.modal-box { background: var(--surface); box-shadow: var(--shadow); padding: 20px 22px; }
+/*  La caja de login llevaba un aro metálico con tres capas de fondo; APEX la
+    quiere como una tarjeta más. */
+.login-box {
+    background-image: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 24px;
+    box-shadow: var(--shadow);
+}
+
+/* ------------------------------ Lateral -------------------------------- */
+/*  Medidas calcadas del lateral de Content OS: 236 px, fondo --surface (un
+    punto por encima del fondo, no igual), y la navegación apretada. */
+.app { grid-template-columns: 236px minmax(0, 1fr); }
+.sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 14px 10px;
+    gap: 12px;
+}
+.brand { padding: 0 4px 2px; }
+.nav-item {
+    font-size: 13.5px; font-weight: 480;
+    border-radius: var(--r-sm); padding: 6px 9px; gap: 9px;
+    color: var(--text-2);
+    transition: background .12s, color .12s;
+}
+.nav-item:hover { background: var(--surface-3); color: var(--text); }
+/*  El activo era un aro cónico naranja sobre degradado. Ahora es lo mismo que
+    en Content OS: una superficie un punto más clara y el texto en blanco. */
+.nav-item.active {
+    background-image: none;
+    background: var(--surface-3);
+    border: 1px solid transparent;
+    padding: 6px 9px;
+    color: var(--text);
+    font-weight: 560;
+    box-shadow: none;
+}
+/*  El pie baja al fondo con su línea, como en Content OS, en vez de quedar
+    pegado al botón de arriba. */
+.sidebar-foot { margin-top: auto; border-top: 1px solid var(--border); padding: 10px 2px 0; gap: 6px; }
+.foot-btn {
+    width: 32px; height: 32px; border-radius: var(--r-sm);
+    background: var(--surface); border: 1px solid var(--border); color: var(--text-2);
+    transition: background .12s, color .12s;
+}
+.foot-btn:hover, .foot-btn.activo { background: var(--surface-3); color: var(--text); }
+.sect-label { font-size: 10.5px; letter-spacing: .08em; color: var(--text-3); font-weight: 620; }
+
+/* --------------------------- Píldoras y estados ------------------------ */
+.pill, .cat-tag, .cat-pill, .frames-badge, .review-badge, .nav-badge {
+    font-size: 11.5px; font-weight: 600;
+    padding: 2px 7px; border-radius: 999px;
+    background: var(--surface-3); color: var(--text-2);
+    /* Sin esto se estiran cuando caen dentro de una tarjeta en columna. */
+    width: fit-content;
+}
+/*  APEX no levanta las tarjetas al pasar por encima: sólo aclara el borde. */
+.tpl-card:hover, .card:hover, .cat-tile:hover { transform: none; }
+.estado-punto.st-published, .aviso-estado.ok { color: var(--green); }
+.estado-punto.st-scheduled { color: var(--amber); }
+.estado-punto.st-draft { color: var(--text-3); }
+.aviso-estado.ko { color: var(--red); }
+
+/*  Filtro de la biblioteca y pie: el control segmentado de APEX. */
+.lib-filter, .chip-row, .foot-btn {
+    border-radius: 9px;
+}
+.lib-filter {
+    gap: 2px; padding: 2px; background: var(--surface-3);
+    border: 0; margin-bottom: 20px;
+}
+.lib-filter button, .chip-vis, .font-chip {
+    font-size: 12.5px; font-weight: 550;
+    border-radius: 7px; padding: 5px 11px;
+    color: var(--text-2); border: 0; background: transparent;
+}
+.lib-filter button.active, .chip-vis.active, .font-chip.active {
+    background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm);
+}
