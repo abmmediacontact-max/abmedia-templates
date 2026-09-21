@@ -437,39 +437,85 @@ function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.fl
  *  Imágenes (subida + persistencia)
  * ========================================================================= */
 /*
- * Antes de guardar nada, qué son: Owner o Background.
+ * Antes de guardar nada, cada foto dice qué es: Owner o Background.
  *
- * Se pregunta aquí, con las fotos recién elegidas, porque es cuando se sabe
- * —tienes la carpeta delante— y porque si no se hace ahora no se hace. Si en
- * la tanda hay de los dos tipos, se elige «Mezcladas» y se marcan luego en la
- * galería. Cerrar sin elegir cancela la subida: no se sube nada a medias.
+ * Se abre con las fotos recién elegidas en miniatura. Se marcan una o varias
+ * tocándolas (o todas de golpe) y se les pone el tipo; cada una enseña el
+ * suyo. No se sube nada hasta que estén todas marcadas: si no, entrarían
+ * sin clasificar y la regla de «abre con una cara» no tendría con qué
+ * trabajar. Cerrar o cancelar no sube nada.
+ *
+ * Devuelve un Map archivo → tipo, o null si se cancela.
  */
-function preguntaTipoSubida(n) {
+function clasificaSubida(files) {
   return new Promise(resolve => {
-    montaDialogo(`
-      <div class="modal-head"><h2>¿Qué son ${n === 1 ? "esta foto" : "estas " + n + " fotos"}?</h2></div>
-      <p class="modal-sub">Owner si sales tú; Background si es un paisaje, el portátil, la mesa… Cada secuencia abre con una tuya, y el frame que pide algo también.</p>
-      <div class="tipo-subida">
-        <button class="tipo-op tipo-owner" data-tsub="owner"><strong>Owner</strong><span>Salgo yo</span></button>
-        <button class="tipo-op tipo-fondo" data-tsub="fondo"><strong>Background</strong><span>Paisaje, objetos, fondo</span></button>
+    const tipos = new Map();           // archivo → "owner" | "fondo"
+    const sel = new Set();             // índices marcados
+    const urls = files.map(f => esHeic(f) ? null : URL.createObjectURL(f));
+    let hecho = false;
+
+    const d = montaDialogo(`
+      <div class="modal-head"><h2>¿Qué es cada foto?</h2></div>
+      <p class="modal-sub">Toca las fotos en las que sales tú y márcalas como Owner; las de paisaje, portátil, mesa… como Background. Cada secuencia abre con una tuya, y el frame que pide algo también.</p>
+      <div class="cs-barra">
+        <button class="btn sm ghost" data-cs="todas">Seleccionar todas</button>
+        <span class="cs-hueco"></span>
+        <button class="btn sm tipo-owner" data-cs="owner" disabled>Owner</button>
+        <button class="btn sm tipo-fondo" data-cs="fondo" disabled>Background</button>
       </div>
+      <div class="cs-rejilla">${files.map((f, i) => `
+        <button class="cs-foto" data-csi="${i}" title="${escapeAttr(f.name)}">
+          ${urls[i] ? `<img src="${urls[i]}" alt="" loading="lazy" decoding="async">` : `<span class="cs-sin">${escapeHtml(f.name)}</span>`}
+          <span class="sel-marca"></span>
+          <span class="cs-tipo"></span>
+        </button>`).join("")}</div>
       <div class="save-row">
-        <button class="btn" data-tsub="cancelar">Cancelar</button>
-        <button class="btn ghost" data-tsub="mezcla">Mezcladas, las marco después</button>
-      </div>`,
-      (d) => {
-        let hecho = false;
-        const fin = (v) => { if (hecho) return; hecho = true; cierraDialogo(); resolve(v); };
-        d.addEventListener("click", e => {
-          const b = e.target.closest("[data-tsub]");
-          if (b) return fin(b.dataset.tsub);
-          if (e.target === d) fin("cancelar");
-        });
-        // Si se cierra por Escape o por fuera, montaDialogo lo quita: se da por cancelado.
-        new MutationObserver((_, obs) => {
-          if (!document.body.contains(d)) { obs.disconnect(); fin("cancelar"); }
-        }).observe(document.body, { childList: true });
+        <button class="btn" data-cs="cancelar">Cancelar</button>
+        <button class="btn primary" data-cs="subir" disabled></button>
+      </div>`, () => {});
+    d.querySelector(".modal-box").classList.add("cs-ventana");
+
+    const fin = (v) => {
+      if (hecho) return; hecho = true;
+      urls.forEach(u => u && URL.revokeObjectURL(u));
+      cierraDialogo(); resolve(v);
+    };
+    const pinta = () => {
+      d.querySelectorAll(".cs-foto").forEach(b => {
+        const i = Number(b.dataset.csi), t = tipos.get(files[i]);
+        b.classList.toggle("sel", sel.has(i));
+        b.querySelector(".sel-marca").classList.toggle("on", sel.has(i));
+        const et = b.querySelector(".cs-tipo");
+        et.className = "cs-tipo" + (t ? " pill tipo-" + t : "");
+        et.textContent = t ? TIPOS_FOTO[t].nombre : "";
       });
+      const faltan = files.filter(f => !tipos.has(f)).length;
+      const todas = sel.size === files.length;
+      d.querySelector('[data-cs="todas"]').textContent = todas ? "Quitar selección" : "Seleccionar todas";
+      d.querySelectorAll('[data-cs="owner"], [data-cs="fondo"]').forEach(b => { b.disabled = !sel.size; });
+      const subir = d.querySelector('[data-cs="subir"]');
+      subir.disabled = faltan > 0;
+      subir.textContent = faltan > 0
+        ? `Faltan ${faltan} por marcar`
+        : `Subir ${files.length} ${files.length === 1 ? "foto" : "fotos"}`;
+    };
+
+    d.addEventListener("click", e => {
+      if (e.target === d) return fin(null);
+      const foto = e.target.closest("[data-csi]");
+      if (foto) { const i = Number(foto.dataset.csi); sel.has(i) ? sel.delete(i) : sel.add(i); return pinta(); }
+      const b = e.target.closest("[data-cs]"); if (!b) return;
+      const que = b.dataset.cs;
+      if (que === "cancelar") return fin(null);
+      if (que === "subir") return fin(tipos);
+      if (que === "todas") { if (sel.size === files.length) sel.clear(); else files.forEach((_, i) => sel.add(i)); return pinta(); }
+      if (que === "owner" || que === "fondo") { sel.forEach(i => tipos.set(files[i], que)); sel.clear(); return pinta(); }
+    });
+    // Escape: montaDialogo quita la ventana; se da por cancelado.
+    new MutationObserver((_, obs) => {
+      if (!document.body.contains(d)) { obs.disconnect(); fin(null); }
+    }).observe(document.body, { childList: true });
+    pinta();
   });
 }
 
@@ -477,9 +523,8 @@ async function loadFiles(fileList) {
   const files = Array.from(fileList)
     .filter(f => f.type.startsWith("image/") || esHeic(f));
   if (!files.length) return;
-  const eleccion = await preguntaTipoSubida(files.length);
-  if (eleccion === "cancelar") return;
-  const tipo = TIPOS_FOTO[eleccion] ? eleccion : null;
+  const tipos = await clasificaSubida(files);
+  if (!tipos) return;
   const nuevas = [];
   let added = 0;
   const fallidas = [];
@@ -489,6 +534,7 @@ async function loadFiles(fileList) {
     const key = imgDB.keyOf(file.name, file.size);
     if (yaEstan.has(key)) return;
     yaEstan.add(key);
+    const tipo = tipos.get(file) || null;
 
     const original = await normalizarImagen(file);
     if (!original) { fallidas.push(file.name); return; }
@@ -508,8 +554,10 @@ async function loadFiles(fileList) {
   if (fallidas.length) {
     aviso("No se han podido abrir: " + fallidas.join(", "), "error");
   }
-  if (tipo && nuevas.length && state.user && window.sbFotos) {
-    sbFotos.sbGuardarTipos(nuevas.map(o => ({ clave: o.key, tipo }))).catch(() => {});
+  // Las marcas a la nube, todas en una petición.
+  const conTipo = nuevas.filter(o => o.tipo);
+  if (conTipo.length && state.user && window.sbFotos) {
+    sbFotos.sbGuardarTipos(conTipo.map(o => ({ clave: o.key, tipo: o.tipo }))).catch(() => {});
   }
   // Dedup defensivo final
   const uniq = new Map(); state.images.forEach(im => uniq.set(im.key, im));
@@ -1098,14 +1146,18 @@ let ultimaMarcada = null;          // para marcar un rango con Mayúsculas
 const ORDEN_ESTADOS = ["draft", "scheduled", "published"];
 const ORDEN_CATEGORIAS = Object.keys(CATEGORIES);
 
-const seleccionadas = () => (state.sequences || []).filter(s => SELECCION.has(s.id));
+/* Ojo con el tipo: los ids de las secuencias son números, pero lo que se lee
+   del HTML (data-sel, data-arrastra…) siempre es texto, y "1" !== 1. En la
+   selección se guarda todo como texto y se compara siempre con String(id). */
+const seleccionadas = () => (state.sequences || []).filter(s => SELECCION.has(String(s.id)));
 
 function limpiaSeleccion() { SELECCION.clear(); ultimaMarcada = null; renderGestion(); }
 
 /** La casilla que se pone en cada fila o tarjeta. */
 function marca(id) {
-  return `<span class="sel-marca${SELECCION.has(id) ? " on" : ""}" data-sel="${id}" role="checkbox"
-    aria-checked="${SELECCION.has(id)}" tabindex="0" title="Seleccionar"></span>`;
+  const k = String(id);
+  return `<span class="sel-marca${SELECCION.has(k) ? " on" : ""}" data-sel="${k}" role="checkbox"
+    aria-checked="${SELECCION.has(k)}" tabindex="0" title="Seleccionar"></span>`;
 }
 
 /**
@@ -1149,7 +1201,7 @@ function secuenciasFiltradas() {
 function filaGestion(seq) {
   const cat = CATEGORIES[seq.category] || CATEGORIES.venta;
   const est = estadoDe(seq);
-  return `<div class="vt-row${SELECCION.has(seq.id) ? " sel" : ""}">
+  return `<div class="vt-row${SELECCION.has(String(seq.id)) ? " sel" : ""}" draggable="true" data-arrastra="${seq.id}">
     <div class="vt-title">${marca(seq.id)}<span class="vt-name"><a class="truncate" href="#" data-abrir="${seq.id}">${escapeHtml(seq.title || "Sin título")}</a></span></div>
     <div class="vt-area"><span class="pill cat-${seq.category}">${escapeHtml(cat.name)}</span></div>
     <div class="vt-stage"><span class="pill ${STATUS[est].cls}">${STATUS[est].label}</span></div>
@@ -1165,7 +1217,7 @@ function tablaGestion(lista) {
     const grupo = lista.filter(s => estadoDe(s) === id)
       .sort((a, b) => String(a.scheduledDate || "9999").localeCompare(String(b.scheduledDate || "9999")));
     const abierto = !plegados.includes(id);
-    return `<div class="vt-group">
+    return `<div class="vt-group" data-soltar-estado="${id}">
       <button class="vt-group-head" aria-expanded="${abierto}" data-plegar="${id}">
         <span class="vt-caret${abierto ? " open" : ""}">›</span>
         <span class="pill ${info.cls}">${info.label}</span>
@@ -1183,11 +1235,11 @@ function tableroGestion(lista) {
   return `<div class="board-frame"><div class="board"><div class="board-phase"><div class="board-phase-cols">
     ${ORDEN_ESTADOS.map(id => {
       const info = STATUS[id], grupo = lista.filter(s => estadoDe(s) === id);
-      return `<div class="board-col">
+      return `<div class="board-col" data-soltar-estado="${id}">
         <div class="board-head"><span class="board-dot ${info.cls}"></span><span class="board-label">${info.label}</span><span class="board-count nums">${grupo.length}</span></div>
         ${grupo.length ? `<div class="board-cards">${grupo.map(seq => {
           const cat = CATEGORIES[seq.category] || CATEGORIES.venta;
-          return `<a class="vcard${SELECCION.has(seq.id) ? " sel" : ""}" href="#" data-abrir="${seq.id}">
+          return `<a class="vcard${SELECCION.has(String(seq.id)) ? " sel" : ""}" href="#" draggable="true" data-arrastra="${seq.id}" data-abrir="${seq.id}">
             ${marca(seq.id)}<span class="small strong">${escapeHtml(seq.title || "Sin título")}</span>
             <div class="row-between"><span class="pill cat-${seq.category}">${escapeHtml(cat.name)}</span><span class="tiny dim nums">${fechaMini(seq.scheduledDate) || seq.slides.length + " frames"}</span></div></a>`;
         }).join("")}</div>` : '<div class="board-empty">Nada aquí</div>'}
@@ -1412,7 +1464,7 @@ function ensureScheduleFor(monthDate) {
 /* ======================================================================= *
  *  PROPUESTA DE CONTENIDO
  *
- *  El ritmo no es una rotación ciega por las cinco categorías: cada una
+ *  El reparto no es una rotación ciega por las cinco categorías: cada una
  *  tiene su papel, y está escrito en su propia descripción del catálogo.
  *
  *    Valor    · «la base de tu semana», la que construye autoridad.
@@ -1421,26 +1473,27 @@ function ensureScheduleFor(monthDate) {
  *    Flex     · pruebas y resultados, justo ANTES de una de venta.
  *    Venta    · poca frecuencia; pierde fuerza si se repite sin motivo.
  *
- *  De ahí salen dos ritmos. En una semana normal no hay venta: manda Valor,
- *  Personal descansa el ojo y Puente recoge. En una semana de lanzamiento el
- *  orden importa —Puente calienta, Flex demuestra y sólo entonces Venta
- *  pide—, así que la venta va siempre al final de la semana, nunca al
- *  principio.
+ *  Cada día elige la categoría que más le falta según su peso —Valor la que
+ *  más, porque es la base—, sin repetir la del día anterior. Una primera
+ *  versión giraba un patrón fijo por semanas y salía un mes con más Puente
+ *  que Valor: las semanas a medias se comían siempre el mismo hueco. Con
+ *  cuotas eso no pasa, empiece el mes el día que empiece.
+ *
+ *  Venta no entra en el reparto normal. En un mes entero una sola semana
+ *  hace de cierre: Puente calienta, Flex demuestra y sólo entonces Venta
+ *  pide. Va en la penúltima semana, para que después quede una normal y el
+ *  mes no acabe vendiendo. En una sola semana no se vende.
  * ======================================================================= */
-const RITMOS = {
-  normal: {
-    2: ["valor", "personal"],
-    3: ["valor", "personal", "puente"],
-    5: ["valor", "personal", "puente", "valor", "personal"],
-  },
-  lanzamiento: {
-    2: ["flex", "venta"],
-    3: ["puente", "flex", "venta"],
-    5: ["valor", "puente", "personal", "flex", "venta"],
-  },
+const PESOS_RITMO = { valor: 0.4, personal: 0.3, puente: 0.2, flex: 0.1 };
+const RITMO_CIERRE = {
+  2: ["flex", "venta"],
+  3: ["puente", "flex", "venta"],
+  5: ["valor", "puente", "personal", "flex", "venta"],
 };
-/* Qué días de la semana se usan según cuántas publicaciones haya. */
-const DIAS_RITMO = { 2: [2, 4], 3: [1, 3, 5], 5: [1, 2, 3, 4, 5] };
+/* Qué días se publica, contando el fin de semana (0 = domingo). Repartidos
+   para que no queden tres seguidas y luego cuatro días sin nada. */
+const DIAS_RITMO = { 2: [3, 6], 3: [1, 3, 6], 5: [1, 2, 4, 5, 0] };
+const NOMBRE_DIAS = { 2: "miércoles y sábado", 3: "lunes, miércoles y sábado", 5: "lunes, martes, jueves, viernes y domingo" };
 
 /** El lunes de la semana de una fecha. */
 function lunesDe(d) {
@@ -1449,101 +1502,130 @@ function lunesDe(d) {
   return x;
 }
 
-function abrePropuesta() {
-  const hoy = new Date();
-  const mes = state.calMonth || new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  pideDato({
-    titulo: "Generar propuesta",
-    sub: "Se reparte una mezcla de contenido por los días. No toca lo que ya tengas puesto.",
-    campos: [
-      { id: "periodo", tipo: "select", etiqueta: "Para", valor: "mes", opciones: [
-        ["semana", "Esta semana"],
-        ["mes", `Todo ${MONTHS_ES[mes.getMonth()]}`],
-      ]},
-      { id: "porSemana", tipo: "select", etiqueta: "Publicaciones por semana", valor: "3",
-        opciones: [["2", "2 · suave"], ["3", "3 · el ritmo recomendado"], ["5", "5 · de lunes a viernes"]] },
-      { id: "tipo", tipo: "select", etiqueta: "Qué semana es", valor: "normal", opciones: [
-        ["normal", "Normal · sin venta"],
-        ["lanzamiento", "De lanzamiento · acaba en venta"],
-      ]},
-      { id: "vaciar", tipo: "select", etiqueta: "Lo que ya haya", valor: "no", opciones: [
-        ["no", "Dejarlo como está"],
-        ["si", "Vaciar el periodo primero"],
-      ]},
-    ],
-    ok: "Generar",
-    alAceptar: (v) => generaPropuesta({
-      periodo: v.periodo,
-      porSemana: Number(v.porSemana),
-      tipo: v.tipo,
-      vaciar: v.vaciar === "si",
-    }),
-  });
+/*
+ * Programa una plantilla del catálogo en un día: la convierte en una
+ * secuencia de verdad, con sus fotos ya elegidas y guardadas.
+ *
+ * Antes el calendario guardaba sólo el nombre de la plantilla. Al abrirla se
+ * hacía una copia nueva cada vez, con fotos al azar: la vista previa, el
+ * editor y la miniatura enseñaban tres cosas distintas, y cambiaban al salir
+ * y volver a entrar. Ahora es una secuencia como las tuyas: sale en Gestión
+ * de stories, se sincroniza entre equipos y sus fotos no se mueven.
+ */
+function programaPlantilla(catId, dia) {
+  const seq = fromCatalog(catId, { status: "scheduled" });
+  seq.scheduledDate = dia;
+  seq.style.scheduledDate = dia;
+  state.sequences.unshift(seq);
+  const ym = dia.slice(0, 7);
+  state.schedule[ym] = state.schedule[ym] || {};
+  calPush(state.schedule[ym], dia, tagDeSecuencia(seq));
+  return seq;
 }
 
-function generaPropuesta({ periodo, porSemana, tipo, vaciar }) {
+/* La ventana: sólo dos preguntas, con botones dentro de la web (un
+   desplegable del sistema se abre fuera, con otra letra y otro aspecto). */
+function abrePropuesta() {
+  let periodo = "mes", porSemana = 3;
+  const pinta = (d) => {
+    d.querySelectorAll("[data-per]").forEach(b => b.classList.toggle("active", b.dataset.per === periodo));
+    d.querySelectorAll("[data-ps]").forEach(b => b.classList.toggle("active", Number(b.dataset.ps) === porSemana));
+    d.querySelector("#propDias").textContent = "Se publica " + NOMBRE_DIAS[porSemana] + ".";
+  };
+  montaDialogo(`
+    <div class="modal-head"><h2>Generar propuesta</h2></div>
+    <p class="modal-sub">Mezcla valor, personal, puente, flex y venta según lo que pide cada una. Los días que ya tengan algo no se tocan.</p>
+    <div class="campo-seg"><span>Para</span>
+      <div class="segmented"><button data-per="semana">Esta semana</button><button data-per="mes">Todo el mes</button></div>
+    </div>
+    <div class="campo-seg"><span>Secuencias por semana</span>
+      <div class="segmented"><button data-ps="2">2</button><button data-ps="3">3</button><button data-ps="5">5</button></div>
+    </div>
+    <p class="tiny dim" id="propDias"></p>
+    <div class="save-row"><button class="btn" data-dlg="no">Cancelar</button><button class="btn primary" data-dlg="si">Generar</button></div>`,
+    (d) => {
+      pinta(d);
+      d.addEventListener("click", e => {
+        const per = e.target.closest("[data-per]"); if (per) { periodo = per.dataset.per; return pinta(d); }
+        const ps = e.target.closest("[data-ps]");   if (ps)  { porSemana = Number(ps.dataset.ps); return pinta(d); }
+      });
+      d.querySelector('[data-dlg="no"]').addEventListener("click", cierraDialogo);
+      d.querySelector('[data-dlg="si"]').addEventListener("click", () => { cierraDialogo(); generaPropuesta({ periodo, porSemana }); });
+    });
+}
+
+function generaPropuesta({ periodo, porSemana }) {
   const mes = state.calMonth || new Date();
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const esteMes = mes.getFullYear() === hoy.getFullYear() && mes.getMonth() === hoy.getMonth();
 
   let desde, hasta;
   if (periodo === "semana") {
-    // La semana que se esté mirando: la de hoy si el mes abierto es el de hoy.
-    const ref = (mes.getFullYear() === hoy.getFullYear() && mes.getMonth() === hoy.getMonth())
-      ? hoy : new Date(mes.getFullYear(), mes.getMonth(), 1);
-    desde = lunesDe(ref);
+    // La semana de hoy si se está mirando este mes; si no, la primera del mes.
+    desde = lunesDe(esteMes ? hoy : new Date(mes.getFullYear(), mes.getMonth(), 1));
     hasta = new Date(desde); hasta.setDate(hasta.getDate() + 6);
   } else {
     desde = new Date(mes.getFullYear(), mes.getMonth(), 1);
     hasta = new Date(mes.getFullYear(), mes.getMonth() + 1, 0);
   }
+  // Nada en el pasado: una story programada para ayer no sirve de nada.
+  if (desde < hoy) desde = new Date(hoy);
 
-  const ritmo = RITMOS[tipo][porSemana];
+  // Las semanas del periodo, por su lunes, para saber cuál hace de cierre.
+  const semanas = [];
+  for (let l = lunesDe(desde); l <= hasta; l.setDate(l.getDate() + 7)) semanas.push(fmtDate(l));
+  const cierre = periodo === "mes" && semanas.length >= 3 ? semanas[semanas.length - 2] : null;
   const dias = DIAS_RITMO[porSemana];
-
-  /* Las plantillas de cada categoría, barajadas una vez. Se van gastando en
-     orden para que no salga la misma dos veces hasta agotarlas. */
-  const bolsa = {};
-  ORDEN_CATEGORIAS.forEach(k => {
-    bolsa[k] = shuffle(CATALOG.filter(t => t.category === k).map(t => t.id));
-  });
-  const coge = (cat) => {
-    const b = bolsa[cat];
-    if (!b || !b.length) return null;
-    const id = b.shift();
-    b.push(id);            // vuelve al final: si hace falta más, se reutiliza
-    return id;
+  const cuenta = {};
+  let total = 0;
+  // La categoría que más se ha quedado por debajo de su peso, sin repetir.
+  const eligeCategoria = (anterior) => {
+    let mejor = null, falta = -Infinity;
+    for (const [c, peso] of Object.entries(PESOS_RITMO)) {
+      if (c === anterior) continue;
+      const f = peso * (total + 1) - (cuenta[c] || 0);
+      if (f > falta + 1e-9) { mejor = c; falta = f; }
+    }
+    return mejor;
   };
 
-  let puestas = 0, ocupados = 0;
+  /* Las plantillas de cada categoría, barajadas una vez y gastadas en orden:
+     no se repite ninguna hasta haber usado todas las de su categoría. */
+  const bolsa = {};
+  ORDEN_CATEGORIAS.forEach(k => { bolsa[k] = shuffle(CATALOG.filter(t => t.category === k).map(t => t.id)); });
+  const coge = (cat) => { const b = bolsa[cat]; if (!b || !b.length) return null; const id = b.shift(); b.push(id); return id; };
+
+  const nuevas = [];
+  let ocupados = 0, anterior = null;
   for (let d = new Date(desde); d <= hasta; d.setDate(d.getDate() + 1)) {
-    const ym = ymKey(d);
-    if (!state.schedule[ym]) state.schedule[ym] = {};
-    const map = state.schedule[ym];
-    const key = fmtDate(d);
-
-    if (vaciar) {
-      // Sólo se quitan las sugerencias del catálogo: lo tuyo no se toca nunca.
-      const propias = calList(map, key).filter(e => typeof e === "string" && e.startsWith("seq:"));
-      calSet(map, key, propias);
-    }
-
     const hueco = dias.indexOf(d.getDay());
     if (hueco < 0) continue;
-    if (calList(map, key).length) { ocupados++; continue; }
-
-    const cat = ritmo[hueco % ritmo.length];
+    const key = fmtDate(d);
+    const ym = key.slice(0, 7);
+    if (calList(state.schedule[ym] || {}, key).length) { ocupados++; continue; }
+    let cat;
+    if (fmtDate(lunesDe(d)) === cierre) {
+      cat = RITMO_CIERRE[porSemana][hueco];
+      // Si el cierre empezaría con lo mismo que el día anterior, abre con Valor.
+      if (cat === anterior && hueco === 0) cat = "valor";
+    } else {
+      cat = eligeCategoria(anterior);
+    }
     const id = coge(cat);
     if (!id) continue;
-    calPush(map, key, id);
-    puestas++;
+    nuevas.push(programaPlantilla(id, key));
+    anterior = cat;
+    if (cat !== "venta") { cuenta[cat] = (cuenta[cat] || 0) + 1; total++; }
   }
 
   storeSched.save(state.schedule);
+  nuevas.forEach(guardarSecuencia);
   renderCalendar();
-  aviso(puestas
-    ? `${puestas} ${puestas === 1 ? "secuencia propuesta" : "secuencias propuestas"}${
-        ocupados ? ` · ${ocupados} ${ocupados === 1 ? "día" : "días"} ya tenían algo` : ""}`
-    : "No quedaba ningún día libre en ese periodo", puestas ? "ok" : "error");
+  if (state.view === "gestion") renderGestion();
+  aviso(nuevas.length
+    ? `${nuevas.length} ${nuevas.length === 1 ? "secuencia programada" : "secuencias programadas"}${
+        ocupados ? ` · ${ocupados} ${ocupados === 1 ? "día ya tenía" : "días ya tenían"} algo` : ""}`
+    : "No quedaba ningún día libre en ese periodo", nuevas.length ? "ok" : "error");
 }
 
 /* ---------------------------------------------------------------------- *
@@ -1682,10 +1764,12 @@ function rebuildScheduleFromSequences() {
   for (const ym in state.schedule) {
     const map = state.schedule[ym];
     for (const d in map) {
-      const limpio = calList(map, d).filter(e => {
-        if (typeof e === "string" && e.startsWith("seq:")) return !!secuenciaDeTag(e);
-        return CATALOG.some(c => c.id === e);
-      });
+      /* Sólo quedan las secuencias de verdad. Las entradas que eran el nombre
+         de una plantilla suelta (de antes, o del relleno automático que había)
+         se quitan: no tenían fotos guardadas y el calendario tiene que
+         arrancar enseñando sólo lo que es tuyo. */
+      const limpio = calList(map, d).filter(e =>
+        typeof e === "string" && e.startsWith("seq:") && !!secuenciaDeTag(e));
       calSet(map, d, limpio);
     }
   }
@@ -1753,7 +1837,7 @@ function renderCalendar() {
       seqEl.className = "seq" + (r.isUserSeq ? " mine" : "");
       seqEl.setAttribute("draggable", "true");
       seqEl.innerHTML =
-        `<span class="ct cat-${escapeAttr(r.category || "venta")}">${cat.name}${r.isUserSeq ? " · tuya" : ""}</span>` +
+        `<span class="ct cat-${escapeAttr(r.category || "venta")}">${cat.name}</span>` +
         `<span class="sq-t">${escapeHtml(r.title)}</span>` +
         `<div class="sq-minis"></div>` +
         `<button class="sq-x" title="Quitar de este día">✕</button>`;
@@ -1767,8 +1851,9 @@ function renderCalendar() {
       const minis = seqEl.querySelector(".sq-minis");
       const diapos = slidesDeEntrada(r);
       const estilo = estiloDeEntrada(r);
+      const dprM = Math.min(3, window.devicePixelRatio || 1);
       diapos.slice(0, 4).forEach(sl => {
-        const cv = makeCardCanvas(sl, estilo, 48, 68);
+        const cv = makeCardCanvas(sl, estilo, Math.round(26 * dprM), Math.round(46 * dprM));
         cv.className = "sq-mini";
         minis.appendChild(cv);
       });
@@ -1854,7 +1939,7 @@ function openSeqPeek(entry, key, idx) {
   const cat = CATEGORIES[r.category] || CATEGORIES.venta;
   $("#seqPeekTitle").textContent = r.title;
   const etiqueta = $("#seqPeekCat");
-  etiqueta.textContent = cat.name + (r.isUserSeq ? " · tuya" : " · del catálogo");
+  etiqueta.textContent = cat.name;
   etiqueta.className = "peek-cat pill cat-" + (r.category || "venta");
 
   const [y, mo, d] = key.split("-");
@@ -1867,24 +1952,64 @@ function openSeqPeek(entry, key, idx) {
     ? state.sequences.find(x => x.id === r.ref)
     : fromCatalog(r.ref, { id: -1 });
 
-  const cont = $("#seqPeekFrames");
-  cont.innerHTML = "";
-  (seq ? seq.slides : []).forEach((slide, i) => {
-    const fr = document.createElement("div");
-    fr.className = "peek-frame";
-    fr.appendChild(makeCardCanvas(slide, seq.style, 150, 267));
-    const n = document.createElement("span");
-    n.className = "peek-n";
-    n.textContent = `Frame ${i + 1}`;
-    fr.appendChild(n);
-    cont.appendChild(fr);
-  });
-  if (!cont.children.length) {
-    cont.innerHTML = `<p class="empty">Esta secuencia todavía no tiene frames.</p>`;
-  }
-
+  _peekSeq = seq;
+  _peekFrame = 0;
+  pintaVisor();
   $("#seqPeekModal").classList.remove("hidden");
 }
+
+/*
+ * El visor de la vista previa: un frame grande y la tira debajo.
+ *
+ * Antes enseñaba todos los frames en fila a 150 px de ancho. El texto de una
+ * story se dibuja a escala del ancho, así que lo que en la story mide 44 px
+ * se quedaba en unos 6: no se leía, y encima salía borroso porque se pintaba
+ * a 1x en pantallas que son 2x. Ahora el frame grande ocupa lo que cabe en
+ * la ventana y se pinta a la resolución real de la pantalla.
+ */
+let _peekSeq = null, _peekFrame = 0;
+function pintaVisor() {
+  const cont = $("#seqPeekFrames");
+  const seq = _peekSeq;
+  if (!seq || !seq.slides.length) {
+    cont.innerHTML = `<p class="empty">Esta secuencia todavía no tiene frames.</p>`;
+    return;
+  }
+  const n = seq.slides.length;
+  _peekFrame = Math.max(0, Math.min(n - 1, _peekFrame));
+  const alto = Math.round(Math.min(window.innerHeight * 0.62, 600));
+  const ancho = Math.round(alto * 9 / 16);
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+
+  cont.innerHTML = `
+    <div class="peek-visor">
+      <button class="peek-flecha" data-pk="-1" aria-label="Frame anterior" ${_peekFrame === 0 ? "disabled" : ""}>‹</button>
+      <div class="peek-grande" style="width:${ancho}px;height:${alto}px"></div>
+      <button class="peek-flecha" data-pk="1" aria-label="Frame siguiente" ${_peekFrame === n - 1 ? "disabled" : ""}>›</button>
+    </div>
+    <div class="peek-pie"><span class="tiny dim">Frame ${_peekFrame + 1} de ${n}</span></div>
+    <div class="peek-tira"></div>`;
+
+  const cv = document.createElement("canvas");
+  cv.width = Math.round(ancho * dpr); cv.height = Math.round(alto * dpr);
+  cv.style.width = ancho + "px"; cv.style.height = alto + "px";
+  drawSlide(cv.getContext("2d"), seq.slides[_peekFrame], cv.width, cv.height, seq.style);
+  cont.querySelector(".peek-grande").appendChild(cv);
+
+  const tira = cont.querySelector(".peek-tira");
+  seq.slides.forEach((sl, i) => {
+    const b = document.createElement("button");
+    b.className = "peek-mini" + (i === _peekFrame ? " activo" : "");
+    b.setAttribute("aria-label", "Frame " + (i + 1));
+    b.dataset.pkIr = i;
+    const m = document.createElement("canvas");
+    m.width = Math.round(46 * dpr); m.height = Math.round(82 * dpr);
+    drawSlide(m.getContext("2d"), sl, m.width, m.height, seq.style);
+    b.appendChild(m);
+    tira.appendChild(b);
+  });
+}
+function muevePeek(delta) { _peekFrame += delta; pintaVisor(); }
 
 function closeSeqPeek() {
   $("#seqPeekModal").classList.add("hidden");
@@ -1976,8 +2101,13 @@ function renderCalPickList() {
     row.addEventListener("click", () => {
       const ym = _calPickKey.slice(0, 7);
       state.schedule[ym] = state.schedule[ym] || {};
-      calPush(state.schedule[ym], _calPickKey, x.entry);
-      if (x.mine) { const sq = secuenciaDeTag(x.entry); if (sq) sincronizarFechaSecuencia(sq.id); }
+      if (x.mine) {
+        calPush(state.schedule[ym], _calPickKey, x.entry);
+        const sq = secuenciaDeTag(x.entry); if (sq) sincronizarFechaSecuencia(sq.id);
+      } else {
+        // Una plantilla del catálogo se convierte en secuencia tuya al ponerla en un día.
+        guardarSecuencia(programaPlantilla(x.entry, _calPickKey));
+      }
       storeSched.save(state.schedule);
       closeCalPicker();
       renderCalendar();
@@ -2738,6 +2868,15 @@ function bind() {
   // Elegir qué secuencia se añade a un día concreto
   $("#seqPeekClose").addEventListener("click", closeSeqPeek);
   $("#seqPeekOpen").addEventListener("click", peekOpenInEditor);
+  $("#seqPeekFrames").addEventListener("click", e => {
+    const f = e.target.closest("[data-pk]"); if (f) return muevePeek(Number(f.dataset.pk));
+    const m = e.target.closest("[data-pk-ir]"); if (m) { _peekFrame = Number(m.dataset.pkIr); pintaVisor(); }
+  });
+  document.addEventListener("keydown", e => {
+    if ($("#seqPeekModal").classList.contains("hidden")) return;
+    if (e.key === "ArrowLeft") muevePeek(-1);
+    if (e.key === "ArrowRight") muevePeek(1);
+  });
   $("#seqPeekRemove").addEventListener("click", peekRemoveFromDay);
   $("#seqPeekModal").addEventListener("click", e => {
     if (e.target.id === "seqPeekModal") closeSeqPeek();
@@ -2879,7 +3018,49 @@ function bind() {
       return renderGestion();
     }
     const abrir = e.target.closest("[data-abrir]");
-    if (abrir) { e.preventDefault(); openEditor(abrir.dataset.abrir); }
+    if (abrir) {
+      e.preventDefault();
+      const q = state.sequences.find(x => String(x.id) === abrir.dataset.abrir);
+      if (q) openEditor(q.id);
+    }
+  });
+
+  /* Arrastrar una secuencia a otro estado. Si la que coges está marcada, se
+     mueven todas las marcadas: es lo que uno espera al arrastrar un grupo. */
+  const cuerpoG = $("#gestionCuerpo");
+  let arrastrando = null;
+  cuerpoG.addEventListener("dragstart", e => {
+    const el = e.target.closest("[data-arrastra]"); if (!el) return;
+    const id = el.dataset.arrastra;
+    arrastrando = SELECCION.has(id) ? [...SELECCION] : [id];
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", id); } catch {}
+    setTimeout(() => el.classList.add("arrastrando"), 0);
+  });
+  cuerpoG.addEventListener("dragend", e => {
+    e.target.closest("[data-arrastra]")?.classList.remove("arrastrando");
+    cuerpoG.querySelectorAll(".soltar-aqui").forEach(x => x.classList.remove("soltar-aqui"));
+    arrastrando = null;
+  });
+  cuerpoG.addEventListener("dragover", e => {
+    const zona = e.target.closest("[data-soltar-estado]"); if (!zona || !arrastrando) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = "move";
+    cuerpoG.querySelectorAll(".soltar-aqui").forEach(x => { if (x !== zona) x.classList.remove("soltar-aqui"); });
+    zona.classList.add("soltar-aqui");
+  });
+  cuerpoG.addEventListener("dragleave", e => {
+    const zona = e.target.closest("[data-soltar-estado]");
+    if (zona && !zona.contains(e.relatedTarget)) zona.classList.remove("soltar-aqui");
+  });
+  cuerpoG.addEventListener("drop", e => {
+    const zona = e.target.closest("[data-soltar-estado]"); if (!zona || !arrastrando) return;
+    e.preventDefault();
+    const estado = zona.dataset.soltarEstado;
+    const seqs = state.sequences.filter(x => arrastrando.includes(String(x.id)) && estadoDe(x) !== estado);
+    arrastrando = null;
+    if (!seqs.length) return renderGestion();
+    guardaEnLote(seqs, x => { x.status = estado; });
+    aviso(`${seqs.length === 1 ? "Movida" : seqs.length + " movidas"} a ${STATUS[estado].label}`);
   });
 
   /* La casilla no abre la secuencia: se queda el clic. En captura, porque el

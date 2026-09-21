@@ -1628,7 +1628,7 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .cal-cell .seq { padding: 4px 20px 5px 6px; }
 .sq-minis { display: flex; flex-wrap: wrap; gap: 3px; align-items: flex-end; margin-top: 4px; }
 .sq-mini {
-    width: 24px; height: 34px; display: block; flex: 0 0 auto;
+    width: 26px; height: 46px; display: block; flex: 0 0 auto;   /* 9:16, como una story */
     border-radius: 4px; overflow: hidden;
     background: var(--surface-3); border: 1px solid var(--border);
 }
@@ -1705,3 +1705,66 @@ body.con-barra-sel .content { padding-bottom: 88px; }
     content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none;
     border: 2px solid var(--accent); border-radius: inherit;
 }
+
+/* ---- Barra del calendario: propuesta a la izquierda, mes a la derecha ---- */
+.cal-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cal-toolbar .cal-nav { margin-left: auto; }
+.cal-toolbar .cal-label { min-width: 140px; text-align: center; text-transform: capitalize; }
+
+/* ---- Vista previa: un frame grande que se lee, y la tira debajo ---- */
+.peek-frames { display: block; padding: 14px 0 6px; overflow: visible; }
+.peek-visor { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.peek-grande { border-radius: 14px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--border); flex: none; }
+.peek-grande canvas { display: block; }
+.peek-flecha {
+    width: 36px; height: 36px; border-radius: 50%; flex: none;
+    border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text);
+    font: inherit; font-size: 20px; line-height: 1; cursor: pointer;
+}
+.peek-flecha:hover:not(:disabled) { background: var(--surface-3); }
+.peek-flecha:disabled { opacity: .3; cursor: default; }
+.peek-pie { text-align: center; padding: 8px 0 10px; }
+.peek-tira { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.peek-mini {
+    padding: 0; border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+    background: var(--surface-2); cursor: pointer; opacity: .6; transition: opacity .12s, border-color .12s;
+}
+.peek-mini canvas { width: 46px; height: 82px; display: block; }
+.peek-mini:hover { opacity: 1; }
+.peek-mini.activo { opacity: 1; border-color: var(--accent); }
+
+/* ---- Ventana de propuesta: botones en vez de desplegables ---- */
+.campo-seg { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 4px; }
+.campo-seg > span { font-size: 12.5px; color: var(--text-2); }
+.campo-seg .segmented { align-self: flex-start; }
+.campo-seg .segmented button { padding: 6px 14px; font-size: 13px; }
+
+/* ---- Arrastrar entre estados ---- */
+.vt-row[draggable="true"], .vcard[draggable="true"] { cursor: grab; }
+.arrastrando { opacity: .4; }
+.vt-group.soltar-aqui, .board-col.soltar-aqui { box-shadow: 0 0 0 2px var(--accent); border-radius: var(--r-lg); }
+.board-col.soltar-aqui .board-cards, .board-col.soltar-aqui .board-empty { background: var(--accent-soft); border-radius: var(--r-sm); }
+
+/* ---- Clasificar las fotos antes de subirlas ---- */
+.modal-box.cs-ventana { width: min(760px, 94vw); max-height: 88vh; display: flex; flex-direction: column; }
+.cs-barra { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; }
+.cs-hueco { flex: 1; }
+.cs-rejilla {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px;
+    overflow-y: auto; min-height: 120px; padding: 2px; margin-bottom: 12px;
+}
+.cs-foto {
+    position: relative; aspect-ratio: 9 / 16; padding: 0; overflow: hidden; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2);
+}
+.cs-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cs-sin { display: grid; place-items: center; height: 100%; padding: 6px; font-size: 10.5px; color: var(--text-3); word-break: break-all; }
+.cs-foto .sel-marca { position: absolute; top: 6px; left: 6px; opacity: 1; z-index: 2; }
+.cs-foto.sel::after { content: ""; position: absolute; inset: 0; border: 2px solid var(--accent); border-radius: inherit; pointer-events: none; }
+.cs-tipo { position: absolute; left: 6px; bottom: 6px; z-index: 2; }
+.cs-tipo.pill { background: rgba(10,10,10,.8); backdrop-filter: blur(4px); }
+.btn.tipo-owner:disabled, .btn.tipo-fondo:disabled { opacity: .45; }
+/* Todo lo del calendario es ya una secuencia tuya: la misma tarjeta neutra
+   para todas, como las etiquetas del calendario de Content OS. */
+.cal-cell .seq.mine { background: var(--surface-3); color: var(--text-2); }
+.cal-cell .seq.mine:hover { color: var(--text); border-color: var(--border-strong); }

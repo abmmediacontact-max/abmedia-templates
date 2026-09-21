@@ -11,7 +11,7 @@
   <!-- Estas cuatro las pinta el generador de stories en el canvas; la
      interfaz ya no pide ninguna: usa SF Pro del sistema. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=44" />
+  <link rel="stylesheet" href="styles.css?v=46" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -234,27 +234,24 @@
         <header class="topbar">
           <div>
             <h1>Calendario de stories</h1>
-            <p>Empieza vacío. Pide una propuesta o arrastra aquí tus secuencias.</p>
-          </div>
-          <div class="cal-nav">
-            <button class="icon-btn" id="calPrev">←</button>
-            <span id="calLabel" class="cal-label">—</span>
-            <button class="icon-btn" id="calNext">→</button>
           </div>
         </header>
         <!--
-          El calendario arranca vacío. Antes se rellenaba solo con tres
-          sugerencias por semana en cuanto abrías un mes, y eso mezclaba lo
-          que tú habías decidido con lo que se había inventado el programa:
-          no había forma de saber qué era tuyo. Ahora no aparece nada hasta
-          que pides una propuesta, y lo que salga es tuyo desde ese momento.
+          Arranca vacío: sólo salen las secuencias que tienen fecha. Lo que
+          genera «Generar propuesta» son secuencias de verdad, con sus fotos
+          guardadas, así que se ven igual aquí, en la vista previa y en el
+          editor, y no cambian al entrar y salir.
         -->
         <div class="cal-toolbar">
           <button class="btn primary sm" id="calPropuesta">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>
             Generar propuesta
           </button>
-          <span class="tiny dim">Te reparte una mezcla de contenido por la semana o el mes.</span>
+          <div class="cal-nav">
+            <button class="icon-btn" id="calPrev" aria-label="Mes anterior">←</button>
+            <span id="calLabel" class="cal-label">—</span>
+            <button class="icon-btn" id="calNext" aria-label="Mes siguiente">→</button>
+          </div>
         </div>
         <div class="cal-scroll">
           <div class="cal-grid" id="calGrid"></div>
@@ -558,9 +555,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase.js?v=44"></script>
-  <script src="templates.js?v=44"></script>
-  <script src="catalog.js?v=44"></script>
-  <script src="app.js?v=44"></script>
+  <script src="supabase.js?v=46"></script>
+  <script src="templates.js?v=46"></script>
+  <script src="catalog.js?v=46"></script>
+  <script src="app.js?v=46"></script>
 </body>
 </html>
