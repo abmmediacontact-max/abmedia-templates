@@ -11,7 +11,7 @@
   <!-- Estas cuatro las pinta el generador de stories en el canvas; la
      interfaz ya no pide ninguna: usa SF Pro del sistema. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=62" />
+  <link rel="stylesheet" href="styles.css?v=63" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -447,7 +447,12 @@
               <svg class="ic" viewBox="0 0 24 24"><path d="M5 21 L12 4 L19 21 M8 14 H16"/></svg>
               Acento
             </button>
-            <span class="mark-hint">Selecciona o pon el cursor en una palabra</span>
+            <span class="seg-caso" role="group" aria-label="Mayúsculas y minúsculas">
+                <button type="button" data-caso="" title="Tal cual">Aa</button>
+                <button type="button" data-caso="upper" title="Todo en mayúsculas">AA</button>
+                <button type="button" data-caso="lower" title="Todo en minúsculas">aa</button>
+              </span>
+              <span class="mark-hint">Selecciona o pon el cursor en una palabra</span>
           </div>
           </div>
 
@@ -577,9 +582,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase.js?v=62"></script>
-  <script src="templates.js?v=62"></script>
-  <script src="catalog.js?v=62"></script>
-  <script src="app.js?v=62"></script>
+  <script src="supabase.js?v=63"></script>
+  <script src="templates.js?v=63"></script>
+  <script src="catalog.js?v=63"></script>
+  <script src="app.js?v=63"></script>
 </body>
 </html>

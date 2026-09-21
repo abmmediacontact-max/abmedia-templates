@@ -58,7 +58,7 @@ async function sbUpsertSequence(seq) {
     style: seq.style,
     // bgKey: qué foto lleva cada frame. Sin ella, en cada recarga se volvían
     // a repartir las fotos al azar y se perdía lo elegido.
-    slides: seq.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null, sticker: sl.sticker || null }))
+    slides: seq.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, caso: sl.caso || null, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null, sticker: sl.sticker || null }))
   };
   if (!row.id) delete row.id;
   const { data, error } = await sb.from("sequences").upsert(row).select().single();

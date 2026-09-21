@@ -287,7 +287,7 @@ const store = {
     const data = seqs.map(s => ({
       id: s.id, title: s.title, category: s.category, status: s.status,
       submitted: !!s.submitted, style: s.style,
-      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null, sticker: sl.sticker || null }))
+      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, caso: sl.caso || null, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null, sticker: sl.sticker || null }))
     }));
     try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch {}
   }
@@ -372,6 +372,7 @@ function makeSlide(s) {
     overlay: s.overlay || "bottom",
     pos: s.pos || { x: 0.05, y: 0.085 },
     align: s.align || "left",
+    caso: s.caso || null,     // "upper" / "lower" / null = tal cual
     bg: s.bg ? { ...s.bg } : { zoom: 1, ox: 0, oy: 0 },
     bgKey: s.bgKey || null,   // qué foto lleva: la clave, que no cambia
     sticker: s.sticker ? JSON.parse(JSON.stringify(s.sticker)) : null,
@@ -2565,7 +2566,7 @@ function updateColorDots() {
 function syncFontChips() {
   const btn = $("#fuenteCampo"); if (!btn || !state.active) return;
   const f = fuenteDe(state.active.style.font) || FONTS[0];
-  btn.innerHTML = `<span style="font-family:${escapeAttr(f.value)};font-weight:${f.w}">${escapeHtml(f.name)}</span>` + SVG_CHEV;
+  btn.innerHTML = `<span style="font-family:${escapeAttr(muestraDe(f))};font-weight:${f.w}">${escapeHtml(f.name)}</span>` + SVG_CHEV;
 }
 function syncOverlayChips() {
   const cur = curSlide().overlay;
@@ -2614,6 +2615,8 @@ function renderEditPanel() {
     pintaBotonesMarca();
   }
   $("#alignChips")?.querySelectorAll("[data-align]").forEach(b => b.classList.toggle("on", b.dataset.align === (slide.align || "left")));
+  $("#bodyRico").style.textTransform = slide.caso === "upper" ? "uppercase" : slide.caso === "lower" ? "lowercase" : "";
+  document.querySelectorAll("[data-caso]").forEach(b => b.classList.toggle("on", b.dataset.caso === (slide.caso || "")));
   syncOverlayChips();
   $("#bgZoom").value = slide.bg.zoom;
   $("#insetControls").classList.toggle("hidden", !slide.inset);
@@ -2881,8 +2884,10 @@ function segsToWords(segs) {
   return words;
 }
 const TXT = { left: 0.05, right: 0.95 };
+// Mayúsculas / minúsculas: se aplica al dibujar; el texto guardado no cambia
+const conCaso = (t, caso) => caso === "upper" ? t.toLocaleUpperCase("es") : caso === "lower" ? t.toLocaleLowerCase("es") : t;
 function layoutBody(c, slide, style, scale, w, h) {
-  const text = (slide.body || "").trim();
+  const text = conCaso((slide.body || "").trim(), slide.caso);
   if (!text) return null;
   const size = 46 * style.size * scale;
   const lh = size * 1.34;
@@ -3047,7 +3052,7 @@ function setupDrag() {
 /* ---- Frames ---- */
 function duplicateFrame() {
   const s = curSlide();
-  const copy = makeSlide({ body: s.body, pos: { ...s.pos }, align: s.align, overlay: s.overlay, bg: { ...s.bg } });
+  const copy = makeSlide({ body: s.body, pos: { ...s.pos }, align: s.align, caso: s.caso, overlay: s.overlay, bg: { ...s.bg } });
   copy.bgIndex = s.bgIndex; copy.bgKey = s.bgKey; copy.inset = s.inset ? { ...s.inset } : null;
   copy.sticker = s.sticker ? JSON.parse(JSON.stringify(s.sticker)) : null;
   state.active.slides.splice(state.current + 1, 0, copy);
@@ -3096,7 +3101,7 @@ async function enviarARevision() {
     title: s.title || "Secuencia",
     category: s.category,
     style: JSON.parse(JSON.stringify(s.style)),
-    slides: s.slides.map(sl => ({ body: sl.body, pos: { ...sl.pos }, align: sl.align, overlay: sl.overlay, sticker: sl.sticker || null })),
+    slides: s.slides.map(sl => ({ body: sl.body, pos: { ...sl.pos }, align: sl.align, caso: sl.caso || null, overlay: sl.overlay, sticker: sl.sticker || null })),
     submitted: true,
     is_public: false,
     share_ok: compartir,
@@ -3662,6 +3667,13 @@ function bind() {
   $("#bgZoom").addEventListener("input", e => { curSlide().bg.zoom = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
   $("#bgZoom").addEventListener("change", persist);
   montaRico();
+  document.querySelectorAll("[data-caso]").forEach(b => {
+    b.addEventListener("mousedown", e => e.preventDefault());
+    b.addEventListener("click", () => {
+      curSlide().caso = b.dataset.caso || null;
+      renderEditPanel(); drawEditor(); refreshActiveThumb(); persist();
+    });
+  });
   $("#alignChips").addEventListener("click", e => {
     const b = e.target.closest("[data-align]"); if (!b) return;
     const sl = curSlide();
@@ -3882,8 +3894,19 @@ function bind() {
  */
 const familiaDe = f => f.fam || (f.value.match(/^\s*"([^"]+)"/) || [])[1] || "";
 const fuenteDe = value => FONTS.find(f => f.value === value);
+const muestraDe = f => f.google ? `"${familiaDe(f)} muestra", ${f.value}` : f.value;
 const _fuentePedida = new Set(), _fuenteLista = new Set();
+const _fuenteEnCamino = new Map();
 function cargaFuente(value) {
+  // Cada dibujo pregunta por su fuente: si ya está en camino se devuelve la
+  // misma espera, en vez de abrir otra por cada miniatura (eso atascaba).
+  if (_fuenteEnCamino.has(value)) return _fuenteEnCamino.get(value);
+  const p = cargaFuenteYa(value);
+  _fuenteEnCamino.set(value, p);
+  p.then(ok => { if (!ok) _fuenteEnCamino.delete(value); });
+  return p;
+}
+function cargaFuenteYa(value) {
   const f = fuenteDe(value);
   if (!f || !f.google || _fuenteLista.has(value)) return Promise.resolve(false);
   const fam = familiaDe(f);
@@ -3896,7 +3919,9 @@ function cargaFuente(value) {
   }
   return new Promise(res => {
     let intentos = 0;
-    const mira = () => document.fonts.load(`${f.w} 40px "${fam}"`).then(r => {
+    // Se pide con letras de verdad (incluidas tildes y ñ) para que carguen
+    // los trozos de la fuente que las contienen, no sólo el primero.
+    const mira = () => document.fonts.load(`${f.w} 40px "${fam}"`, "AaÁáÉéÍíÓóÚúÑñÜü¿?¡!0123456789 abcdefghijklmnopqrstuvwxyz").then(r => {
       if (r.length) { _fuenteLista.add(value); res(true); }
       else if (++intentos < 20) setTimeout(mira, 250); else res(false);
     }).catch(() => res(false));
@@ -3907,6 +3932,7 @@ let _repintarFuentes = null;
 function aseguraFuente(style) {
   const f = style && fuenteDe(style.font);
   if (!f || !f.google || _fuenteLista.has(f.value)) return;
+  if (_fuenteEnCamino.has(f.value)) return;
   cargaFuente(f.value).then(ok => {
     if (!ok) return;
     clearTimeout(_repintarFuentes);
@@ -3924,10 +3950,17 @@ function buildFontChips() {
   const btn = $("#fuenteCampo"); if (!btn) return;
   const google = FONTS.filter(f => f.google);
   const letras = [...new Set(google.map(f => f.name).join(""))].join("");
-  const l = document.createElement("link");
-  l.rel = "stylesheet";
-  l.href = "https://fonts.googleapis.com/css2?" + google.map(f => "family=" + encodeURIComponent(familiaDe(f)).replace(/%20/g, "+") + ":wght@" + f.w).join("&") + "&text=" + encodeURIComponent(letras) + "&display=swap";
-  document.head.appendChild(l);
+  /* La muestra (sólo las letras del nombre) se registra con OTRO nombre de
+     familia: «X muestra». Si llevara el nombre de verdad, el navegador la daba
+     por cargada y el lienzo pintaba con ella, y las letras que no están en el
+     nombre salían en otra fuente o no se actualizaban. */
+  const url = "https://fonts.googleapis.com/css2?" + google.map(f => "family=" + encodeURIComponent(familiaDe(f)).replace(/%20/g, "+") + ":wght@" + f.w).join("&") + "&text=" + encodeURIComponent(letras) + "&display=swap";
+  fetch(url).then(r => r.ok ? r.text() : "").then(css => {
+    if (!css) return;
+    const st = document.createElement("style");
+    st.textContent = css.replace(/font-family:\s*'([^']+)'/g, (m, fam) => `font-family: '${fam} muestra'`);
+    document.head.appendChild(st);
+  }).catch(() => {});
   btn.addEventListener("click", e => { e.stopPropagation(); abreListaFuentes(btn); });
 }
 function abreListaFuentes(btn) {
@@ -3940,7 +3973,7 @@ function abreListaFuentes(btn) {
   FONTS.forEach((f, i) => {
     if (f.grupo !== grupo) { grupo = f.grupo; html += `<span class="ds-grupo">${grupo}</span>`; }
     const on = f.value === actual;
-    html += `<button type="button" class="ds-op${on ? " activo" : ""}" data-fuente="${i}"><span style="font-family:${escapeAttr(f.value)};font-weight:${f.w};font-size:15px">${escapeHtml(f.name)}</span>${on ? SVG_CHECK : ""}</button>`;
+    html += `<button type="button" class="ds-op${on ? " activo" : ""}" data-fuente="${i}"><span style="font-family:${escapeAttr(muestraDe(f))};font-weight:${f.w};font-size:15px">${escapeHtml(f.name)}</span>${on ? SVG_CHECK : ""}</button>`;
   });
   const lista = document.createElement("div");
   lista.className = "ds-lista ds-fuentes";
