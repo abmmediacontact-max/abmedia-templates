@@ -319,7 +319,52 @@ const persist = () => { persistAhora().catch(() => {}); };
 /* =========================================================================
  *  Construcción de secuencias
  * ========================================================================= */
-function newStyle() { return JSON.parse(JSON.stringify(DEFAULT_STYLE)); }
+/* Color de acento: de base ninguno. El que se elige se guarda en la cuenta y
+   es el de las secuencias nuevas hasta que se cambie. Si alguien marca texto
+   sin haber elegido, se pinta con ACENTO_RESERVA para que se vea algo. */
+const ACENTO_RESERVA = "#ff6a1a";
+let acentoPreferido = null;
+const acentoDe = st => (st && st.highlightColor) || ACENTO_RESERVA;
+let _guardaAcentoT = null;
+function recuerdaAcento(color) {
+  acentoPreferido = color;
+  try { localStorage.setItem("sb_acento_" + state.user?.id, color); } catch {}
+  clearTimeout(_guardaAcentoT);
+  _guardaAcentoT = setTimeout(() => sbDB.sbGuardarAcento(color).catch(() => {}), 600);
+}
+async function cargaAcento(uid) {
+  try { acentoPreferido = localStorage.getItem("sb_acento_" + uid) || null; } catch {}
+  const nube = await sbDB.sbLeerAcento().catch(() => undefined);
+  if (nube !== undefined) {
+    acentoPreferido = nube;
+    try { nube ? localStorage.setItem("sb_acento_" + uid, nube) : localStorage.removeItem("sb_acento_" + uid); } catch {}
+  }
+}
+/* Tipografía: igual que el acento. La última que se elige es la de las
+   secuencias nuevas hasta que se cambie (se guarda el nombre de la lista). */
+let fuentePreferida = null;
+let _guardaFuenteT = null;
+function recuerdaFuente(nombre) {
+  fuentePreferida = nombre;
+  try { localStorage.setItem("sb_fuente_" + state.user?.id, nombre); } catch {}
+  clearTimeout(_guardaFuenteT);
+  _guardaFuenteT = setTimeout(() => sbDB.sbGuardarFuente(nombre).catch(() => {}), 600);
+}
+async function cargaFuentePreferida(uid) {
+  try { fuentePreferida = localStorage.getItem("sb_fuente_" + uid) || null; } catch {}
+  const nube = await sbDB.sbLeerFuente().catch(() => undefined);
+  if (nube !== undefined) {
+    fuentePreferida = nube;
+    try { nube ? localStorage.setItem("sb_fuente_" + uid, nube) : localStorage.removeItem("sb_fuente_" + uid); } catch {}
+  }
+}
+function estiloFuentePreferida() {
+  const f = fuentePreferida && FONTS.find(x => x.name === fuentePreferida);
+  return f ? { font: f.value, weight: f.w } : {};
+}
+function newStyle() { return { ...JSON.parse(JSON.stringify(DEFAULT_STYLE)), highlightColor: acentoPreferido, ...estiloFuentePreferida() }; }
+// Las plantillas no imponen su acento: manda el que haya elegido cada uno.
+const sinAcento = st => { if (!st) return st; const { highlightColor, highlightText, ...resto } = st; return resto; };
 
 function makeSlide(s) {
   return {
@@ -365,7 +410,7 @@ function fromStructure(frames, category) {
   return instantiate({ title: "Nueva secuencia", category, slides, status: "draft" });
 }
 function fromTemplate(tpl, extra = {}) {
-  return instantiate({ title: tpl.title, category: tpl.category, slides: tpl.slides, style: tpl.style, ...extra });
+  return instantiate({ title: tpl.title, category: tpl.category, slides: tpl.slides, style: sinAcento(tpl.style), ...extra });
 }
 /*
  * Qué frame lleva la llamada a la acción.
@@ -2504,7 +2549,7 @@ function closeEditor() {
 }
 function syncStyleControls() {
   const st = state.active.style;
-  $("#highlightColor").value = st.highlightColor;
+  $("#highlightColor").value = acentoDe(st);
   $("#textColor").value = st.textColor;
   $("#sizeRange").value = String(st.size);
   updateColorDots();
@@ -2513,12 +2558,14 @@ function syncStyleControls() {
 function updateColorDots() {
   const st = state.active?.style; if (!st) return;
   const t = $("#textColorDot"); if (t) t.style.background = st.textColor;
-  const h = $("#highlightColorDot"); if (h) h.style.background = st.highlightColor;
-  $("#bodyRico")?.style.setProperty("--m-hl", st.highlightColor);
+  const h = $("#highlightColorDot");
+  if (h) { h.style.background = st.highlightColor || ""; h.classList.toggle("sin-color", !st.highlightColor); }
+  $("#bodyRico")?.style.setProperty("--m-hl", acentoDe(st));
 }
 function syncFontChips() {
-  const box = $("#fontChips"); if (!box) return;
-  $$(".font-chip").forEach(c => c.classList.toggle("active", c.dataset.fontval === state.active.style.font));
+  const btn = $("#fuenteCampo"); if (!btn || !state.active) return;
+  const f = fuenteDe(state.active.style.font) || FONTS[0];
+  btn.innerHTML = `<span style="font-family:${escapeAttr(f.value)};font-weight:${f.w}">${escapeHtml(f.name)}</span>` + SVG_CHEV;
 }
 function syncOverlayChips() {
   const cur = curSlide().overlay;
@@ -2531,7 +2578,7 @@ function renderThumbs() {
     const t = document.createElement("button");
     t.className = "thumb" + (i === state.current ? " active" : "");
     const cv = document.createElement("canvas");
-    cv.width = 90; cv.height = 160;
+    cv.width = 216; cv.height = 384;  // a 2x del tamaño en pantalla, para que se lea
     drawSlide(cv.getContext("2d"), slide, cv.width, cv.height, state.active.style);
     t.appendChild(cv);
     const span = document.createElement("span"); span.textContent = "Frame " + (i + 1);
@@ -2599,13 +2646,9 @@ function pintaCamposSticker(slide) {
  */
 function renderBgPicker() {
   const box = $("#bgPicker"); if (!box) return;
-  const n = t => state.images.filter(im => im.tipo === t).length;
-  const cO = $("#cuentaOwner"), cF = $("#cuentaFondo");
-  if (cO) cO.textContent = n("owner");
-  if (cF) cF.textContent = n("fondo");
   const vacio = !state.images.length;
   box.innerHTML = vacio ? `<span class="bg-empty">Sube fotos en "Galería" para elegir el fondo.</span>` : "";
-  document.querySelector(".elige-foto")?.classList.toggle("hidden", vacio);
+  document.querySelectorAll("[data-elige-tipo]").forEach(b => b.classList.toggle("hidden", vacio));
 }
 function abreFotosTipo(tipo) {
   if (!state.active) return;
@@ -2920,14 +2963,14 @@ function drawBody(c, slide, style, scale, w, h) {
           // antes sobraba por arriba y quedaba descolgada.
           const padX = size * 0.16, padY = size * 0.15;
           const alto = mt.actualBoundingBoxAscent || size * 0.72, bajo = (mg.actualBoundingBoxDescent || size * 0.2) * 0.6;
-          c.fillStyle = style.highlightColor;
+          c.fillStyle = acentoDe(style);
           roundRect(c, left + sX - padX, y - alto - padY, (eX - sX) + padX * 2, alto + bajo + padY * 2, size * 0.18);
           c.fill();
           i = j;
         } else i++;
       }
       ln.words.forEach(t => {
-        c.fillStyle = t.hl ? style.highlightText : (t.ac ? style.highlightColor : style.textColor);
+        c.fillStyle = t.hl ? (style.highlightText || "#ffffff") : (t.ac ? acentoDe(style) : style.textColor);
         if (!t.hl) { c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = size * 0.12; c.shadowOffsetY = size * 0.025; }
         c.fillText(t.text, left + t.x, y);
         c.shadowColor = "transparent"; c.shadowBlur = 0; c.shadowOffsetY = 0;
@@ -2936,7 +2979,7 @@ function drawBody(c, slide, style, scale, w, h) {
         if (ln.words[k].ul) {
           let j = k, sX = ln.words[k].x, eX = ln.words[k].x + ln.words[k].w;
           while (j < ln.words.length && ln.words[j].ul) { eX = ln.words[j].x + ln.words[j].w; j++; }
-          c.strokeStyle = style.highlightColor; c.lineWidth = size * 0.1; c.lineCap = "round";
+          c.strokeStyle = acentoDe(style); c.lineWidth = size * 0.1; c.lineCap = "round";
           const uy = y + size * 0.19;
           c.beginPath(); c.moveTo(left + sX, uy); c.lineTo(left + eX, uy); c.stroke();
           k = j;
@@ -3301,7 +3344,7 @@ function pintaRico(root, chars) {
   root.classList.toggle("vacio", !chars.length);
   const st = state.active?.style;
   if (st) {
-    root.style.setProperty("--m-hl", st.highlightColor);
+    root.style.setProperty("--m-hl", acentoDe(st));
     root.style.setProperty("--m-hlt", st.highlightText || "#fff");
   }
 }
@@ -3375,6 +3418,13 @@ function wrapSelection(marker) {
   for (let i = a; i < b; i++) if (chars[i].ch !== "\n") chars[i][k] = poner;
   root.focus();
   cambiaRico(root, chars, sel[0] === sel[1] ? sel[0] : a, sel[0] === sel[1] ? sel[0] : b);
+  if (poner && !state.active.style.highlightColor) pideAcento();
+}
+// Sin acento elegido, al marcar algo se abre el selector de color.
+function pideAcento() {
+  const inp = $("#highlightColor"); if (!inp) return;
+  inp.closest("details")?.setAttribute("open", "");
+  try { inp.showPicker ? inp.showPicker() : inp.click(); } catch { inp.click(); }
 }
 let _ultimaSel = null;
 function pintaBotonesMarca() {
@@ -3632,7 +3682,7 @@ function bind() {
   $("#mkAccent").addEventListener("click", () => wrapSelection("**"));
   // Font chips
   buildFontChips();
-  $("#highlightColor").addEventListener("input", e => { state.active.style.highlightColor = e.target.value; updateColorDots(); drawEditor(); renderThumbs(); persist(); });
+  $("#highlightColor").addEventListener("input", e => { state.active.style.highlightColor = e.target.value; recuerdaAcento(e.target.value); updateColorDots(); drawEditor(); renderThumbs(); persist(); });
   $("#textColor").addEventListener("input", e => { state.active.style.textColor = e.target.value; updateColorDots(); drawEditor(); renderThumbs(); persist(); });
   $("#sizeRange").addEventListener("input", e => { state.active.style.size = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); });
   $("#sizeRange").addEventListener("change", persist);
@@ -3867,39 +3917,48 @@ function aseguraFuente(style) {
     }, 60);
   });
 }
+/* La tipografía se elige en un desplegable junto a la alineación. Cada
+   nombre va escrito en su letra (con una muestra mínima de la fuente: sólo
+   las letras del nombre) y agrupado: Sans, Display, Serif, Manuscrita. */
 function buildFontChips() {
-  const box = $("#fontChips"); if (!box) return;
-  box.innerHTML = "";
-  box.classList.add("font-lista");
-  // Muestra de cada fuente de Google, sólo con las letras de su nombre
+  const btn = $("#fuenteCampo"); if (!btn) return;
   const google = FONTS.filter(f => f.google);
   const letras = [...new Set(google.map(f => f.name).join(""))].join("");
   const l = document.createElement("link");
   l.rel = "stylesheet";
   l.href = "https://fonts.googleapis.com/css2?" + google.map(f => "family=" + encodeURIComponent(familiaDe(f)).replace(/%20/g, "+") + ":wght@" + f.w).join("&") + "&text=" + encodeURIComponent(letras) + "&display=swap";
   document.head.appendChild(l);
-  let grupo = "";
-  FONTS.forEach(f => {
-    if (f.grupo !== grupo) {
-      grupo = f.grupo;
-      const t = document.createElement("span"); t.className = "font-grupo"; t.textContent = grupo;
-      box.appendChild(t);
-    }
-    const b = document.createElement("button");
-    b.className = "font-chip";
-    b.dataset.fontval = f.value;
-    b.style.fontFamily = f.value;
-    b.style.fontWeight = f.w;
-    b.textContent = f.name;
-    b.addEventListener("click", () => {
-      state.active.style.font = f.value;
-      state.active.style.weight = f.w;
-      syncFontChips();
-      drawEditor(); renderThumbs(); persist();
-      aseguraFuente(state.active.style);
-    });
-    box.appendChild(b);
+  btn.addEventListener("click", e => { e.stopPropagation(); abreListaFuentes(btn); });
+}
+function abreListaFuentes(btn) {
+  const abierto = btn.classList.contains("abierto");
+  cierraDesplegable(); cierraSelectorFecha();
+  if (abierto || !state.active) return;
+  btn.classList.add("abierto");
+  const actual = state.active.style.font;
+  let grupo = "", html = "";
+  FONTS.forEach((f, i) => {
+    if (f.grupo !== grupo) { grupo = f.grupo; html += `<span class="ds-grupo">${grupo}</span>`; }
+    const on = f.value === actual;
+    html += `<button type="button" class="ds-op${on ? " activo" : ""}" data-fuente="${i}"><span style="font-family:${escapeAttr(f.value)};font-weight:${f.w};font-size:15px">${escapeHtml(f.name)}</span>${on ? SVG_CHECK : ""}</button>`;
   });
+  const lista = document.createElement("div");
+  lista.className = "ds-lista ds-fuentes";
+  lista.innerHTML = html;
+  document.body.appendChild(lista);
+  lista.style.minWidth = Math.max(220, btn.getBoundingClientRect().width) + "px";
+  colocaPop(lista, btn);
+  lista.querySelector(".ds-op.activo")?.scrollIntoView({ block: "center" });
+  lista.querySelectorAll("[data-fuente]").forEach(op => op.addEventListener("click", () => {
+    const f = FONTS[+op.dataset.fuente];
+    state.active.style.font = f.value;
+    state.active.style.weight = f.w;
+    recuerdaFuente(f.name);
+    cierraDesplegable();
+    syncFontChips();
+    drawEditor(); renderThumbs(); persist();
+    aseguraFuente(state.active.style);
+  }));
 }
 function fillFontSelect() { /* deprecated — sustituido por buildFontChips */ }
 
@@ -3931,6 +3990,7 @@ async function bootLoggedIn(user) {
   document.getElementById("appRoot").classList.remove("hidden");
   document.getElementById("userEmail").textContent = user.email || "";
   document.getElementById("adminTab").classList.toggle("hidden", !state.isAdminUser);
+  await Promise.all([cargaAcento(user.id), cargaFuentePreferida(user.id)]);
 
   // Cada cuenta tiene su propia galería en este navegador
   imgDB.usarCuenta(user.id);

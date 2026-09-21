@@ -11,7 +11,7 @@
   <!-- Estas cuatro las pinta el generador de stories en el canvas; la
      interfaz ya no pide ninguna: usa SF Pro del sistema. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=60" />
+  <link rel="stylesheet" href="styles.css?v=62" />
 </head>
 <body>
   <!-- ===================== NO AUTORIZADO ===================== -->
@@ -390,18 +390,14 @@
           <label class="field inline zoom-field"><span>Zoom fondo</span>
             <input type="range" id="bgZoom" min="1" max="2.6" step="0.02" value="1" />
           </label>
-          <div class="preview-actions">
-            <button class="btn btn-ghost sm" id="newImg">
+          <div class="preview-actions fila-fotos">
+            <button class="btn btn-ghost sm icono-cuadrado" id="newImg" title="Otra imagen" aria-label="Otra imagen">
               <svg class="ic" viewBox="0 0 24 24"><path d="M7 7 H17 L14 4 M17 7 L14 10 M17 17 H7 L10 14 M7 17 L10 20"/></svg>
-              Otra imagen
             </button>
-          </div>
-          <div class="elige-foto">
-            <button class="btn btn-ghost sm" data-elige-tipo="owner"><i class="ds-punto tipo-owner"></i>Owner <span class="dim" id="cuentaOwner"></span></button>
-            <button class="btn btn-ghost sm" data-elige-tipo="fondo"><i class="ds-punto tipo-fondo"></i>Background <span class="dim" id="cuentaFondo"></span></button>
+            <button class="btn btn-ghost sm" data-elige-tipo="owner"><i class="ds-punto tipo-owner"></i>Owner</button>
+            <button class="btn btn-ghost sm" data-elige-tipo="fondo"><i class="ds-punto tipo-fondo"></i>Background</button>
           </div>
           <div id="bgPicker" class="bg-picker"></div>
-          <p class="drag-hint">Arrastra el texto, la foto o el fondo con el cursor. Las líneas marcan la zona segura de Instagram.</p>
         </div>
 
         <div class="frames-col">
@@ -499,10 +495,11 @@
           <details class="cp-sec" open>
             <summary class="cp-sec-h"><svg class="cp-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3M9 20h6M12 4v16"/></svg><span class="grow">Estilo del texto</span><svg class="cp-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></summary>
             <div class="cp-sec-b">
-              <span class="cp-sub">Alineación</span>
-              <div class="seg-alin" id="alignChips"><button type="button" data-align="left" title="Izquierda" aria-label="Izquierda"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg></button><button type="button" data-align="center" title="Centrado" aria-label="Centrado"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M5.5 18h13"/></svg></button><button type="button" data-align="right" title="Derecha" aria-label="Derecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M10 12h10M7 18h13"/></svg></button><button type="button" data-align="justify" title="Justificado" aria-label="Justificado"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div>
-              <span class="cp-sub">Tipografía</span>
-              <div class="chip-row" id="fontChips"></div>
+              <span class="cp-sub">Alineación y tipografía</span>
+              <div class="alin-fuente">
+                <div class="seg-alin" id="alignChips"><button type="button" data-align="left" title="Izquierda" aria-label="Izquierda"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg></button><button type="button" data-align="center" title="Centrado" aria-label="Centrado"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M5.5 18h13"/></svg></button><button type="button" data-align="right" title="Derecha" aria-label="Derecha"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M10 12h10M7 18h13"/></svg></button><button type="button" data-align="justify" title="Justificado" aria-label="Justificado"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button></div>
+                <button type="button" class="ds-campo" id="fuenteCampo" aria-label="Tipografía"></button>
+              </div>
               <span class="cp-sub">Tamaño</span>
               <input type="range" id="sizeRange" min="0.6" max="1.7" step="0.02" value="1" />
               <span class="cp-sub">Colores</span>
@@ -580,9 +577,9 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="supabase.js?v=60"></script>
-  <script src="templates.js?v=60"></script>
-  <script src="catalog.js?v=60"></script>
-  <script src="app.js?v=60"></script>
+  <script src="supabase.js?v=62"></script>
+  <script src="templates.js?v=62"></script>
+  <script src="catalog.js?v=62"></script>
+  <script src="app.js?v=62"></script>
 </body>
 </html>

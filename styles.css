@@ -1992,3 +1992,32 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .font-grupo { flex-basis: 100%; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin: 6px 0 0; }
 .font-grupo:first-child { margin-top: 0; }
 .font-lista .font-chip { font-size: 14px; padding: 7px 11px; }
+
+/* Acento sin elegir: círculo vacío tachado */
+.swatch .dot.sin-color {
+  background: transparent !important;
+  border: 1.5px dashed rgba(255,255,255,.45);
+  position: relative;
+}
+.swatch .dot.sin-color::after {
+  content: ""; position: absolute; left: 50%; top: 12%; bottom: 12%;
+  width: 1.5px; background: rgba(255,255,255,.45); transform: translateX(-50%) rotate(45deg);
+}
+/* Alineación y tipografía en una fila */
+.alin-fuente { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.alin-fuente .seg-alin { align-self: auto; }
+.alin-fuente #fuenteCampo { flex: 1; min-width: 180px; height: 38px; }
+.ds-fuentes { max-height: 360px; }
+.ds-grupo { font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); padding: 8px 10px 3px; }
+.ds-grupo:first-child { padding-top: 4px; }
+/* Otra imagen (sólo icono) + Owner + Background en una línea */
+.fila-fotos { justify-content: center; align-items: center; flex-wrap: nowrap; }
+.fila-fotos .btn.hidden { display: none; }
+.icono-cuadrado { width: 34px; height: 34px; padding: 0 !important; display: grid; place-items: center; flex: none; }
+.fila-fotos .btn { height: 34px; gap: 7px; }
+/* Frames: la miniatura ocupa la tarjeta entera y el borde va pegado a ella */
+.thumbs .thumb { padding: 0; border: 0 !important; background: none !important; gap: 6px; width: 100%; }
+.thumbs .thumb canvas { width: 100%; height: auto; aspect-ratio: 9 / 16; border-radius: 10px; border: 1px solid transparent; box-sizing: border-box; display: block; }
+.thumbs .thumb:hover canvas { border-color: rgba(255,255,255,.14); }
+.thumbs .thumb.active canvas { border-color: rgba(255,255,255,.4); }
+.thumbs .thumb.add { border: 1px dashed var(--border-strong) !important; border-radius: 10px; width: 100%; }

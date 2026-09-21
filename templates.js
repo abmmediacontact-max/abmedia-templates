@@ -19,7 +19,7 @@ const CANVAS_H = 1920;
 const DEFAULT_STYLE = {
   font: '-apple-system, "SF Pro Display", "SF Pro Text", Inter, system-ui, sans-serif',
   textColor: "#ffffff",
-  highlightColor: "#ff6a1a", // naranja ABMedia
+  highlightColor: null,      // sin acento hasta que se elige uno (se guarda en la cuenta)
   highlightText: "#ffffff",
   weight: 700,
   size: 1,        // multiplicador de tamaño (0.85 / 1 / 1.15)

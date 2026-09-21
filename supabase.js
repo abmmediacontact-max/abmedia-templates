@@ -302,8 +302,39 @@ async function sbBorrarTipos(claves) {
   await sb.from("galeria_tipos").delete().in("clave", claves);
 }
 
+/* ---- Color de acento preferido -----------------------------------------
+ * De base no hay ninguno. El primero que se elige se guarda en la cuenta
+ * (builder_preferencias, RLS por dueño) y es el de todas las secuencias nuevas
+ * hasta que se cambie. */
+async function sbLeerAcento() {
+  const { data, error } = await sb.from("builder_preferencias").select("acento").maybeSingle();
+  if (error) { console.warn("sbLeerAcento", error.message); return undefined; }
+  return data ? data.acento : null;
+}
+async function sbGuardarAcento(acento) {
+  const uid = await sbUidActual();
+  if (!uid) return;
+  const { error } = await sb.from("builder_preferencias")
+    .upsert({ owner: uid, acento, actualizado: new Date().toISOString() }, { onConflict: "owner" });
+  if (error) console.warn("sbGuardarAcento", error.message);
+}
+
+// Última tipografía elegida: la de las secuencias nuevas hasta que se cambie
+async function sbLeerFuente() {
+  const { data, error } = await sb.from("builder_preferencias").select("fuente").maybeSingle();
+  if (error) { console.warn("sbLeerFuente", error.message); return undefined; }
+  return data ? data.fuente : null;
+}
+async function sbGuardarFuente(fuente) {
+  const uid = await sbUidActual();
+  if (!uid) return;
+  const { error } = await sb.from("builder_preferencias")
+    .upsert({ owner: uid, fuente, actualizado: new Date().toISOString() }, { onConflict: "owner" });
+  if (error) console.warn("sbGuardarFuente", error.message);
+}
+
 window.sbFotos = { sbSubirFoto, sbListarFotos, sbDescargarFoto, sbBorrarFoto, sbBorrarTodasLasFotos, rutaDeFoto,
                    sbLeerTipos, sbGuardarTipos, sbBorrarTipos };
 
 window.sbAuth = { sbGetSession, sbSignIn, sbSignUp, sbSignOut, isAdmin, sbIsAllowed };
-window.sbDB = { sbFetchCatalogo, sbFetchSequences, sbUpsertSequence, sbDeleteSequence, sbDeleteSequences, sbFetchTemplates, sbUpsertTemplate, sbDeleteTemplate, sbRevisarTemplate, sbFetchAvisos, sbMarcarAvisoLeido };
+window.sbDB = { sbFetchCatalogo, sbFetchSequences, sbUpsertSequence, sbDeleteSequence, sbDeleteSequences, sbLeerAcento, sbGuardarAcento, sbLeerFuente, sbGuardarFuente, sbFetchTemplates, sbUpsertTemplate, sbDeleteTemplate, sbRevisarTemplate, sbFetchAvisos, sbMarcarAvisoLeido };
