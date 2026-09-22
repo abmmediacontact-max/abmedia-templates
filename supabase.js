@@ -8,7 +8,7 @@ const SUPABASE_URL = "https://jiuhhnjpggdcjyjchxir.supabase.co";
 const SUPABASE_KEY = "sb_publishable_tJVsAdsRgupt7cg2LOzWMg_vT6r0pFn";
 
 // Emails con rol admin. Debe coincidir con is_admin() en la base de datos:
-const ADMIN_EMAILS = ["alvarobautistaabmedia@gmail.com"];
+const ADMIN_EMAILS = ["alvarobautistaabmedia@gmail.com", "abmmediacontact@gmail.com"];
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 window.sb = sb;
