@@ -478,6 +478,11 @@ async function leeEnvios() {
   data.forEach(r => ENVIOS.set(r.secuencia_id, r));
   const salidas = state.sequences.filter(s => s.cloudId && estadoDe(s) === "send" && ENVIOS.get(s.cloudId)?.pub_estado === "publicada");
   if (salidas.length) guardaEnLote(salidas, s => { s.status = "published"; s.style.envio = undefined; });
+  // Lo que quedó a medias —se cambió a «Enviar» (o se sacó) y se cerró la
+  // pestaña antes de que saliera el envío— se pone al día al abrir. Si ya
+  // coincide con lo mandado, revisaEnvio no hace nada.
+  state.sequences.filter(s => s.cloudId && !salidas.includes(s) && (estadoDe(s) === "send" || s.style.envio))
+    .forEach(programaEnvio);
 }
 
 /* Guarda en el navegador y, si hay sesión, en la nube. */
