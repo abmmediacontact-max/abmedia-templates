@@ -455,7 +455,7 @@ function avisoInteractivos(seq) {
   const n = (seq?.slides || []).map((sl, i) => sl.sticker ? i + 1 : 0).filter(Boolean);
   if (!n.length) return "";
   return `${n.length === 1 ? "La story " + n[0] + " lleva" : "Las stories " + n.slice(0, -1).join(", ") + " y " + n.at(-1) + " llevan"} un sticker interactivo: ` +
-    "Instagram no deja publicarlo solo, saldría como imagen sin poder pulsarse. Súbela a mano.";
+    `Instagram no deja publicarlo solo: saldría como imagen, sin poder pulsarse. ${n.length === 1 ? "Súbela" : "Súbelas"} a mano.`;
 }
 
 const fechaHoraCorta = iso => new Date(iso).toLocaleString("es-ES", {
