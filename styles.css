@@ -2100,3 +2100,6 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .envio-nota.error::before { background: var(--red); }
 @keyframes envio-latido { 50% { opacity: .3; } }
 .envio-aviso { font-size: 12px; line-height: 1.45; color: #F2A57A; background: rgba(242,165,122,.1); border: 1px solid rgba(242,165,122,.25); border-radius: 8px; padding: 6px 10px; }
+
+/* ---- Editor: tres bloques plegables (texto, fondo, foto encima) ---- */
+.cp-texto .cp-editor { margin: 2px 0 16px; }

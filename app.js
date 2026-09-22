@@ -289,7 +289,7 @@ const store = {
     const data = seqs.map(s => ({
       id: s.id, title: s.title, category: s.category, status: s.status,
       submitted: !!s.submitted, style: s.style,
-      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, caso: sl.caso || null, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null, sticker: sl.sticker || null }))
+      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, caso: sl.caso || null, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null, sticker: sl.sticker || null, estilo: sl.estilo || null }))
     }));
     try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch {}
   }
@@ -376,7 +376,7 @@ function firmaEnvio(seq) {
   // «v» sube cuando cambia lo que se manda (ahora, una miniatura por frame):
   // lo ya enviado se vuelve a mandar una vez, solo, al abrir el builder.
   const txt = JSON.stringify({ v: 2, t: seq.title, f: seq.scheduledDate, estilo,
-    sl: seq.slides.map(sl => [sl.body, sl.pos, sl.align, sl.caso, sl.overlay, sl.bg, sl.bgKey, sl.sticker]) });
+    sl: seq.slides.map(sl => [sl.body, sl.pos, sl.align, sl.caso, sl.overlay, sl.bg, sl.bgKey, sl.sticker, sl.estilo]) });
   let h = 2166136261;
   for (let i = 0; i < txt.length; i++) { h ^= txt.charCodeAt(i); h = Math.imul(h, 16777619); }
   return (h >>> 0).toString(36) + "-" + txt.length;
@@ -587,6 +587,7 @@ function makeSlide(s) {
     bg: s.bg ? { ...s.bg } : { zoom: 1, ox: 0, oy: 0 },
     bgKey: s.bgKey || null,   // qué foto lleva: la clave, que no cambia
     sticker: s.sticker ? JSON.parse(JSON.stringify(s.sticker)) : null,
+    estilo: s.estilo ? { ...s.estilo } : null,   // tamaño, colores y letra de ESTE frame
     bgIndex: -1,              // dónde está ahora en la galería, para pintar
     inset: null, _textBox: null
   };
@@ -2822,6 +2823,7 @@ function openEditor(id) {
   $("#catSelect").value = state.active.category;
   syncSchedDate();
   syncStyleControls();
+  recuerdaBloquesEditor();
   refrescaCampos($("#overlay"));
   $("#overlay").classList.remove("hidden");
   document.body.style.overflow = "hidden";
@@ -2857,8 +2859,18 @@ function closeEditor() {
   document.body.style.overflow = "";
   state.active = null; renderAll();
 }
+/* Los tres bloques del editor (texto, fondo, foto encima) se pliegan, y se
+   recuerda cómo los dejaste: si trabajas con el texto cerrado para ver el
+   fondo sin bajar, al abrir otra secuencia sigue cerrado. */
+function recuerdaBloquesEditor() {
+  document.querySelectorAll("#overlay details[data-bloque]").forEach(d => {
+    try { const v = localStorage.getItem("sb_bloque_" + d.dataset.bloque); if (v != null) d.open = v === "1"; } catch {}
+    if (d._recuerda) return; d._recuerda = true;
+    d.addEventListener("toggle", () => { try { localStorage.setItem("sb_bloque_" + d.dataset.bloque, d.open ? "1" : "0"); } catch {} });
+  });
+}
 function syncStyleControls() {
-  const st = state.active.style;
+  const st = estiloActual();
   $("#highlightColor").value = acentoDe(st);
   $("#textColor").value = st.textColor;
   $("#sizeRange").value = String(st.size);
@@ -2866,7 +2878,8 @@ function syncStyleControls() {
   syncFontChips();
 }
 function updateColorDots() {
-  const st = state.active?.style; if (!st) return;
+  if (!state.active) return;
+  const st = estiloActual(); if (!st) return;
   const t = $("#textColorDot"); if (t) t.style.background = st.textColor;
   const h = $("#highlightColorDot");
   if (h) { h.style.background = st.highlightColor || ""; h.classList.toggle("sin-color", !st.highlightColor); }
@@ -2874,7 +2887,7 @@ function updateColorDots() {
 }
 function syncFontChips() {
   const btn = $("#fuenteCampo"); if (!btn || !state.active) return;
-  const f = fuenteDe(state.active.style.font) || FONTS[0];
+  const f = fuenteDe(estiloActual().font) || FONTS[0];
   btn.innerHTML = `<span style="font-family:${escapeAttr(muestraDe(f))};font-weight:${f.w}">${escapeHtml(f.name)}</span>` + SVG_CHEV;
 }
 function syncOverlayChips() {
@@ -2882,6 +2895,24 @@ function syncOverlayChips() {
   $$(".chip-vis").forEach(c => c.classList.toggle("active", c.dataset.overlay === cur));
 }
 function curSlide() { return state.active.slides[state.current]; }
+/*
+ * Tamaño, colores y letra son de cada frame. Antes vivían en el estilo de la
+ * secuencia entera, así que tocar el tamaño en un frame lo cambiaba en todos.
+ * El de la secuencia queda como punto de partida: un frame sin cambios propios
+ * se ve como siempre.
+ */
+const ESTILO_FRAME = ["size", "textColor", "highlightColor", "font", "weight"];
+function estiloFrame(slide, style) {
+  const e = slide?.estilo; if (!e) return style;
+  const o = { ...style };
+  for (const k of ESTILO_FRAME) if (e[k] != null) o[k] = e[k];
+  return o;
+}
+const estiloActual = () => estiloFrame(curSlide(), state.active.style);
+function ponEstiloFrame(cambios) {
+  const sl = curSlide(); if (!sl) return;
+  sl.estilo = { ...(sl.estilo || {}), ...cambios };
+}
 function renderThumbs() {
   const box = $("#thumbs"); box.innerHTML = "";
   state.active.slides.forEach((slide, i) => {
@@ -2893,17 +2924,18 @@ function renderThumbs() {
     t.appendChild(cv);
     const span = document.createElement("span"); span.textContent = "Frame " + (i + 1);
     t.appendChild(span);
-    t.addEventListener("click", () => { state.current = i; renderThumbs(); drawEditor(); });
+    t.addEventListener("click", () => { state.current = i; renderThumbs(); drawEditor(); syncStyleControls(); pintaTamano(); });
     box.appendChild(t);
   });
   const add = document.createElement("button");
   add.className = "thumb add"; add.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span>Añadir frame</span>`;
   add.addEventListener("click", () => {
-    state.active.slides.push(makeSlide({ body: blankBody(0), overlay: "bottom" }));
+    // El frame nuevo sale con el tamaño, colores y letra del que estás viendo.
+    state.active.slides.push(makeSlide({ body: blankBody(0), overlay: "bottom", estilo: curSlide()?.estilo }));
     // Sólo el frame nuevo recibe foto: los que ya tienen la suya no se tocan
     assignRandomImages(state.active, { soloVacios: true });
     state.current = state.active.slides.length - 1;
-    persist(); renderThumbs(); drawEditor();
+    persist(); renderThumbs(); drawEditor(); syncStyleControls(); pintaTamano();
   });
   box.appendChild(add);
 }
@@ -3008,6 +3040,7 @@ function drawEditor() {
 const SAFE = { top: 0.075, bottom: 0.82, left: 0.05, right: 0.95 };
 function clampSafe(v, min, max) { return min > max ? (min + max) / 2 : Math.max(min, Math.min(max, v)); }
 function drawSlide(c, slide, w, h, style, guides) {
+  style = estiloFrame(slide, style);
   aseguraFuente(style);
   const scale = w / CANVAS_W;
   c.clearRect(0, 0, w, h);
@@ -3398,6 +3431,7 @@ function duplicateFrame() {
   const copy = makeSlide({ body: s.body, pos: { ...s.pos }, align: s.align, caso: s.caso, overlay: s.overlay, bg: { ...s.bg } });
   copy.bgIndex = s.bgIndex; copy.bgKey = s.bgKey; copy.inset = s.inset ? { ...s.inset } : null;
   copy.sticker = s.sticker ? JSON.parse(JSON.stringify(s.sticker)) : null;
+  copy.estilo = s.estilo ? { ...s.estilo } : null;
   state.active.slides.splice(state.current + 1, 0, copy);
   state.current++; persist(); renderThumbs(); drawEditor();
 }
@@ -3406,7 +3440,7 @@ function deleteFrame() {
   if (!confirm("¿Borrar este frame?")) return;
   state.active.slides.splice(state.current, 1);
   state.current = Math.max(0, state.current - 1);
-  persist(); renderThumbs(); drawEditor();
+  persist(); renderThumbs(); drawEditor(); syncStyleControls(); pintaTamano();
 }
 function moveFrame(dir) {
   const i = state.current, j = i + dir, a = state.active.slides;
@@ -3444,7 +3478,7 @@ async function enviarARevision() {
     title: s.title || "Secuencia",
     category: s.category,
     style: JSON.parse(JSON.stringify(s.style)),
-    slides: s.slides.map(sl => ({ body: sl.body, pos: { ...sl.pos }, align: sl.align, caso: sl.caso || null, overlay: sl.overlay, sticker: sl.sticker || null })),
+    slides: s.slides.map(sl => ({ body: sl.body, pos: { ...sl.pos }, align: sl.align, caso: sl.caso || null, overlay: sl.overlay, sticker: sl.sticker || null, estilo: sl.estilo || null })),
     submitted: true,
     is_public: false,
     share_ok: compartir,
@@ -3778,7 +3812,7 @@ function wrapSelection(marker) {
   for (let i = a; i < b; i++) if (chars[i].ch !== "\n") chars[i][k] = poner;
   root.focus();
   cambiaRico(root, chars, sel[0] === sel[1] ? sel[0] : a, sel[0] === sel[1] ? sel[0] : b);
-  if (poner && !state.active.style.highlightColor) pideAcento();
+  if (poner && !estiloActual().highlightColor) pideAcento();
 }
 // Sin acento elegido, al marcar algo se abre el selector de color.
 function pideAcento() {
@@ -3798,7 +3832,7 @@ function pintaTamano() {
   const lab = $("#sizeLabel"), inp = $("#sizeRange");
   if (!inp || !state.active) return;
   const r = rangoTamano();
-  const base = state.active.style.size || 1;
+  const base = estiloActual().size || 1;
   if (lab) lab.textContent = r ? "Tamaño · texto seleccionado" : "Tamaño";
   if (r) {
     const chars = leeRico($("#bodyRico"));
@@ -3966,13 +4000,8 @@ function bind() {
   ["dragleave", "drop"].forEach(ev => gDrop.addEventListener(ev, e => { e.preventDefault(); gDrop.classList.remove("hover"); }));
   gDrop.addEventListener("drop", e => loadFiles(e.dataTransfer.files));
 
-  // Drop editor
-  const drop = $("#editorDrop");
-  drop.addEventListener("click", () => $("#fileInput2").click());
-  $("#fileInput2").addEventListener("change", e => loadFiles(e.target.files));
-  ["dragover", "dragenter"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("hover"); }));
-  ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("hover"); }));
-  drop.addEventListener("drop", e => loadFiles(e.dataTransfer.files));
+  // (La zona de «Arrastra tus fotos» del editor se quitó: las fotos ya están
+  // en la galería y ocupaba sitio encima de lo que sí se toca.)
 
   // Ideas
 
@@ -4105,8 +4134,8 @@ function bind() {
   $("#mkAccent").addEventListener("click", () => wrapSelection("**"));
   // Font chips
   buildFontChips();
-  $("#highlightColor").addEventListener("input", e => { state.active.style.highlightColor = e.target.value; recuerdaAcento(e.target.value); updateColorDots(); drawEditor(); renderThumbs(); persist(); });
-  $("#textColor").addEventListener("input", e => { state.active.style.textColor = e.target.value; updateColorDots(); drawEditor(); renderThumbs(); persist(); });
+  $("#highlightColor").addEventListener("input", e => { ponEstiloFrame({ highlightColor: e.target.value }); recuerdaAcento(e.target.value); updateColorDots(); drawEditor(); refreshActiveThumb(); persist(); });
+  $("#textColor").addEventListener("input", e => { ponEstiloFrame({ textColor: e.target.value }); updateColorDots(); drawEditor(); refreshActiveThumb(); persist(); });
   // Con un trozo de texto seleccionado, el tamaño cambia sólo ese trozo; sin
   // selección, el de toda la story.
   $("#sizeRange").addEventListener("input", e => {
@@ -4114,11 +4143,11 @@ function bind() {
     const r = rangoTamano();
     if (r) {
       const root = $("#bodyRico"), chars = leeRico(root);
-      const base = state.active.style.size || 1;
+      const base = estiloActual().size || 1;
       for (let i = r[0]; i < r[1]; i++) if (chars[i] && chars[i].ch !== "\n") chars[i].sz = v / base;
       pintaRico(root, chars); guardaRico(chars);
     } else {
-      state.active.style.size = v; drawEditor(); refreshActiveThumb();
+      ponEstiloFrame({ size: v }); drawEditor(); refreshActiveThumb();
     }
   });
   $("#sizeRange").addEventListener("change", persist);
@@ -4396,7 +4425,7 @@ function abreListaFuentes(btn) {
   cierraDesplegable(); cierraSelectorFecha();
   if (abierto || !state.active) return;
   btn.classList.add("abierto");
-  const actual = state.active.style.font;
+  const actual = estiloActual().font;
   let grupo = "", html = "";
   FONTS.forEach((f, i) => {
     if (f.grupo !== grupo) { grupo = f.grupo; html += `<span class="ds-grupo">${grupo}</span>`; }
@@ -4412,13 +4441,12 @@ function abreListaFuentes(btn) {
   lista.querySelector(".ds-op.activo")?.scrollIntoView({ block: "center" });
   lista.querySelectorAll("[data-fuente]").forEach(op => op.addEventListener("click", () => {
     const f = FONTS[+op.dataset.fuente];
-    state.active.style.font = f.value;
-    state.active.style.weight = f.w;
+    ponEstiloFrame({ font: f.value, weight: f.w });
     recuerdaFuente(f.name);
     cierraDesplegable();
     syncFontChips();
     drawEditor(); renderThumbs(); persist();
-    aseguraFuente(state.active.style);
+    aseguraFuente(estiloActual());
   }));
 }
 function fillFontSelect() { /* deprecated — sustituido por buildFontChips */ }
