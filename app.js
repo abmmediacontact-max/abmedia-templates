@@ -367,7 +367,9 @@ function horaEnZonaAISO(dia, hora, zona) {
 /* Lo que decide qué se publica: si no cambia, no se vuelve a mandar. */
 function firmaEnvio(seq) {
   const { envio, scheduledDate, ...estilo } = seq.style || {};
-  const txt = JSON.stringify({ t: seq.title, f: seq.scheduledDate, estilo,
+  // «v» sube cuando cambia lo que se manda (ahora, una miniatura por frame):
+  // lo ya enviado se vuelve a mandar una vez, solo, al abrir el builder.
+  const txt = JSON.stringify({ v: 2, t: seq.title, f: seq.scheduledDate, estilo,
     sl: seq.slides.map(sl => [sl.body, sl.pos, sl.align, sl.caso, sl.overlay, sl.bg, sl.bgKey, sl.sticker]) });
   let h = 2166136261;
   for (let i = 0; i < txt.length; i++) { h ^= txt.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -430,11 +432,11 @@ async function revisaEnvio(seq) {
       if (error) throw new Error("No se pudo subir la story " + (i + 1) + ": " + error.message);
       subidas.push(ruta);
       const a = { ruta, tipo: "image/jpeg", nombre: `story-${i + 1}.jpg`, bytes: blob.size, origen: "supabase" };
-      if (i === 0) {   // la portada del calendario de Content OS
-        const mini = document.createElement("canvas"); mini.width = 180; mini.height = 320;
-        drawSlide(mini.getContext("2d"), seq.slides[0], 180, 320, seq.style);
-        a.poster = mini.toDataURL("image/jpeg", 0.72);
-      }
+      // Una miniatura por frame: Content OS enseña la secuencia entera en
+      // grande, y la primera es además la portada en su calendario.
+      const mini = document.createElement("canvas"); mini.width = 270; mini.height = 480;
+      drawSlide(mini.getContext("2d"), seq.slides[i], 270, 480, seq.style);
+      a.poster = mini.toDataURL("image/jpeg", 0.74);
       archivos.push(a);
     }
     const { data, error } = await sb.rpc("builder_enviar_secuencia", {
@@ -446,7 +448,7 @@ async function revisaEnvio(seq) {
     ENVIOS.set(seq.cloudId, { pub_estado: "programada", publicar_en: cuando, total: archivos.length });
     seq._notaEnvio = null;
     subeSecuencia(seq);
-    aviso(`En Content OS · sale el ${fechaHoraCorta(cuando, zonaDe(seq))} (${nombreZonaEnvio(zonaDe(seq))})`);
+    aviso(`✓ Enviada a Content OS · sale el ${fechaHoraCorta(cuando, zonaDe(seq))} (${nombreZonaEnvio(zonaDe(seq))})`, "largo");
   } catch (e) {
     await borraDelAlmacen(subidas);
     seq._notaEnvio = e.message || "No se pudo mandar a Content OS.";
@@ -483,8 +485,11 @@ function textoEnvio(seq) {
 function pintaNotaEnvio() {
   const el = $("#envioNota"); if (!el) return;
   const t = textoEnvio(state.active);
-  el.textContent = t; el.classList.toggle("hidden", !t);
-  el.classList.toggle("error", /^No |pasado|No se pudo/.test(t));
+  el.textContent = t;
+  $("#envioLinea")?.classList.toggle("hidden", !t);
+  el.classList.toggle("error", /^No |pasado|No se pudo|Tu cuenta|Faltan/.test(t));
+  el.classList.toggle("ok", /^En Content OS/.test(t));
+  el.classList.toggle("mandando", /^Mandándola/.test(t));
   const av = $("#envioInteractivo"); if (!av) return;
   const a = estadoDe(state.active) === "send" ? avisoInteractivos(state.active) : "";
   av.textContent = a ? "⚠ " + a : ""; av.classList.toggle("hidden", !a);
@@ -1515,7 +1520,7 @@ function aviso(texto, tipo = "ok") {
   setTimeout(() => {
     el.classList.remove("visible");
     setTimeout(() => el.remove(), 320);
-  }, tipo === "error" ? 5200 : 3600);
+  }, tipo === "error" || tipo === "largo" ? 5200 : 3600);
 }
 
 /* ---------------------------------------------------------------------- *
