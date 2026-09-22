@@ -348,7 +348,7 @@ const ENVIOS = new Map();   // lo que Content OS dice de cada una, por cloudId
 const ZONAS_ENVIO = [["Europe/Madrid", "España (península)"], ["Atlantic/Canary", "Canarias"], ["Europe/London", "Londres"], ["America/New_York", "Nueva York"], ["America/Mexico_City", "Ciudad de México"], ["America/Bogota", "Bogotá"], ["America/Argentina/Buenos_Aires", "Buenos Aires"], ["America/Los_Angeles", "Los Ángeles"], ["Asia/Dubai", "Dubái"], ["Asia/Ho_Chi_Minh", "Vietnam"], ["Asia/Bangkok", "Bangkok"]];
 const zonaPorDefecto = () => { try { return localStorage.getItem("sb_zona") || "Europe/Madrid"; } catch { return "Europe/Madrid"; } };
 const zonaDe = seq => seq?.style?.scheduledZone || zonaPorDefecto();
-const nombreZonaEnvio = z => (ZONAS_ENVIO.find(x => x[0] === z) || [z, z])[1];
+const nombreZonaEnvio = z => (ZONAS_ENVIO.find(x => x[0] === z) || [z, z])[1].replace(" (península)", "");
 
 /* El día y la hora tal como se leen en esa zona, pasados a un instante. */
 function horaEnZonaAISO(dia, hora, zona) {
