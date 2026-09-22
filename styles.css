@@ -2082,3 +2082,12 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 .chip-vis .prev-vignette::after { background: radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.78) 100%); }
 .chip-vis .prev-strong::after { background: rgba(0,0,0,0.62); }
 .chip-vis .prev-light::after { background: rgba(255,255,255,0.32); }
+
+/* ---- «Enviar»: se manda sola a Content OS a su día y hora ---- */
+.st-send { background: rgba(242,165,122,.16); color: #F2A57A; }
+.estado-punto.st-send { background: #F2A57A; box-shadow: 0 0 8px rgba(242,165,122,.45); color: #F2A57A; }
+.board-dot.st-send { background: #F2A57A; }
+.pill.st-send { background: rgba(242,165,122,.15); color: #F2A57A; }
+.ds-campo.hidden { display: none; }
+.envio-nota { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 340px; }
+.envio-nota.error { color: var(--red); }

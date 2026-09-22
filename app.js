@@ -28,6 +28,8 @@ const ctx = () => editorCanvas.getContext("2d");
 const STATUS = {
   draft:     { label: "Borrador",   cls: "st-draft" },
   scheduled: { label: "Programada", cls: "st-scheduled" },
+  // «Enviar»: con día y hora, se manda sola a Content OS y se publica a esa hora.
+  send:      { label: "Enviar",     cls: "st-send" },
   published: { label: "Publicada",  cls: "st-published" }
 };
 // Compatibilidad: las que quedaran "en progreso" se leen como borrador
@@ -319,8 +321,163 @@ function subeSecuencia(seq) {
     .catch(() => {})
     // Borrada mientras esperaba: no se vuelve a crear
     .then(() => { seq._enCola = false; return seq._borrada ? null : sbDB.sbUpsertSequence(seq); })
-    .then(row => { if (row && !seq.cloudId) seq.cloudId = row.id; return row; });
+    .then(row => { if (row && !seq.cloudId) seq.cloudId = row.id; if (row) programaEnvio(seq); return row; });
   return seq._cola;
+}
+
+/* =========================================================================
+ *  Envío a Content OS
+ *
+ *  Una secuencia en «Enviar» con día y hora se convierte en una pieza de
+ *  Content OS (formato Stories): aparece en su calendario y se publica sola a
+ *  esa hora, story a story y en su orden. Mientras Meta no apruebe el permiso
+ *  de publicar, Content OS la deja «en espera» y sale en cuanto lo apruebe.
+ *
+ *  Las imágenes se dibujan aquí, en el navegador, porque es donde están las
+ *  fotos de la galería. Se suben al almacén privado y Content OS le da a
+ *  Instagram un enlace temporal a cada una; al publicarse se borran.
+ *
+ *  Cualquier cambio posterior (texto, foto, día, hora) la vuelve a mandar
+ *  sola; sacarla de «Enviar» o borrarla la quita de Content OS.
+ * ========================================================================= */
+const conFecha = seq => ["scheduled", "send"].includes(estadoDe(seq));
+const ENVIOS = new Map();   // lo que Content OS dice de cada una, por cloudId
+
+/* La hora se da en la de España, como en el calendario de Content OS. */
+function horaMadridAISO(dia, hora) {
+  const [y, m, d] = dia.split("-").map(Number), [h, mi] = hora.split(":").map(Number);
+  const deseada = Date.UTC(y, m - 1, d, h, mi);
+  const fmt = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Madrid", hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  let t = deseada;
+  for (let k = 0; k < 2; k++) {
+    const p = fmt.formatToParts(new Date(t)), g = n => +p.find(x => x.type === n).value;
+    t += deseada - Date.UTC(g("year"), g("month") - 1, g("day"), g("hour"), g("minute"));
+  }
+  return new Date(t).toISOString();
+}
+
+/* Lo que decide qué se publica: si no cambia, no se vuelve a mandar. */
+function firmaEnvio(seq) {
+  const { envio, scheduledDate, ...estilo } = seq.style || {};
+  const txt = JSON.stringify({ t: seq.title, f: seq.scheduledDate, estilo,
+    sl: seq.slides.map(sl => [sl.body, sl.pos, sl.align, sl.caso, sl.overlay, sl.bg, sl.bgKey, sl.sticker]) });
+  let h = 2166136261;
+  for (let i = 0; i < txt.length; i++) { h ^= txt.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(36) + "-" + txt.length;
+}
+
+function programaEnvio(seq) {
+  if (!state.user || !seq || seq._borrada) return;
+  clearTimeout(seq._envioTimer);
+  seq._envioTimer = setTimeout(() => {
+    seq._envio = (seq._envio || Promise.resolve()).catch(() => {}).then(() => revisaEnvio(seq));
+  }, 1500);
+}
+
+const borraDelAlmacen = rutas => rutas.length
+  ? sb.storage.from("subidas").remove(rutas).catch(() => null) : Promise.resolve();
+
+async function revisaEnvio(seq) {
+  if (!state.user || !seq.cloudId || seq._borrada) return;
+  const env = seq.style.envio || null;
+  const hora = seq.style.scheduledTime;
+  const quiere = estadoDe(seq) === "send" && seq.scheduledDate && hora;
+
+  if (!quiere) {
+    if (!env) return;
+    const { data, error } = await sb.rpc("builder_cancelar_envio", { p_secuencia: seq.cloudId });
+    if (error) { aviso(error.message, "error"); return; }
+    await borraDelAlmacen((data?.viejos || []).map(a => a.ruta));
+    seq.style.envio = undefined; ENVIOS.delete(seq.cloudId);
+    aviso("Quitada del calendario de Content OS");
+    subeSecuencia(seq); pintaNotaEnvio();
+    return;
+  }
+
+  const firma = firmaEnvio(seq);
+  if (env && env.firma === firma) return;
+  const cuando = horaMadridAISO(seq.scheduledDate, hora);
+  if (new Date(cuando) <= new Date()) { seq._notaEnvio = "Esa hora ya ha pasado: elige una futura."; pintaNotaEnvio(); return; }
+
+  // Sin todas las fotos cargadas se publicaría el hueco gris: se espera.
+  const faltan = seq.slides.some(sl => !(sl.bgIndex >= 0 && state.images[sl.bgIndex]?.img?.complete));
+  if (faltan) {
+    seq._notaEnvio = "Faltan fotos por cargar: se manda en cuanto estén.";
+    pintaNotaEnvio(); setTimeout(() => programaEnvio(seq), 5000); return;
+  }
+
+  seq._notaEnvio = "Mandándola a Content OS…"; pintaNotaEnvio();
+  const carpeta = `secuencias/${state.user.id}/${seq.cloudId}/${Date.now().toString(36)}`;
+  const subidas = [];
+  try {
+    try { await document.fonts.ready; } catch {}
+    const archivos = [];
+    for (let i = 0; i < seq.slides.length; i++) {
+      const lienzo = document.createElement("canvas"); lienzo.width = CANVAS_W; lienzo.height = CANVAS_H;
+      drawSlide(lienzo.getContext("2d"), seq.slides[i], CANVAS_W, CANVAS_H, seq.style);
+      const blob = await new Promise(r => lienzo.toBlob(r, "image/jpeg", 0.92));
+      if (!blob) throw new Error("No se pudo dibujar la story " + (i + 1) + ".");
+      const ruta = `${carpeta}/${i + 1}.jpg`;
+      const { error } = await sb.storage.from("subidas").upload(ruta, blob, { contentType: "image/jpeg", upsert: true });
+      if (error) throw new Error("No se pudo subir la story " + (i + 1) + ": " + error.message);
+      subidas.push(ruta);
+      const a = { ruta, tipo: "image/jpeg", nombre: `story-${i + 1}.jpg`, bytes: blob.size, origen: "supabase" };
+      if (i === 0) {   // la portada del calendario de Content OS
+        const mini = document.createElement("canvas"); mini.width = 180; mini.height = 320;
+        drawSlide(mini.getContext("2d"), seq.slides[0], 180, 320, seq.style);
+        a.poster = mini.toDataURL("image/jpeg", 0.72);
+      }
+      archivos.push(a);
+    }
+    const { data, error } = await sb.rpc("builder_enviar_secuencia", {
+      p_secuencia: seq.cloudId, p_titulo: seq.title || "", p_publicar_en: cuando, p_archivos: archivos });
+    if (error) throw new Error(error.message);
+    await borraDelAlmacen((data?.viejos || []).map(a => a.ruta).filter(r => !subidas.includes(r)));
+    seq.style.envio = { pieza: data.pieza, firma, cuando };
+    ENVIOS.set(seq.cloudId, { pub_estado: "programada", publicar_en: cuando, total: archivos.length });
+    seq._notaEnvio = null;
+    subeSecuencia(seq);
+    aviso(`En Content OS · sale el ${fechaHoraCorta(cuando)}`);
+  } catch (e) {
+    await borraDelAlmacen(subidas);
+    seq._notaEnvio = e.message || "No se pudo mandar a Content OS.";
+    aviso(seq._notaEnvio, "error");
+  }
+  pintaNotaEnvio();
+}
+
+const fechaHoraCorta = iso => new Date(iso).toLocaleString("es-ES", {
+  timeZone: "Europe/Madrid", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+/* Qué se ve en el editor, junto al estado. */
+function textoEnvio(seq) {
+  if (!seq || estadoDe(seq) !== "send") return "";
+  if (seq._notaEnvio) return seq._notaEnvio;
+  if (!seq.scheduledDate || !seq.style.scheduledTime) return "Pon día y hora para mandarla a Content OS.";
+  const e = ENVIOS.get(seq.cloudId), cuando = seq.style.envio?.cuando;
+  if (!seq.style.envio) return "Se manda a Content OS al guardar.";
+  if (e?.pub_estado === "en_espera") return "En Content OS · esperando el permiso de Meta para publicar.";
+  if (e?.pub_estado === "publicando") return `Publicándose · ${e.pub_progreso || 0} de ${e.total || "?"} (una cada 7 min)`;
+  if (e?.pub_estado === "error") return "No salió: " + (e.pub_error || "revisa Content OS.");
+  return `En Content OS · sale el ${fechaHoraCorta(cuando)}${seq.slides.length > 1 ? " · una story cada 7 min" : ""}`;
+}
+function pintaNotaEnvio() {
+  const el = $("#envioNota"); if (!el) return;
+  const t = textoEnvio(state.active);
+  el.textContent = t; el.classList.toggle("hidden", !t);
+  el.classList.toggle("error", /^No |pasado|No se pudo/.test(t));
+}
+
+/* Al abrir: lo que Content OS sabe de cada una. Si ya salió, pasa a «Publicada». */
+async function leeEnvios() {
+  if (!state.user) return;
+  const { data, error } = await sb.rpc("builder_estado_envios");
+  if (error || !Array.isArray(data)) return;
+  ENVIOS.clear();
+  data.forEach(r => ENVIOS.set(r.secuencia_id, r));
+  const salidas = state.sequences.filter(s => s.cloudId && estadoDe(s) === "send" && ENVIOS.get(s.cloudId)?.pub_estado === "publicada");
+  if (salidas.length) guardaEnLote(salidas, s => { s.status = "published"; s.style.envio = undefined; });
 }
 
 /* Guarda en el navegador y, si hay sesión, en la nube. */
@@ -1387,7 +1544,7 @@ function tarjetaMia(seq) {
      </div>
      <p class="estado-linea">
        <span class="estado-punto ${info.cls}"></span>
-       <span>${info.label}${fecha ? ` · ${fecha}` : ""}</span>
+       <span>${info.label}${fecha ? ` · ${fecha}` : ""}${estadoDe(seq) === "send" && seq.style.scheduledTime ? ` · ${seq.style.scheduledTime}` : ""}</span>
      </p>
      <div class="card-acciones">
        <button class="btn btn-primary sm card-cta" data-act="abrir">Abrir</button>
@@ -1557,7 +1714,7 @@ function pintaBarraFotos() {
 const SELECCION = new Set();
 let ultimaMarcada = null;          // para marcar un rango con Mayúsculas
 
-const ORDEN_ESTADOS = ["draft", "scheduled", "published"];
+const ORDEN_ESTADOS = ["draft", "scheduled", "send", "published"];
 const ORDEN_CATEGORIAS = Object.keys(CATEGORIES);
 
 /* Ojo con el tipo: los ids de las secuencias son números, pero lo que se lee
@@ -1781,6 +1938,12 @@ async function eliminaSecuencias(seqs) {
   renderAll();
   if (state.view === "calendar") renderCalendar();
   if (!state.user) return;
+  // Si estaba mandada a Content OS, se retira antes de borrarla: si no, la
+  // pieza se quedaría en su calendario y se publicaría igual.
+  for (const sq of seqs.filter(x => x.cloudId && x.style?.envio)) {
+    const { data } = await sb.rpc("builder_cancelar_envio", { p_secuencia: sq.cloudId });
+    await borraDelAlmacen((data?.viejos || []).map(a => a.ruta));
+  }
   // Una secuencia recién creada puede no tener aún su fila en la nube: se
   // espera a que termine de guardarse, o se borraría aquí y volvería al recargar.
   await Promise.all(seqs.map(s => (s._cola || Promise.resolve()).catch(() => {})));
@@ -2129,6 +2292,7 @@ function fijaFecha(seq, dia) {
   setScheduleForSequence(seq, dia);
   seq.scheduledDate = dia || undefined;
   if (dia && estadoDe(seq) === "draft") seq.status = "scheduled";
+  if (!dia && estadoDe(seq) === "send") seq.status = "scheduled";
   guardarSecuencia(seq);
   if (state.view === "calendar") renderCalendar();
 }
@@ -2625,9 +2789,18 @@ function openEditor(id) {
 function syncSchedDate() {
   const inp = $("#schedDate");
   if (!inp) return;
-  const isSched = state.active?.status === "scheduled";
+  const isSched = conFecha(state.active);
   inp.classList.toggle("hidden", !isSched);
   if (isSched) inp.value = state.active.scheduledDate || "";
+  const hora = $("#schedTime");
+  if (hora) {
+    const conHora = estadoDe(state.active) === "send";
+    // El desplegable propio es el botón de al lado; el <select> sigue oculto.
+    const campo = hora.nextElementSibling?.classList.contains("ds-campo") ? hora.nextElementSibling : hora;
+    campo.classList.toggle("hidden", !conHora);
+    if (conHora) { hora.value = state.active.style.scheduledTime || "10:00"; hora._pinta?.(); }
+  }
+  pintaNotaEnvio();
 }
 function closeEditor() {
   persist();
@@ -3806,7 +3979,8 @@ function bind() {
   $("#editorTitle").addEventListener("input", e => { state.active.title = e.target.value; });
   $("#statusSelect").addEventListener("change", e => {
     state.active.status = e.target.value;
-    if (e.target.value !== "scheduled") {
+    if (e.target.value === "send" && !state.active.style.scheduledTime) state.active.style.scheduledTime = "10:00";
+    if (!conFecha(state.active)) {
       // Fuera del calendario también en la nube: antes la fecha seguía en
       // style.scheduledDate y al recargar volvía a aparecer ese día.
       setScheduleForSequence(state.active, null);
@@ -3815,6 +3989,11 @@ function bind() {
     syncSchedDate(); persist();
   });
   $("#catSelect").addEventListener("change", e => { state.active.category = e.target.value; persist(); });
+  $("#schedTime")?.addEventListener("change", e => {
+    if (!state.active) return;
+    state.active.style.scheduledTime = e.target.value || undefined;
+    pintaNotaEnvio(); persist();
+  });
   $("#schedDate").addEventListener("change", e => {
     if (!state.active) return;
     const v = e.target.value || null;
@@ -4279,6 +4458,7 @@ async function bootLoggedIn(user) {
   state.schedule = storeSched.load() || {};
   state.calMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   rebuildScheduleFromSequences();
+  leeEnvios().catch(() => {});
 
   // Vuelve a donde estabas antes de recargar, no siempre a la biblioteca
   let vistaGuardada = "library";
