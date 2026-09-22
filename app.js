@@ -341,6 +341,12 @@ function subeSecuencia(seq) {
  *  sola; sacarla de «Enviar» o borrarla la quita de Content OS.
  * ========================================================================= */
 const conFecha = seq => ["scheduled", "send"].includes(estadoDe(seq));
+/* Engagement vive de lo interactivo (encuestas, preguntas, deslizadores), y eso
+   Instagram no deja publicarlo por la API: esas secuencias se suben siempre a
+   mano. Por eso no pueden estar en «Enviar»: se quedan en «Programada». */
+const MSG_ENGAGEMENT = "Las secuencias de Engagement se suben a mano en Instagram: no se pueden mandar a Content OS. Se queda en Programada.";
+const puedeEnviarse = seq => normalizaCategoria(seq?.category) !== "engagement";
+const estadoPermitido = (seq, estado) => estado === "send" && !puedeEnviarse(seq) ? "scheduled" : estado;
 const ENVIOS = new Map();   // lo que Content OS dice de cada una, por cloudId
 
 /* Las mismas zonas que Content OS. Cada secuencia guarda la suya
@@ -391,7 +397,7 @@ async function revisaEnvio(seq) {
   if (!state.user || !seq.cloudId || seq._borrada) return;
   const env = seq.style.envio || null;
   const hora = seq.style.scheduledTime;
-  const quiere = estadoDe(seq) === "send" && seq.scheduledDate && hora;
+  const quiere = estadoDe(seq) === "send" && puedeEnviarse(seq) && seq.scheduledDate && hora;
 
   if (!quiere) {
     if (!env) return;
@@ -1369,6 +1375,7 @@ function usarPlantilla(id, vista) {
     ok: "Crear y abrir",
     alAceptar: (v) => {
       const seq = fromCatalog(item.id, { status: v.e || "draft" });
+      if (estadoPermitido(seq, seq.status) !== seq.status) { seq.status = "scheduled"; aviso(MSG_ENGAGEMENT, "error"); }
       if (v.t.trim()) seq.title = v.t.trim();
       if (vista) seq.slides.forEach((sl, i) => {
         const o = vista.slides[i];
@@ -1937,7 +1944,11 @@ function ponEstadoEnLote(seqs) {
     sub: "El mismo para las " + seqs.length + " seleccionadas.",
     campos: [{ id: "e", tipo: "select", etiqueta: "Estado",
       opciones: ORDEN_ESTADOS.map(k => [k, STATUS[k].label]), valor: estadoDe(seqs[0]) }],
-    alAceptar: (v) => guardaEnLote(seqs, s => { s.status = v.e; })
+    alAceptar: (v) => {
+      const frenadas = seqs.filter(s => estadoPermitido(s, v.e) !== v.e).length;
+      guardaEnLote(seqs, s => { s.status = estadoPermitido(s, v.e); });
+      if (frenadas) aviso(`${frenadas === 1 ? "Una es" : frenadas + " son"} de Engagement: se ${frenadas === 1 ? "queda" : "quedan"} en Programada, porque se suben a mano.`, "error");
+    }
   });
 }
 
@@ -4016,10 +4027,14 @@ function bind() {
   $("#editorClose").addEventListener("click", closeEditor);
   $("#editorTitle").addEventListener("input", e => { state.active.title = e.target.value; });
   $("#statusSelect").addEventListener("change", e => {
-    state.active.status = e.target.value;
-    if (e.target.value === "send" && !state.active.style.scheduledTime) state.active.style.scheduledTime = "10:00";
-    if (e.target.value === "send" && !state.active.style.scheduledZone) state.active.style.scheduledZone = zonaPorDefecto();
-    if (e.target.value === "send" && avisoInteractivos(state.active)) aviso(avisoInteractivos(state.active), "error");
+    state.active.status = estadoPermitido(state.active, e.target.value);
+    if (state.active.status !== e.target.value) {
+      aviso(MSG_ENGAGEMENT, "error");
+      e.target.value = state.active.status; e.target._pinta?.();
+    }
+    if (state.active.status === "send" && !state.active.style.scheduledTime) state.active.style.scheduledTime = "10:00";
+    if (state.active.status === "send" && !state.active.style.scheduledZone) state.active.style.scheduledZone = zonaPorDefecto();
+    if (state.active.status === "send" && avisoInteractivos(state.active)) aviso(avisoInteractivos(state.active), "error");
     if (!conFecha(state.active)) {
       // Fuera del calendario también en la nube: antes la fecha seguía en
       // style.scheduledDate y al recargar volvía a aparecer ese día.
@@ -4028,7 +4043,16 @@ function bind() {
     }
     syncSchedDate(); persist();
   });
-  $("#catSelect").addEventListener("change", e => { state.active.category = e.target.value; persist(); });
+  $("#catSelect").addEventListener("change", e => {
+    state.active.category = e.target.value;
+    if (estadoDe(state.active) === "send" && !puedeEnviarse(state.active)) {
+      state.active.status = "scheduled";
+      $("#statusSelect").value = "scheduled"; $("#statusSelect")._pinta?.();
+      aviso(MSG_ENGAGEMENT, "error");
+      syncSchedDate();
+    }
+    persist();
+  });
   $("#schedZona")?.addEventListener("change", e => {
     if (!state.active) return;
     state.active.style.scheduledZone = e.target.value || "Europe/Madrid";
@@ -4228,7 +4252,9 @@ function bind() {
     const seqs = state.sequences.filter(x => arrastrando.includes(String(x.id)) && estadoDe(x) !== estado);
     arrastrando = null;
     if (!seqs.length) return renderGestion();
-    guardaEnLote(seqs, x => { x.status = estado; });
+    const frenadas = seqs.filter(x => estadoPermitido(x, estado) !== estado).length;
+    guardaEnLote(seqs, x => { x.status = estadoPermitido(x, estado); });
+    if (frenadas) aviso(`${frenadas === 1 ? "Una es" : frenadas + " son"} de Engagement: se ${frenadas === 1 ? "queda" : "quedan"} en Programada, porque se suben a mano.`, "error");
     aviso(`${seqs.length === 1 ? "Movida" : seqs.length + " movidas"} a ${STATUS[estado].label}`);
   });
 
