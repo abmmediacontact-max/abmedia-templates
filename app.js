@@ -431,7 +431,8 @@ async function revisaEnvio(seq) {
       archivos.push(a);
     }
     const { data, error } = await sb.rpc("builder_enviar_secuencia", {
-      p_secuencia: seq.cloudId, p_titulo: seq.title || "", p_publicar_en: cuando, p_archivos: archivos });
+      p_secuencia: seq.cloudId, p_titulo: seq.title || "", p_publicar_en: cuando, p_archivos: archivos,
+      p_notas: avisoInteractivos(seq) || null });
     if (error) throw new Error(error.message);
     await borraDelAlmacen((data?.viejos || []).map(a => a.ruta).filter(r => !subidas.includes(r)));
     seq.style.envio = { pieza: data.pieza, firma, cuando };
@@ -445,6 +446,16 @@ async function revisaEnvio(seq) {
     aviso(seq._notaEnvio, "error");
   }
   pintaNotaEnvio();
+}
+
+/* Lo interactivo (encuesta, preguntas, deslizador) no se puede publicar por
+   la API de Instagram: sale dibujado, como imagen, y no se puede pulsar. Esas
+   stories hay que subirlas a mano desde Instagram. */
+function avisoInteractivos(seq) {
+  const n = (seq?.slides || []).map((sl, i) => sl.sticker ? i + 1 : 0).filter(Boolean);
+  if (!n.length) return "";
+  return `${n.length === 1 ? "La story " + n[0] + " lleva" : "Las stories " + n.slice(0, -1).join(", ") + " y " + n.at(-1) + " llevan"} un sticker interactivo: ` +
+    "Instagram no deja publicarlo solo, saldría como imagen sin poder pulsarse. Súbela a mano.";
 }
 
 const fechaHoraCorta = iso => new Date(iso).toLocaleString("es-ES", {
@@ -467,6 +478,9 @@ function pintaNotaEnvio() {
   const t = textoEnvio(state.active);
   el.textContent = t; el.classList.toggle("hidden", !t);
   el.classList.toggle("error", /^No |pasado|No se pudo/.test(t));
+  const av = $("#envioInteractivo"); if (!av) return;
+  const a = estadoDe(state.active) === "send" ? avisoInteractivos(state.active) : "";
+  av.textContent = a ? "⚠ " + a : ""; av.classList.toggle("hidden", !a);
 }
 
 /* Al abrir: lo que Content OS sabe de cada una. Si ya salió, pasa a «Publicada». */
@@ -3985,6 +3999,7 @@ function bind() {
   $("#statusSelect").addEventListener("change", e => {
     state.active.status = e.target.value;
     if (e.target.value === "send" && !state.active.style.scheduledTime) state.active.style.scheduledTime = "10:00";
+    if (e.target.value === "send" && avisoInteractivos(state.active)) aviso(avisoInteractivos(state.active), "error");
     if (!conFecha(state.active)) {
       // Fuera del calendario también en la nube: antes la fecha seguía en
       // style.scheduledDate y al recargar volvía a aparecer ese día.
