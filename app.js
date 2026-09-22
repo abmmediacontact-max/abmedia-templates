@@ -343,11 +343,18 @@ function subeSecuencia(seq) {
 const conFecha = seq => ["scheduled", "send"].includes(estadoDe(seq));
 const ENVIOS = new Map();   // lo que Content OS dice de cada una, por cloudId
 
-/* La hora se da en la de España, como en el calendario de Content OS. */
-function horaMadridAISO(dia, hora) {
+/* Las mismas zonas que Content OS. Cada secuencia guarda la suya
+   (style.scheduledZone); la última elegida es la de partida para las nuevas. */
+const ZONAS_ENVIO = [["Europe/Madrid", "España (península)"], ["Atlantic/Canary", "Canarias"], ["Europe/London", "Londres"], ["America/New_York", "Nueva York"], ["America/Mexico_City", "Ciudad de México"], ["America/Bogota", "Bogotá"], ["America/Argentina/Buenos_Aires", "Buenos Aires"], ["America/Los_Angeles", "Los Ángeles"], ["Asia/Dubai", "Dubái"], ["Asia/Ho_Chi_Minh", "Vietnam"], ["Asia/Bangkok", "Bangkok"]];
+const zonaPorDefecto = () => { try { return localStorage.getItem("sb_zona") || "Europe/Madrid"; } catch { return "Europe/Madrid"; } };
+const zonaDe = seq => seq?.style?.scheduledZone || zonaPorDefecto();
+const nombreZonaEnvio = z => (ZONAS_ENVIO.find(x => x[0] === z) || [z, z])[1];
+
+/* El día y la hora tal como se leen en esa zona, pasados a un instante. */
+function horaEnZonaAISO(dia, hora, zona) {
   const [y, m, d] = dia.split("-").map(Number), [h, mi] = hora.split(":").map(Number);
   const deseada = Date.UTC(y, m - 1, d, h, mi);
-  const fmt = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Madrid", hourCycle: "h23",
+  const fmt = new Intl.DateTimeFormat("en-US", { timeZone: zona || "Europe/Madrid", hourCycle: "h23",
     year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   let t = deseada;
   for (let k = 0; k < 2; k++) {
@@ -397,7 +404,7 @@ async function revisaEnvio(seq) {
 
   const firma = firmaEnvio(seq);
   if (env && env.firma === firma) return;
-  const cuando = horaMadridAISO(seq.scheduledDate, hora);
+  const cuando = horaEnZonaAISO(seq.scheduledDate, hora, zonaDe(seq));
   if (new Date(cuando) <= new Date()) { seq._notaEnvio = "Esa hora ya ha pasado: elige una futura."; pintaNotaEnvio(); return; }
 
   // Sin todas las fotos cargadas se publicaría el hueco gris: se espera.
@@ -439,7 +446,7 @@ async function revisaEnvio(seq) {
     ENVIOS.set(seq.cloudId, { pub_estado: "programada", publicar_en: cuando, total: archivos.length });
     seq._notaEnvio = null;
     subeSecuencia(seq);
-    aviso(`En Content OS · sale el ${fechaHoraCorta(cuando)}`);
+    aviso(`En Content OS · sale el ${fechaHoraCorta(cuando, zonaDe(seq))} (${nombreZonaEnvio(zonaDe(seq))})`);
   } catch (e) {
     await borraDelAlmacen(subidas);
     seq._notaEnvio = e.message || "No se pudo mandar a Content OS.";
@@ -458,8 +465,8 @@ function avisoInteractivos(seq) {
     `Instagram no deja publicarlo solo: saldría como imagen, sin poder pulsarse. ${n.length === 1 ? "Súbela" : "Súbelas"} a mano.`;
 }
 
-const fechaHoraCorta = iso => new Date(iso).toLocaleString("es-ES", {
-  timeZone: "Europe/Madrid", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const fechaHoraCorta = (iso, zona = "Europe/Madrid") => new Date(iso).toLocaleString("es-ES", {
+  timeZone: zona, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 /* Qué se ve en el editor, junto al estado. */
 function textoEnvio(seq) {
@@ -471,7 +478,7 @@ function textoEnvio(seq) {
   if (e?.pub_estado === "en_espera") return "En Content OS · esperando el permiso de Meta para publicar.";
   if (e?.pub_estado === "publicando") return `Publicándose · ${e.pub_progreso || 0} de ${e.total || "?"} (una cada 7 min)`;
   if (e?.pub_estado === "error") return "No salió: " + (e.pub_error || "revisa Content OS.");
-  return `En Content OS · sale el ${fechaHoraCorta(cuando)}${seq.slides.length > 1 ? " · una story cada 7 min" : ""}`;
+  return `En Content OS · sale el ${fechaHoraCorta(cuando, zonaDe(seq))} (${nombreZonaEnvio(zonaDe(seq))})${seq.slides.length > 1 ? " · una story cada 7 min" : ""}`;
 }
 function pintaNotaEnvio() {
   const el = $("#envioNota"); if (!el) return;
@@ -2819,6 +2826,13 @@ function syncSchedDate() {
     campo.classList.toggle("hidden", !conHora);
     if (conHora) { hora.value = state.active.style.scheduledTime || "10:00"; hora._pinta?.(); }
   }
+  const zona = $("#schedZona");
+  if (zona) {
+    const conHora = estadoDe(state.active) === "send";
+    const campo = zona.nextElementSibling?.classList.contains("ds-campo") ? zona.nextElementSibling : zona;
+    campo.classList.toggle("hidden", !conHora);
+    if (conHora) { zona.value = zonaDe(state.active); zona._pinta?.(); }
+  }
   pintaNotaEnvio();
 }
 function closeEditor() {
@@ -3999,6 +4013,7 @@ function bind() {
   $("#statusSelect").addEventListener("change", e => {
     state.active.status = e.target.value;
     if (e.target.value === "send" && !state.active.style.scheduledTime) state.active.style.scheduledTime = "10:00";
+    if (e.target.value === "send" && !state.active.style.scheduledZone) state.active.style.scheduledZone = zonaPorDefecto();
     if (e.target.value === "send" && avisoInteractivos(state.active)) aviso(avisoInteractivos(state.active), "error");
     if (!conFecha(state.active)) {
       // Fuera del calendario también en la nube: antes la fecha seguía en
@@ -4009,6 +4024,12 @@ function bind() {
     syncSchedDate(); persist();
   });
   $("#catSelect").addEventListener("change", e => { state.active.category = e.target.value; persist(); });
+  $("#schedZona")?.addEventListener("change", e => {
+    if (!state.active) return;
+    state.active.style.scheduledZone = e.target.value || "Europe/Madrid";
+    try { localStorage.setItem("sb_zona", state.active.style.scheduledZone); } catch {}
+    pintaNotaEnvio(); persist();
+  });
   $("#schedTime")?.addEventListener("change", e => {
     if (!state.active) return;
     state.active.style.scheduledTime = e.target.value || undefined;
