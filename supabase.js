@@ -208,13 +208,20 @@ async function sbSubirFoto(key, blob) {
 
 async function sbListarFotos() {
   const uid = await sbUidActual();
-  if (!uid) return [];
-  const { data, error } = await sb.storage.from(BUCKET)
-    .list(uid, { limit: 1000, sortBy: { column: "created_at", order: "asc" } });
-  // null si falla, [] si de verdad no hay ninguna: no es lo mismo, y
-  // confundirlos haría creer que se han borrado todas las fotos.
-  if (error) { console.warn("sbListarFotos", error.message); return null; }
-  return (data || []).filter(o => o.name && !o.name.startsWith("."));
+  // Sin sesión no se sabe qué hay en la nube: null, nunca [] (una lista vacía
+  // haría creer que se borraron las fotos y se pondrían otras en los frames).
+  if (!uid) return null;
+  const todas = [];
+  for (let offset = 0; ; offset += 1000) {
+    const { data, error } = await sb.storage.from(BUCKET)
+      .list(uid, { limit: 1000, offset, sortBy: { column: "created_at", order: "asc" } });
+    // null si falla, [] si de verdad no hay ninguna: no es lo mismo, y
+    // confundirlos haría creer que se han borrado todas las fotos.
+    if (error) { console.warn("sbListarFotos", error.message); return null; }
+    todas.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return todas.filter(o => o.name && !o.name.startsWith("."));
 }
 
 async function sbDescargarFoto(nombre) {

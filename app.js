@@ -303,14 +303,31 @@ const storeT = {
   save(t) { try { localStorage.setItem(this.KEY, JSON.stringify(t)); } catch {} }
 };
 
+/*
+ * Sube una secuencia a la nube de una en una. Si se lanzaban dos guardados
+ * de una secuencia nueva antes de que la nube le diera id, cada uno creaba
+ * una fila y la secuencia salía duplicada. Ahora los guardados de la misma
+ * secuencia van en fila: el segundo espera al primero (y ya lleva el id), y
+ * si se piden varios mientras uno está en marcha sólo se hace uno más, con
+ * lo último.
+ */
+function subeSecuencia(seq) {
+  if (!seq) return Promise.resolve(null);
+  if (seq._enCola) return seq._cola;
+  seq._enCola = true;
+  seq._cola = (seq._cola || Promise.resolve())
+    .catch(() => {})
+    // Borrada mientras esperaba: no se vuelve a crear
+    .then(() => { seq._enCola = false; return seq._borrada ? null : sbDB.sbUpsertSequence(seq); })
+    .then(row => { if (row && !seq.cloudId) seq.cloudId = row.id; return row; });
+  return seq._cola;
+}
+
 /* Guarda en el navegador y, si hay sesión, en la nube. */
 async function persistAhora() {
   store.save(state.sequences);
   if (!state.user || !state.active) return;
-  const ref = state.active;
-  const row = await sbDB.sbUpsertSequence(ref);
-  if (row && ref && !ref.cloudId) ref.cloudId = row.id;
-  return row;
+  return subeSecuencia(state.active);
 }
 
 /* Igual, pero sin esperar: para los guardados automáticos de cada retoque. */
@@ -436,6 +453,12 @@ function cambiaPorOtra(seq) {
   if (!pool.length) { aviso("No hay otra plantilla de esta categoría", "mal"); return null; }
   const t = pool[Math.floor(Math.random() * pool.length)];
   const nueva = fromCatalog(t.id, { id: -1 });
+  // Las fotos se quedan donde estaban, frame a frame; sólo los frames que
+  // sobren reciben una.
+  nueva.slides.forEach((sl, i) => {
+    const antes = seq.slides[i];
+    if (antes && antes.bgKey) { sl.bgKey = antes.bgKey; sl.bgIndex = antes.bgIndex; sl.bg = antes.bg; }
+  });
   seq.title = t.title;
   seq.slides = nueva.slides;
   seq.style.plantilla = t.id;
@@ -1692,7 +1715,7 @@ function guardaEnLote(seqs, cambia) {
   seqs.forEach(cambia);
   store.save(state.sequences);
   storeSched.save(state.schedule);
-  if (state.user) seqs.forEach(s => { try { sbDB.sbUpsertSequence(s); } catch {} });
+  if (state.user) seqs.forEach(s => { subeSecuencia(s).catch(() => {}); });
   renderAll();
   if (state.view === "calendar") renderCalendar();
 }
@@ -1760,7 +1783,7 @@ async function eliminaSecuencias(seqs) {
   if (!state.user) return;
   // Una secuencia recién creada puede no tener aún su fila en la nube: se
   // espera a que termine de guardarse, o se borraría aquí y volvería al recargar.
-  await Promise.all(seqs.map(s => s._guardando || null));
+  await Promise.all(seqs.map(s => (s._cola || Promise.resolve()).catch(() => {})));
   const nube = seqs.map(s => s.cloudId).filter(Boolean);
   if (nube.length) { try { await sbDB.sbDeleteSequences(nube); } catch (e) { console.warn("borrar en la nube", e); } }
 }
@@ -2116,8 +2139,7 @@ function guardarSecuencia(seq) {
   if (!state.user || !seq) return;
   // Se guarda la petición en marcha: si se borra antes de que acabe, el
   // borrado la espera para saber qué fila de la nube quitar.
-  seq._guardando = sbDB.sbUpsertSequence(seq).then(row => {
-    if (row && !seq.cloudId) seq.cloudId = row.id;
+  seq._guardando = subeSecuencia(seq).then(row => {
     if (seq._borrada && seq.cloudId) sbDB.sbDeleteSequences([seq.cloudId]).catch(() => {});
   }).catch(() => {});
 }
@@ -3785,9 +3807,10 @@ function bind() {
   $("#statusSelect").addEventListener("change", e => {
     state.active.status = e.target.value;
     if (e.target.value !== "scheduled") {
-      state.active.scheduledDate = null;
-      removeScheduleEntriesForSeq(state.active.id);
-      storeSched.save(state.schedule);
+      // Fuera del calendario también en la nube: antes la fecha seguía en
+      // style.scheduledDate y al recargar volvía a aparecer ese día.
+      setScheduleForSequence(state.active, null);
+      state.active.scheduledDate = undefined;
     }
     syncSchedDate(); persist();
   });
@@ -4152,7 +4175,27 @@ function fillFontSelect() { /* deprecated — sustituido por buildFontChips */ }
 /* =========================================================================
  *  AUTH + arranque
  * ========================================================================= */
+/* Al cambiar de cuenta en la misma pestaña no puede quedar nada de la
+   anterior en memoria: un guardado en marcha subiría sus secuencias (o las
+   fotos repartidas con las de la nueva) a la cuenta que acaba de entrar. */
+function vaciaMemoriaDeCuenta() {
+  state.user = null;
+  state.isAdminUser = false;
+  state.images = [];
+  state.sequences = [];
+  state.userTemplates = [];
+  state.reviewQueue = [];
+  state.inbox = [];
+  state.active = null;
+  state.current = 0;
+  state.schedule = {};
+  _ultimaSel = null;
+  try { $("#overlay")?.classList.add("hidden"); $("#seqPeekModal")?.classList.add("hidden"); } catch {}
+}
+
 async function bootLoggedIn(user) {
+  if (state.user && state.user.id !== user.id) vaciaMemoriaDeCuenta();
+  if (!state.user) { state.images = []; state.sequences = []; state.userTemplates = []; state.active = null; state.schedule = {}; }
   state.user = user;
   state.isAdminUser = sbAuth.isAdmin(user);
 
@@ -4200,6 +4243,7 @@ async function bootLoggedIn(user) {
   // y después se completa con lo que haya en la nube, marcas incluidas
   sincronizarFotos().then(sincronizarTipos);
 
+  _ultimaCargaNube = Date.now();
   const cloudSeqs = await sbDB.sbFetchSequences();
   if (cloudSeqs.length) {
     const sinFotoGuardada = [];
@@ -4244,6 +4288,35 @@ async function bootLoggedIn(user) {
   contarAvisos();
   setTimeout(() => startTour(false), 600);
 }
+
+/*
+ * Una pestaña que lleva rato abierta tiene las secuencias como estaban
+ * cuando se abrió. Si desde otra pestaña u otro equipo se cambió una fecha
+ * o una foto, al guardar desde aquí se pisaba con lo viejo. Al volver a la
+ * pestaña (tras más de un minuto fuera) se recargan de la nube, salvo que
+ * haya una secuencia abierta en el editor.
+ */
+let _ultimaCargaNube = 0, _ocultaDesde = 0;
+async function recargaDesdeNube() {
+  if (!state.user || state.active) return;
+  const cloudSeqs = await sbDB.sbFetchSequences().catch(() => null);
+  if (!Array.isArray(cloudSeqs) || state.active) return;
+  const locales = state.sequences.filter(s => !s.cloudId);   // aún sin subir
+  state.sequences = [...locales, ...cloudSeqs.map(r => {
+    const seq = instantiate({ title: r.title, category: r.category, status: r.status, submitted: r.submitted, style: r.style, slides: r.slides });
+    seq.cloudId = r.id;
+    return seq;
+  })];
+  _ultimaCargaNube = Date.now();
+  resuelveFondos();
+  rebuildScheduleFromSequences();
+  renderAll();
+  if (state.view === "calendar") renderCalendar();
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") { _ocultaDesde = Date.now(); return; }
+  if (_ocultaDesde && Date.now() - _ocultaDesde > 60000) recargaDesdeNube();
+});
 
 function showLogin() {
   document.getElementById("notAllowed")?.classList.add("hidden");
@@ -4352,7 +4425,7 @@ async function init() {
 
   sb.auth.onAuthStateChange(async (event, session) => {
     if (session && session.user) await bootOnce(session.user);
-    else { state.user = null; _bootingFor = null; showLogin(); }
+    else { vaciaMemoriaDeCuenta(); _bootingFor = null; showLogin(); }
   });
 
   const s = await sbAuth.sbGetSession();
