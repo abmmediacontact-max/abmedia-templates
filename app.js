@@ -289,7 +289,7 @@ const store = {
     const data = seqs.map(s => ({
       id: s.id, title: s.title, category: s.category, status: s.status,
       submitted: !!s.submitted, style: s.style,
-      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, caso: sl.caso || null, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null, sticker: sl.sticker || null, estilo: sl.estilo || null }))
+      slides: s.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, caso: sl.caso || null, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null, sticker: sl.sticker || null, estilo: sl.estilo || null, insets: datosEncimas(sl.insets) }))
     }));
     try { localStorage.setItem(this.KEY, JSON.stringify(data)); } catch {}
   }
@@ -376,7 +376,7 @@ function firmaEnvio(seq) {
   // «v» sube cuando cambia lo que se manda (ahora, una miniatura por frame):
   // lo ya enviado se vuelve a mandar una vez, solo, al abrir el builder.
   const txt = JSON.stringify({ v: 2, t: seq.title, f: seq.scheduledDate, estilo,
-    sl: seq.slides.map(sl => [sl.body, sl.pos, sl.align, sl.caso, sl.overlay, sl.bg, sl.bgKey, sl.sticker, sl.estilo]) });
+    sl: seq.slides.map(sl => [sl.body, sl.pos, sl.align, sl.caso, sl.overlay, sl.bg, sl.bgKey, sl.sticker, sl.estilo, datosEncimas(sl.insets)]) });
   let h = 2166136261;
   for (let i = 0; i < txt.length; i++) { h ^= txt.charCodeAt(i); h = Math.imul(h, 16777619); }
   return (h >>> 0).toString(36) + "-" + txt.length;
@@ -427,6 +427,12 @@ async function revisaEnvio(seq) {
   const subidas = [];
   try {
     try { await document.fonts.ready; } catch {}
+    await aseguraEncimas(seq.slides);
+    // Sin las fotos de encima se publicaría el frame sin ellas: se espera.
+    if (seq.slides.some(sl => (sl.insets || []).some(i => !imgEncima(i.key)))) {
+      seq._notaEnvio = "Faltan fotos por cargar: se manda en cuanto estén.";
+      pintaNotaEnvio(); setTimeout(() => programaEnvio(seq), 5000); return;
+    }
     const archivos = [];
     for (let i = 0; i < seq.slides.length; i++) {
       const lienzo = document.createElement("canvas"); lienzo.width = CANVAS_W; lienzo.height = CANVAS_H;
@@ -589,7 +595,10 @@ function makeSlide(s) {
     sticker: s.sticker ? JSON.parse(JSON.stringify(s.sticker)) : null,
     estilo: s.estilo ? { ...s.estilo } : null,   // tamaño, colores y letra de ESTE frame
     bgIndex: -1,              // dónde está ahora en la galería, para pintar
-    inset: null, _textBox: null
+    // Fotos o pantallazos puestos encima (varios): clave de la imagen en el
+    // almacén + posición y tamaño. Se guardan con la secuencia, en su frame.
+    insets: Array.isArray(s.insets) ? s.insets.filter(i => i && i.key).map(i => ({ key: i.key, cx: i.cx, cy: i.cy, scale: i.scale, alfa: !!i.alfa })) : [],
+    _textBox: null
   };
 }
 /* Categorías de antes del catálogo actual. Quedaron en secuencias viejas; sin
@@ -2939,6 +2948,28 @@ function renderThumbs() {
   });
   box.appendChild(add);
 }
+/* Lista de fotos encima del frame: se toca una para elegirla (tamaño y
+   quitar actúan sobre la elegida). Sólo se rehace si algo cambia. */
+function encimaElegida(slide) {
+  const l = slide.insets || [];
+  if (state._insetFrame !== slide) { state._insetFrame = slide; state.insetSel = l.length - 1; }
+  if (state.insetSel == null || state.insetSel >= l.length) state.insetSel = l.length - 1;
+  return l[state.insetSel] || null;
+}
+function pintaEncimas(slide) {
+  const l = slide.insets || [], sel = encimaElegida(slide);
+  $("#insetControls").classList.toggle("hidden", !l.length);
+  const txt = $("#insetBtnTxt"); if (txt) txt.textContent = l.length ? "Añadir otra foto" : "Insertar foto / pantallazo";
+  if (sel) $("#insetSize").value = String(sel.scale);
+  const caja = $("#insetLista"); if (!caja) return;
+  const firma = l.map(i => i.key + (imgEncima(i.key) ? "+" : "-")).join(",") + "|" + state.insetSel;
+  if (caja.dataset.firma === firma) return;
+  caja.dataset.firma = firma;
+  caja.innerHTML = l.map((i, n) => {
+    const img = imgEncima(i.key);
+    return `<button type="button" class="encima-mini${n === state.insetSel ? " on" : ""}" data-encima="${n}" aria-label="Foto encima ${n + 1}">${img ? `<img src="${escapeAttr(img.src)}" alt="">` : ""}</button>`;
+  }).join("");
+}
 function refreshActiveThumb() {
   const cv = $("#thumbs").children[state.current]?.querySelector("canvas");
   if (cv) drawSlide(cv.getContext("2d"), curSlide(), cv.width, cv.height, state.active.style);
@@ -2961,7 +2992,7 @@ function renderEditPanel() {
   document.querySelectorAll("[data-caso]").forEach(b => b.classList.toggle("on", b.dataset.caso === (slide.caso || "")));
   syncOverlayChips();
   $("#bgZoom").value = slide.bg.zoom;
-  $("#insetControls").classList.toggle("hidden", !slide.inset);
+  pintaEncimas(slide);
   pintaCamposSticker(slide);
   renderBgPicker();
 }
@@ -3047,7 +3078,7 @@ function drawSlide(c, slide, w, h, style, guides) {
   const imgObj = slide.bgIndex >= 0 ? state.images[slide.bgIndex] : null;
   if (imgObj) drawCover(c, imgObj.img, w, h, slide.bg); else drawPlaceholder(c, w, h);
   drawOverlay(c, slide.overlay, w, h);
-  if (slide.inset && slide.inset.img) drawInset(c, slide.inset, w, h);
+  (slide.insets || []).forEach(ins => { const img = imgEncima(ins.key); if (img) drawInset(c, ins, img, w, h); });
   drawBody(c, slide, style, scale, w, h);
   if (slide.sticker) drawSticker(c, slide.sticker, w, h);
   if (guides) drawGuides(c, w, h);
@@ -3198,10 +3229,77 @@ function roundRect(c, x, y, w, h, r) {
   c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
   c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
 }
-function drawInset(c, inset, w, h) {
+/* Imágenes de las fotos encima, por clave. Se bajan del almacén la primera
+   vez que hacen falta y, al llegar, se repinta lo que esté a la vista. */
+const ENCIMAS = new Map();   // clave -> { img, listo, fallo, promesa }
+function abreImagen(blob) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => rej(new Error("imagen"));
+    img.src = URL.createObjectURL(blob);
+  });
+}
+function cargaEncima(key) {
+  const previa = ENCIMAS.get(key);
+  if (previa && !(previa.fallo && Date.now() - previa.fallo > 30000)) return previa.promesa;
+  const e = { img: null, listo: false, fallo: 0 };
+  e.promesa = (async () => {
+    const blob = window.sbFotos && state.user ? await sbFotos.sbDescargarEncima(key) : null;
+    if (!blob) { e.fallo = Date.now(); return null; }
+    e.img = await abreImagen(blob); e.listo = true;
+    repintaTrasEncima();
+    return e.img;
+  })().catch(() => { e.fallo = Date.now(); return null; });
+  ENCIMAS.set(key, e);
+  return e.promesa;
+}
+function imgEncima(key) {
+  const e = ENCIMAS.get(key);
+  if (e && e.listo) return e.img;
+  cargaEncima(key);
+  return null;
+}
+const aseguraEncimas = (slides) =>
+  Promise.all((slides || []).flatMap(sl => (sl.insets || []).map(i => cargaEncima(i.key))));
+let _repintaEncima = null;
+function repintaTrasEncima() {
+  clearTimeout(_repintaEncima);
+  _repintaEncima = setTimeout(() => {
+    try { renderAll(); } catch {}
+    if (state.active) { drawEditor(); renderThumbs(); }
+  }, 150);
+}
+/* Prepara la foto que se pone encima: como mucho 1600 px y, si tiene
+   transparencia (un logo, un recorte), se conserva. */
+async function preparaEncima(file) {
+  let img;
+  try { img = await abreImagen(file); } catch { return null; }
+  const lado = 1600, r = Math.min(1, lado / Math.max(img.width, img.height));
+  const w = Math.max(1, Math.round(img.width * r)), h = Math.max(1, Math.round(img.height * r));
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  const x = c.getContext("2d"); x.drawImage(img, 0, 0, w, h);
+  let alfa = false;
+  if (/png|webp|gif/.test(file.type)) {
+    try {
+      const m = document.createElement("canvas"); m.width = 64; m.height = 64;
+      const mx = m.getContext("2d"); mx.drawImage(img, 0, 0, 64, 64);
+      const d = mx.getImageData(0, 0, 64, 64).data;
+      for (let i = 3; i < d.length; i += 4) if (d[i] < 250) { alfa = true; break; }
+    } catch {}
+  }
+  const formato = await formatoFoto();
+  const tipo = formato === "image/webp" ? "image/webp" : alfa ? "image/png" : "image/jpeg";
+  const blob = await new Promise(res => c.toBlob(res, tipo, 0.86));
+  if (!blob) return null;
+  return { img: await abreImagen(blob), blob, alfa };
+}
+function drawInset(c, inset, img, w, h) {
   const iw = inset.scale * w;
-  const ih = iw * (inset.img.height / inset.img.width);
+  const ih = iw * (img.height / img.width);
   const x = inset.cx * w - iw / 2, y = inset.cy * h - ih / 2;
+  // Un elemento con transparencia (logo, recorte) va tal cual, sin marco.
+  if (inset.alfa) { c.drawImage(img, x, y, iw, ih); return; }
   const r = iw * 0.04;
   c.save();
   c.shadowColor = "rgba(0,0,0,0.5)"; c.shadowBlur = iw * 0.06; c.shadowOffsetY = iw * 0.02;
@@ -3209,7 +3307,7 @@ function drawInset(c, inset, w, h) {
   c.restore();
   c.save();
   roundRect(c, x, y, iw, ih, r); c.clip();
-  c.drawImage(inset.img, x, y, iw, ih);
+  c.drawImage(img, x, y, iw, ih);
   c.restore();
 }
 /* Tamaño por trozo de texto: {s:1.4}así{/s} multiplica el tamaño de la
@@ -3384,12 +3482,16 @@ function setupDrag() {
     const { nx, ny } = norm(e);
     const px = nx * CANVAS_W, py = ny * CANVAS_H;
     const slide = curSlide();
-    const ins = slide.inset;
-    if (ins && ins.img) {
-      const iw = ins.scale * CANVAS_W, ih = iw * (ins.img.height / ins.img.width);
+    // Las fotos encima, de la de arriba a la de abajo: se coge la que se toca.
+    const lista = slide.insets || [];
+    for (let n = lista.length - 1; n >= 0; n--) {
+      const ins = lista[n], img = imgEncima(ins.key); if (!img) continue;
+      const iw = ins.scale * CANVAS_W, ih = iw * (img.height / img.width);
       const ix = ins.cx * CANVAS_W - iw / 2, iy = ins.cy * CANVAS_H - ih / 2;
       if (px >= ix && px <= ix + iw && py >= iy && py <= iy + ih) {
-        target = "inset"; start = { nx, ny, cx: ins.cx, cy: ins.cy }; cv.setPointerCapture(e.pointerId); return;
+        state._insetFrame = slide; state.insetSel = n;
+        target = "inset"; start = { nx, ny, cx: ins.cx, cy: ins.cy, ins, img }; cv.setPointerCapture(e.pointerId);
+        renderEditPanel(); return;
       }
     }
     const b = slide._textBox;
@@ -3405,8 +3507,8 @@ function setupDrag() {
     const { nx, ny } = norm(e);
     const slide = curSlide();
     if (target === "inset") {
-      const ins = slide.inset, hw = ins.scale / 2;
-      const hh = (ins.scale * (ins.img.height / ins.img.width) * (CANVAS_W / CANVAS_H)) / 2;
+      const ins = start.ins, hw = ins.scale / 2;
+      const hh = (ins.scale * (start.img.height / start.img.width) * (CANVAS_W / CANVAS_H)) / 2;
       ins.cx = cl(start.cx + (nx - start.nx), SAFE.left + hw, SAFE.right - hw);
       ins.cy = cl(start.cy + (ny - start.ny), SAFE.top + hh, SAFE.bottom - hh);
     } else if (target === "text") {
@@ -3429,7 +3531,7 @@ function setupDrag() {
 function duplicateFrame() {
   const s = curSlide();
   const copy = makeSlide({ body: s.body, pos: { ...s.pos }, align: s.align, caso: s.caso, overlay: s.overlay, bg: { ...s.bg } });
-  copy.bgIndex = s.bgIndex; copy.bgKey = s.bgKey; copy.inset = s.inset ? { ...s.inset } : null;
+  copy.bgIndex = s.bgIndex; copy.bgKey = s.bgKey; copy.insets = (s.insets || []).map(i => ({ ...i }));
   copy.sticker = s.sticker ? JSON.parse(JSON.stringify(s.sticker)) : null;
   copy.estilo = s.estilo ? { ...s.estilo } : null;
   state.active.slides.splice(state.current + 1, 0, copy);
@@ -3598,6 +3700,7 @@ function blobDownload(canvas, name) {
 async function subirVistasPrevias(idPlantilla, seq) {
   if (!window.sbRevision) return;
   const ANCHO = 540, ALTO = 960;
+  await aseguraEncimas(seq.slides);
   for (let i = 0; i < seq.slides.length; i++) {
     try {
       const off = document.createElement("canvas");
@@ -3611,7 +3714,8 @@ async function subirVistasPrevias(idPlantilla, seq) {
   }
 }
 
-function renderToBlob(slide) {
+async function renderToBlob(slide) {
+  await aseguraEncimas([slide]);
   const off = document.createElement("canvas"); off.width = CANVAS_W; off.height = CANVAS_H;
   drawSlide(off.getContext("2d"), slide, CANVAS_W, CANVAS_H, state.active.style);
   return new Promise(r => off.toBlob(r, "image/jpeg", 0.92));
@@ -3620,6 +3724,7 @@ async function downloadAll() {
   const base = (state.active.title || "story").replace(/[^\w]+/g, "-").slice(0, 24) || "story";
   const btn = $("#dlAll"), prev = btn.textContent; btn.disabled = true; btn.textContent = "Generando…";
   try {
+    await aseguraEncimas(state.active.slides);
     if (typeof JSZip !== "undefined") {
       const zip = new JSZip();
       for (let i = 0; i < state.active.slides.length; i++) zip.file(`${base}-${i + 1}.jpg`, await renderToBlob(state.active.slides[i]));
@@ -4169,15 +4274,40 @@ function bind() {
     ponFondo(slide, next); drawEditor(); refreshActiveThumb(); persist();
   });
   $("#insetBtn").addEventListener("click", () => $("#insetInput").click());
-  $("#insetInput").addEventListener("change", e => {
-    const f = e.target.files[0]; if (!f) return;
-    const img = new Image();
-    img.onload = () => { curSlide().inset = { img, cx: 0.5, cy: 0.62, scale: 0.62 }; drawEditor(); refreshActiveThumb(); renderEditPanel(); };
-    img.src = URL.createObjectURL(f);
-    e.target.value = "";
+  $("#insetInput").addEventListener("change", async e => {
+    const files = [...e.target.files]; e.target.value = "";
+    if (!files.length || !state.active) return;
+    const slide = curSlide();
+    for (const f of files) {
+      const p = await preparaEncima(f);
+      if (!p) { aviso("No se pudo abrir «" + f.name + "». Prueba con JPG o PNG.", "error"); continue; }
+      const ext = p.blob.type === "image/png" ? "png" : p.blob.type === "image/webp" ? "webp" : "jpg";
+      const key = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8) + "." + ext;
+      ENCIMAS.set(key, { img: p.img, listo: true, fallo: 0, promesa: Promise.resolve(p.img) });
+      const n = slide.insets.length;
+      slide.insets.push({ key, cx: Math.min(0.62, 0.5 + n * 0.04), cy: Math.min(0.7, 0.55 + n * 0.04), scale: 0.62, alfa: p.alfa });
+      state._insetFrame = slide; state.insetSel = slide.insets.length - 1;
+      drawEditor(); refreshActiveThumb(); renderEditPanel();
+      if (window.sbFotos && state.user) {
+        sbFotos.sbSubirEncima(key, p.blob).then(ok => { if (!ok) aviso("No se pudo guardar la foto en la nube. Vuelve a insertarla.", "error"); });
+      }
+    }
+    persist();
   });
-  $("#insetSize").addEventListener("input", e => { if (curSlide().inset) { curSlide().inset.scale = parseFloat(e.target.value); drawEditor(); refreshActiveThumb(); } });
-  $("#insetRemove").addEventListener("click", () => { curSlide().inset = null; drawEditor(); refreshActiveThumb(); renderEditPanel(); });
+  $("#insetLista").addEventListener("click", e => {
+    const b = e.target.closest("[data-encima]"); if (!b) return;
+    state._insetFrame = curSlide(); state.insetSel = Number(b.dataset.encima); renderEditPanel();
+  });
+  $("#insetSize").addEventListener("input", e => {
+    const ins = encimaElegida(curSlide()); if (!ins) return;
+    ins.scale = parseFloat(e.target.value); drawEditor(); refreshActiveThumb();
+  });
+  $("#insetSize").addEventListener("change", () => persist());
+  $("#insetRemove").addEventListener("click", () => {
+    const slide = curSlide(); if (!encimaElegida(slide)) return;
+    slide.insets.splice(state.insetSel, 1); state.insetSel = slide.insets.length - 1;
+    drawEditor(); refreshActiveThumb(); renderEditPanel(); persist();
+  });
 
   $("#saveBtn").addEventListener("click", async () => {
     const b = $("#saveBtn"), prev = b.innerHTML;

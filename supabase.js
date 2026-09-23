@@ -50,6 +50,11 @@ async function sbFetchSequences() {
   return data || [];
 }
 
+// Las fotos encima se guardan por su clave y posición (la imagen va aparte, en el almacén).
+const datosEncimas = (l) => Array.isArray(l) && l.length
+  ? l.filter(i => i && i.key).map(i => ({ key: i.key, cx: i.cx, cy: i.cy, scale: i.scale, alfa: !!i.alfa }))
+  : null;
+
 async function sbUpsertSequence(seq) {
   const row = {
     id: seq.cloudId,
@@ -58,7 +63,7 @@ async function sbUpsertSequence(seq) {
     style: seq.style,
     // bgKey: qué foto lleva cada frame. Sin ella, en cada recarga se volvían
     // a repartir las fotos al azar y se perdía lo elegido.
-    slides: seq.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, caso: sl.caso || null, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null, sticker: sl.sticker || null, estilo: sl.estilo || null }))
+    slides: seq.slides.map(sl => ({ body: sl.body, pos: sl.pos, align: sl.align, caso: sl.caso || null, overlay: sl.overlay, bg: sl.bg, bgKey: sl.bgKey || null, sticker: sl.sticker || null, estilo: sl.estilo || null, insets: datosEncimas(sl.insets) }))
   };
   if (!row.id) delete row.id;
   const { data, error } = await sb.from("sequences").upsert(row).select().single();
@@ -221,7 +226,8 @@ async function sbListarFotos() {
     todas.push(...(data || []));
     if (!data || data.length < 1000) break;
   }
-  return todas.filter(o => o.name && !o.name.startsWith("."));
+  // Las carpetas (p. ej. «encima/») salen sin id: no son fotos de la galería.
+  return todas.filter(o => o.id && o.name && !o.name.startsWith("."));
 }
 
 async function sbDescargarFoto(nombre) {
@@ -229,6 +235,24 @@ async function sbDescargarFoto(nombre) {
   if (!uid) return null;
   const { data, error } = await sb.storage.from(BUCKET).download(`${uid}/${nombre}`);
   if (error) { console.warn("sbDescargarFoto", error.message); return null; }
+  return data;
+}
+
+/* Fotos puestas ENCIMA de un frame (pantallazos, elementos). Van en una
+   subcarpeta propia, para que no se mezclen con la galería de fondos. */
+async function sbSubirEncima(key, blob) {
+  const uid = await sbUidActual();
+  if (!uid) return null;
+  const { error } = await sb.storage.from(BUCKET)
+    .upload(`${uid}/encima/${key}`, blob, { upsert: true, contentType: blob.type || "image/png" });
+  if (error) { console.warn("sbSubirEncima", error.message); return null; }
+  return true;
+}
+async function sbDescargarEncima(key) {
+  const uid = await sbUidActual();
+  if (!uid) return null;
+  const { data, error } = await sb.storage.from(BUCKET).download(`${uid}/encima/${key}`);
+  if (error) { console.warn("sbDescargarEncima", error.message); return null; }
   return data;
 }
 
@@ -340,7 +364,7 @@ async function sbGuardarFuente(fuente) {
   if (error) console.warn("sbGuardarFuente", error.message);
 }
 
-window.sbFotos = { sbSubirFoto, sbListarFotos, sbDescargarFoto, sbBorrarFoto, sbBorrarTodasLasFotos, rutaDeFoto,
+window.sbFotos = { sbSubirEncima, sbDescargarEncima, sbSubirFoto, sbListarFotos, sbDescargarFoto, sbBorrarFoto, sbBorrarTodasLasFotos, rutaDeFoto,
                    sbLeerTipos, sbGuardarTipos, sbBorrarTipos };
 
 window.sbAuth = { sbGetSession, sbSignIn, sbSignUp, sbSignOut, isAdmin, sbIsAllowed };

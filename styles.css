@@ -2103,3 +2103,17 @@ body.con-barra-sel .content { padding-bottom: 88px; }
 
 /* ---- Editor: tres bloques plegables (texto, fondo, foto encima) ---- */
 .cp-texto .cp-editor { margin: 2px 0 16px; }
+
+/* Barras de scroll: sin carril blanco. El carril es transparente (se ve el
+   fondo de lo que hay detrás) y el tirador, una línea gris discreta. */
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.16) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; background: transparent; }
+*::-webkit-scrollbar-track, *::-webkit-scrollbar-corner { background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgba(255,255,255,.16); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,.28); }
+
+/* Fotos encima del frame: miniaturas para elegir cuál se mueve o se quita */
+.encima-lista { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 10px; }
+.encima-mini { width: 46px; height: 46px; padding: 3px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); cursor: pointer; display: grid; place-items: center; outline: none; }
+.encima-mini img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; display: block; }
+.encima-mini.on { border-color: rgba(255,255,255,.75); }
